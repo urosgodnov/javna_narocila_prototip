@@ -1,0 +1,69 @@
+{
+    "title": "Obrazec za javna naročila",
+    "type": "object",
+    "properties": {
+        "clientNameAndAddress": {
+            "type": "string",
+            "title": "Naziv in naslov naročnika"
+        },
+        "clientName": {
+            "type": "string",
+            "title": "Naziv"
+        },
+        "projectName": {
+            "type": "string",
+            "title": "Naziv javnega naročila in interna številka"
+        },
+        "projectDescription": {
+            "type": "string",
+            "title": "Predmet naročila",
+            "format": "textarea"
+        },
+        "cpvCode": {
+            "type": "string",
+            "title": "CPV koda"
+        },
+        "orderType": {
+            "type": "array",
+            "title": "Tip naročila",
+            "items": {
+                "type": "string"
+            },
+            "enum": ["Enkratna izbira 1", "Enkratna izbira 2"],
+            "uniqueItems": true
+        },
+        "submissionProcedure": {
+            "type": "string",
+            "title": "Izbrani postopek oddaje",
+            "enum": ["Postopek A", "Postopek B"]
+        },
+        "estimatedValue": {
+            "type": "number",
+            "title": "Ocenjena vrednost naročila"
+        },
+        "cofinancing": {
+            "type": "number",
+            "title": "Sofinanciranje"
+        },
+        "executionDate": {
+            "type": "string",
+            "title": "Rok izvedbe ali trajanje po podpisu pogodbe",
+            "format": "date"
+        },
+        "technicalRequirementsDocument": {
+            "type": "string",
+            "title": "Dokument tehničnih zahtev",
+            "format": "file"
+        },
+        "selectionCriteria": {
+            "type": "string",
+            "title": "Merila za izbor ponudnika",
+            "format": "textarea"
+        },
+        "financialGuarantees": {
+            "type": "number",
+            "title": "Finančna zavarovanja"
+        }
+    },
+    "required": ["clientNameAndAddress", "clientName", "projectName", "projectDescription", "cpvCode", "orderType", "submissionProcedure", "estimatedValue", "cofinancing", "executionDate", "selectionCriteria", "financialGuarantees"]
+}
