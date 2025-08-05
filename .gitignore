@@ -425,3 +425,4 @@ web-bundles/
 .vscode/
 .pytest_cache/
 .bmad-core/
+.claude/
