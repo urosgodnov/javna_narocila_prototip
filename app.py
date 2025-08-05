@@ -12,38 +12,43 @@ def load_json_schema(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
-def render_form(schema):
-    st.header(schema.get("title", "Obrazec"))
+def render_form(schema, parent_key=""):
+    # Removed st.header(schema.get("title", "Obrazec")) from here
     form_data = {}
     for prop_name, prop_details in schema.get("properties", {}).items():
+        full_key = f"{parent_key}.{prop_name}" if parent_key else prop_name
         label = prop_details.get("title", prop_name)
         
         # Get current value from session_state if available, otherwise use default
-        current_value = st.session_state.get(prop_name, "")
+        current_value = st.session_state.get(full_key, "")
         if prop_details.get("type") == "number":
-            current_value = st.session_state.get(prop_name, 0.0)
+            current_value = st.session_state.get(full_key, 0.0)
         elif prop_details.get("format") == "date":
-            current_value = st.session_state.get(prop_name, date.today())
+            current_value = st.session_state.get(full_key, date.today())
         elif prop_details.get("type") == "array":
-            current_value = st.session_state.get(prop_name, [])
+            current_value = st.session_state.get(full_key, [])
 
-        if prop_details.get("type") == "array" and "enum" in prop_details:
+        if prop_details.get("type") == "object":
+            st.subheader(label)
+            nested_data = render_form(prop_details, parent_key=full_key)
+            form_data[prop_name] = nested_data
+        elif prop_details.get("type") == "array" and "enum" in prop_details:
             # Multi-select dropdown
-            form_data[prop_name] = st.multiselect(label, options=prop_details["enum"], default=current_value, key=prop_name)
+            form_data[prop_name] = st.multiselect(label, options=prop_details["enum"], default=current_value, key=full_key)
         elif prop_details.get("type") == "string" and "enum" in prop_details:
             # Single-select dropdown
-            form_data[prop_name] = st.selectbox(label, options=prop_details["enum"], index=prop_details["enum"].index(current_value) if current_value in prop_details["enum"] else 0, key=prop_name)
+            form_data[prop_name] = st.selectbox(label, options=prop_details["enum"], index=prop_details["enum"].index(current_value) if current_value in prop_details["enum"] else 0, key=full_key)
         elif prop_details.get("type") == "string":
             if prop_details.get("format") == "textarea":
-                form_data[prop_name] = st.text_area(label, value=current_value, key=prop_name)
+                form_data[prop_name] = st.text_area(label, value=current_value, key=full_key)
             elif prop_details.get("format") == "date":
-                form_data[prop_name] = st.date_input(label, value=current_value, key=prop_name)
+                form_data[prop_name] = st.date_input(label, value=current_value, key=full_key)
             elif prop_details.get("format") == "file":
-                form_data[prop_name] = st.file_uploader(label, key=prop_name)
+                form_data[prop_name] = st.file_uploader(label, key=full_key)
             else:
-                form_data[prop_name] = st.text_input(label, value=current_value, key=prop_name)
+                form_data[prop_name] = st.text_input(label, value=current_value, key=full_key)
         elif prop_details.get("type") == "number":
-            form_data[prop_name] = st.number_input(label, value=current_value, key=prop_name)
+            form_data[prop_name] = st.number_input(label, value=current_value, key=full_key)
     return form_data
 
 def main():
@@ -72,6 +77,7 @@ def main():
 
         with col1:
             with st.form(key='procurement_form'):
+                st.header(st.session_state['schema'].get("title", "Obrazec")) # Moved header here
                 form_values = render_form(st.session_state['schema'])
                 submit_button = st.form_submit_button(label='Pošlji')
 

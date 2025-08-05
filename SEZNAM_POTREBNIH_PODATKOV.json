@@ -2,68 +2,198 @@
     "title": "Obrazec za javna naročila",
     "type": "object",
     "properties": {
-        "clientNameAndAddress": {
-            "type": "string",
-            "title": "Naziv in naslov naročnika"
-        },
-        "clientName": {
-            "type": "string",
-            "title": "Naziv"
+        "clientData": {
+            "type": "object",
+            "title": "Podatki o naročniku",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "title": "Naziv"
+                },
+                "address": {
+                    "type": "string",
+                    "title": "Naslov (ulica, hišna številka, poštna številka in kraj)"
+                }
+            },
+            "required": ["name", "address"]
         },
         "projectName": {
             "type": "string",
-            "title": "Naziv javnega naročila in interna številka"
-        },
-        "projectDescription": {
-            "type": "string",
-            "title": "Predmet naročila",
-            "format": "textarea"
-        },
-        "cpvCode": {
-            "type": "string",
-            "title": "CPV koda"
-        },
-        "orderType": {
-            "type": "array",
-            "title": "Tip naročila",
-            "items": {
-                "type": "string"
-            },
-            "enum": ["Enkratna izbira 1", "Enkratna izbira 2"],
-            "uniqueItems": true
+            "title": "Naziv javnega naročila"
         },
         "submissionProcedure": {
             "type": "string",
-            "title": "Izbrani postopek oddaje",
-            "enum": ["Postopek A", "Postopek B"]
+            "title": "Postopek oddaje javnega naročila",
+            "enum": [
+                "odprti postopek",
+                "omejeni postopek",
+                "konkurenčni dialog",
+                "partnerstvo za inovacije",
+                "konkurenčni postopek s pogajanji",
+                "postopek s pogajanji brez predhodne objave",
+                "postopek naročila male vrednosti",
+                "vseeno"
+            ]
         },
-        "estimatedValue": {
-            "type": "number",
-            "title": "Ocenjena vrednost naročila"
+        "orderType": {
+            "type": "object",
+            "title": "Vrsta javnega naročila",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "title": "Vrsta",
+                    "enum": ["blago", "storitve", "gradnje", "mešano javno naročilo"]
+                },
+                "goodsValue": {
+                    "type": "number",
+                    "title": "Vrednost blaga (EUR brez DDV)"
+                },
+                "servicesValue": {
+                    "type": "number",
+                    "title": "Vrednost storitev (EUR brez DDV)"
+                },
+                "constructionValue": {
+                    "type": "number",
+                    "title": "Vrednost gradenj (EUR brez DDV)"
+                }
+            },
+            "required": ["type"]
         },
-        "cofinancing": {
-            "type": "number",
-            "title": "Sofinanciranje"
+        "exclusionReasons": {
+            "type": "array",
+            "title": "Razlogi za izključitev",
+            "items": {
+                "type": "string",
+                "enum": [
+                    "kršitev obveznosti na področju okoljskega, socialnega in delovnega prava",
+                    "postopek insolventnosti ali prisilnega prenehanja, likvidacije",
+                    "hujša kršitev poklicnih pravil",
+                    "dogovor z drugimi gospodarskimi subjekti z namenom izkrivljanja konkurence",
+                    "nasprotja interesov",
+                    "predhodno sodelovanje pri pripravi tega postopka javnega naročanja",
+                    "precejšnje ali stalne pomanjkljivosti pri prejšnji pogodbi",
+                    "dajanje resnih zavajajočih informacij ali razlag / nerazkrivanje",
+                    "poskus neupravičenega vplivanja na naročnika",
+                    "ne želimo vključiti neobveznih razlogov za izključitev",
+                    "vseeno nam je"
+                ]
+            },
+            "uniqueItems": true
         },
-        "executionDate": {
-            "type": "string",
-            "title": "Rok izvedbe ali trajanje po podpisu pogodbe",
-            "format": "date"
-        },
-        "technicalRequirementsDocument": {
-            "type": "string",
-            "title": "Dokument tehničnih zahtev",
-            "format": "file"
-        },
-        "selectionCriteria": {
-            "type": "string",
-            "title": "Merila za izbor ponudnika",
-            "format": "textarea"
+        "participationConditions": {
+            "type": "object",
+            "title": "Pogoji za sodelovanje",
+            "properties": {
+                "conditions": {
+                    "type": "array",
+                    "title": "Izbrani pogoji",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "ustreznost za opravljanje poklicne dejavnosti",
+                            "ekonomski in finančni položaj",
+                            "tehnična in strokovna sposobnost"
+                        ]
+                    },
+                    "uniqueItems": true
+                },
+                "technicalRequirements": {
+                    "type": "object",
+                    "title": "Tehnične zahteve",
+                    "properties": {
+                        "companyReferences": {
+                            "type": "string",
+                            "title": "Reference gospodarskega subjekta"
+                        },
+                        "staffReferences": {
+                            "type": "string",
+                            "title": "Reference kadra"
+                        },
+                        "staff": {
+                            "type": "string",
+                            "title": "Kader"
+                        },
+                        "certificates": {
+                            "type": "string",
+                            "title": "Potrdila pristojnih ustanov (certifikati/standardi)"
+                        },
+                        "other": {
+                            "type": "string",
+                            "title": "Drugo"
+                        }
+                    }
+                }
+            }
         },
         "financialGuarantees": {
-            "type": "number",
-            "title": "Finančna zavarovanja"
+            "type": "array",
+            "title": "Finančna zavarovanja",
+            "items": {
+                "type": "string",
+                "enum": [
+                    "FZ za resnost ponudbe",
+                    "FZ za dobro izvedbo pogodbenih obveznosti",
+                    "FZ za odpravo napak v garancijski dobi"
+                ]
+            },
+            "uniqueItems": true
+        },
+        "selectionCriteria": {
+            "type": "array",
+            "title": "Merila",
+            "items": {
+                "type": "string",
+                "enum": [
+                    "cena",
+                    "dodatne reference imenovanega kadra",
+                    "dodatne tehnične zahteve",
+                    "krajši rok izvedbe",
+                    "garancija daljša od zahtevane",
+                    "stroškovna učinkovitost",
+                    "socialna merila",
+                    "drugo"
+                ]
+            },
+            "uniqueItems": true
+        },
+        "socialCriteria": {
+            "type": "string",
+            "title": "Socialna merila (opis)"
+        },
+        "otherCriteria": {
+            "type": "string",
+            "title": "Druga merila (opis)"
+        },
+        "contractType": {
+            "type": "object",
+            "title": "Pogodba / Okvirni sporazum",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "title": "Vrsta",
+                    "enum": [
+                        "pogodba",
+                        "okvirni sporazum z odpiranjem konkurence",
+                        "okvirni sporazum brez odpiranja konkurence"
+                    ]
+                },
+                "validFrom": {
+                    "type": "string",
+                    "title": "Veljavnost od",
+                    "format": "date"
+                },
+                "validTo": {
+                    "type": "string",
+                    "title": "Veljavnost do",
+                    "format": "date"
+                },
+                "competitionFrequency": {
+                    "type": "string",
+                    "title": "Odpiranje konkurence vsake"
+                }
+            },
+            "required": ["type"]
         }
     },
-    "required": ["clientNameAndAddress", "clientName", "projectName", "projectDescription", "cpvCode", "orderType", "submissionProcedure", "estimatedValue", "cofinancing", "executionDate", "selectionCriteria", "financialGuarantees"]
+    "required": ["clientData", "projectName", "submissionProcedure", "orderType", "contractType"]
 }
