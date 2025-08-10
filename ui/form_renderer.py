@@ -9,6 +9,8 @@ def _get_default_value(full_key, prop_details):
     default_value = prop_details.get("default")
     if prop_details.get("type") == "number":
         return st.session_state.get(full_key, default_value if default_value is not None else 0.0)
+    elif prop_details.get("type") == "integer":
+        return st.session_state.get(full_key, default_value if default_value is not None else 0)
     elif prop_details.get("format") == "date":
         return st.session_state.get(full_key, default_value if default_value is not None else date.today())
     elif prop_details.get("type") == "array":
@@ -108,100 +110,30 @@ def render_form(schema_properties, parent_key=""):
 
         if prop_type == "object":
             if "$ref" in prop_details:
+                # Always show section header for $ref objects - use consistent styling
+                st.subheader(label)
+                
                 ref_path = prop_details["$ref"].split('/')[1:]
                 ref_props = st.session_state['schema']
                 for part in ref_path:
                     ref_props = ref_props[part]
                 render_form(ref_props.get("properties", {}), parent_key=full_key)
             else:
-                # Enhanced section header with better styling
+                # Use consistent simple styling for all sections
+                st.subheader(label)
+                
+                # Keep helpful expandable info for complex sections
                 if help_text:
-                    # Special handling for sections with detailed explanations
                     if "Pravna podlaga" in label:
-                        # Create header with info icon
-                        col_header, col_info = st.columns([4, 1])
-                        with col_header:
-                            st.markdown(f"""
-                            <div style="
-                                background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
-                                padding: 1rem;
-                                border-radius: 8px;
-                                border-left: 4px solid #1f4e79;
-                                margin: 1rem 0;
-                            ">
-                                <h3 style="margin: 0; color: #1f4e79;">{label}</h3>
-                            </div>
-                            """, unsafe_allow_html=True)
-                        
-                        # Add dropdown/expandable section with legal framework info
                         with st.expander("ℹ️ Prikaži pravne podlage in predpise", expanded=False):
-                            st.markdown(f"""
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 5px; margin: 0.5rem 0;">
-                                <p style="margin: 0; color: #495057; font-size: 0.9rem; line-height: 1.6;">
-                                    {help_text.replace(chr(10), '<br>')}
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                    elif "Tehnične zahteve" in label or "Specifikacije" in label:
-                        # Technical specifications with info icon
-                        st.markdown(f"""
-                        <div style="
-                            background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
-                            padding: 1rem;
-                            border-radius: 8px;
-                            border-left: 4px solid #1f4e79;
-                            margin: 1rem 0;
-                        ">
-                            <h3 style="margin: 0; color: #1f4e79;">{label}</h3>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # Add dropdown/expandable section with technical specifications explanation
+                            st.text(help_text)
+                    elif "Tehnične zahteve" in label or "specifikacije" in label:
                         with st.expander("ℹ️ Kaj so tehnične specifikacije?", expanded=False):
-                            st.markdown(f"""
-                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 5px; margin: 0.5rem 0;">
-                                <p style="margin: 0; color: #495057; font-size: 0.9rem; line-height: 1.6;">
-                                    {help_text.replace(chr(10), '<br>')}
-                                </p>
-                            </div>
-                            """, unsafe_allow_html=True)
-                    elif "Opozorilo" in label and help_text:
-                        # Warning message styling
-                        st.markdown(f"""
-                        <div style="
-                            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-                            border: 2px solid #ffc107;
-                            border-radius: 8px;
-                            padding: 1.5rem;
-                            margin: 1rem 0;
-                            box-shadow: 0 2px 4px rgba(255, 193, 7, 0.2);
-                        ">
-                            <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                                <span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span>
-                                <h4 style="margin: 0; color: #856404; font-weight: 600;">Opozorilo</h4>
-                            </div>
-                            <p style="margin: 0; color: #856404; font-size: 0.95rem; line-height: 1.6; font-weight: 500;">
-                                {help_text.replace(chr(10), '<br>')}
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        return  # Don't render form fields for this object
-                    else:
-                        # Regular sections with truncated description
-                        st.markdown(f"""
-                        <div style="
-                            background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
-                            padding: 1rem;
-                            border-radius: 8px;
-                            border-left: 4px solid #1f4e79;
-                            margin: 1rem 0;
-                        ">
-                            <h3 style="margin: 0; color: #1f4e79;">{label}</h3>
-                            <p style="margin: 0.5rem 0 0 0; color: #6c757d; font-size: 0.9rem;">{help_text[:200]}{'...' if len(help_text) > 200 else ''}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.subheader(label)
+                            st.text(help_text)
+                    elif "Opozorilo" in label:
+                        st.warning(help_text)
+                        return  # Don't render form fields for warning objects
+                        
                 render_form(prop_details.get("properties", {}), parent_key=full_key)
         
         elif prop_type == "array":
@@ -447,6 +379,37 @@ def render_form(schema_properties, parent_key=""):
             except ValueError:
                 st.warning(f"'{number_text}' ni veljavna številka")
                 st.session_state[full_key] = 0.0
+
+        elif prop_type == "integer":
+            display_label = _format_field_label(label, prop_details, parent_key, prop_name)
+            
+            # Get minimum value constraint if specified
+            minimum = prop_details.get("minimum", 1)
+            
+            # Use text input for integers to avoid spinner
+            current_str = str(current_value) if current_value != 0 else ""
+            integer_text = st.text_input(
+                display_label, 
+                value=current_str, 
+                key=f"{full_key}_text",
+                help=help_text,
+                placeholder=f"Vnesite celo število (min. {minimum})"
+            )
+            
+            # Convert back to integer and validate constraints
+            try:
+                if integer_text.strip():
+                    integer_value = int(integer_text)
+                    if integer_value < minimum:
+                        st.warning(f"Vrednost mora biti najmanj {minimum}")
+                        st.session_state[full_key] = minimum
+                    else:
+                        st.session_state[full_key] = integer_value
+                else:
+                    st.session_state[full_key] = 0
+            except ValueError:
+                st.warning(f"'{integer_text}' ni veljavno celo število")
+                st.session_state[full_key] = 0
 
         elif prop_type == "boolean":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)

@@ -3,7 +3,7 @@
     "type": "object",
     "properties": {
         "clientInfo": {
-            "title": "PODATKI O NAROČNIKU",
+            "title": "Podatki o naročniku",
             "type": "object",
             "properties": {
                 "isSingleClient": {
@@ -55,7 +55,7 @@
             }
         },
         "projectInfo": {
-            "title": "OSNOVNI PODATKI O JAVNEM NAROČILU",
+            "title": "Osnovni podatki o javnem naročilu",
             "type": "object",
             "properties": {
                 "projectName": {
@@ -164,7 +164,7 @@
             "description": "Vrsta javnega naročila"
         },
         "technicalSpecifications": {
-            "title": "Tehnične zahteve / Specifikacije",
+            "title": "Tehnične zahteve oziroma specifikacije",
             "type": "object",
             "properties": {
                 "hasSpecifications": {
@@ -269,7 +269,7 @@
             "required": ["type"]
         },
         "priceInfo": {
-            "title": "Cena",
+            "title": "Informacije o ceni",
             "type": "object",
             "properties": {
                 "priceClause": {
@@ -286,7 +286,7 @@
             }
         },
         "inspectionInfo": {
-            "title": "Ogled",
+            "title": "Ogled lokacije",
             "type": "object",
             "properties": {
                 "hasInspection": { "type": "boolean", "title": "Naročnik bo organiziral ogled" },
@@ -297,7 +297,7 @@
             }
         },
         "negotiationsInfo": {
-            "title": "Pogajanja",
+            "title": "Informacije o pogajanjih",
             "type": "object",
             "properties": {
                 "hasNegotiations": { "type": "boolean", "title": "Vključitev pogajanj (če postopek to omogoča)" },
@@ -309,7 +309,7 @@
             "description": "Pogajanja so mogoča v naslednjih postopkih..."
         },
         "exclusionReasons": {
-            "title": "Razlogi za izključitev",
+            "title": "Razlogi za izključitev ponudnikov",
             "type": "array",
             "items": {
                 "type": "object",
@@ -321,12 +321,12 @@
             }
         },
         "participationConditions": {
-            "title": "Pogoji za sodelovanje",
+            "title": "Pogoji za sodelovanje ponudnikov",
             "type": "object",
             "$ref": "#/$defs/participationConditionProperties"
         },
         "financialGuarantees": {
-            "title": "Finančna zavarovanja",
+            "title": "Finančna zavarovanja in garancije",
             "type": "array",
             "items": {
                 "type": "object",
@@ -339,7 +339,7 @@
             }
         },
         "variantOffers": {
-            "title": "Variantne ponudbe",
+            "title": "Variantne ponudbe in alternativni predlogi",
             "type": "object",
             "properties": {
                 "areVariantsAllowed": { "type": "boolean", "title": "Dopuščate predložitev variantnih ponudb" },
@@ -349,7 +349,7 @@
             }
         },
         "selectionCriteria": {
-            "title": "Merila",
+            "title": "Merila za izbiro najugodnejše ponudbe",
             "type": "array",
             "items": {
                 "type": "object",
@@ -362,7 +362,7 @@
             }
         },
         "contractInfo": {
-            "title": "Pogodba / Okvirni sporazum",
+            "title": "Pogodba oziroma okvirni sporazum",
             "type": "object",
             "properties": {
                 "type": { "type": "string", "enum": ["pogodba", "okvirni sporazum"], "title": "Želimo skleniti" },
@@ -374,10 +374,10 @@
             }
         },
         "otherInfo": {
-            "title": "Ostalo",
+            "title": "Dodatne informacije in posebne zahteve",
             "type": "string",
             "format": "textarea",
-            "title": "Bi nam želeli še kaj sporočiti?"
+            "description": "Bi nam želeli še kaj sporočiti?"
         }
     },
     "$defs": {
