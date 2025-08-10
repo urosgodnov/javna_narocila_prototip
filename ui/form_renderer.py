@@ -18,25 +18,41 @@ def _get_default_value(full_key, prop_details):
     else:
         return st.session_state.get(full_key, default_value if default_value is not None else "")
 
-def _should_render(prop_details):
+def _should_render(prop_details, parent_key=""):
     """Check if a field should be rendered based on a conditional flag in the schema."""
     render_if = prop_details.get("render_if")
     if not render_if:
         return True
     
     condition_field = render_if.get("field")
+    condition_field_parent = render_if.get("field_parent")
     condition_value = render_if.get("value")
     condition_not_in = render_if.get("not_in")
+    condition_contains = render_if.get("contains")
     
-    current_field_value = st.session_state.get(condition_field)
+    # Handle parent-relative field reference
+    if condition_field_parent and parent_key:
+        # Build the full field path from parent context
+        condition_field = f"{parent_key}.{condition_field_parent}"
+    elif condition_field_parent:
+        # No parent context, use as-is
+        condition_field = condition_field_parent
+    
+    current_field_value = st.session_state.get(condition_field) if condition_field else None
     
     # Handle 'value' condition (exact match)
-    if condition_value is not None:
+    if condition_value is not None and condition_field:
         return current_field_value == condition_value
     
     # Handle 'not_in' condition (value should not be in list)
-    if condition_not_in is not None:
+    if condition_not_in is not None and condition_field:
         return current_field_value not in condition_not_in
+    
+    # Handle 'contains' condition (array contains value)
+    if condition_contains is not None and condition_field:
+        if isinstance(current_field_value, list):
+            return condition_contains in current_field_value
+        return False
     
     return True
 
@@ -80,7 +96,7 @@ def _is_field_required(parent_key, prop_name):
 def render_form(schema_properties, parent_key=""):
     """Recursively render form fields based on JSON schema properties."""
     for prop_name, prop_details in schema_properties.items():
-        if not _should_render(prop_details):
+        if not _should_render(prop_details, parent_key):
             continue
 
         full_key = f"{parent_key}.{prop_name}" if parent_key else prop_name
@@ -100,7 +116,7 @@ def render_form(schema_properties, parent_key=""):
             else:
                 # Enhanced section header with better styling
                 if help_text:
-                    # Special handling for legal basis section - restore original superior design
+                    # Special handling for sections with detailed explanations
                     if "Pravna podlaga" in label:
                         # Create header with info icon
                         col_header, col_info = st.columns([4, 1])
@@ -126,6 +142,50 @@ def render_form(schema_properties, parent_key=""):
                                 </p>
                             </div>
                             """, unsafe_allow_html=True)
+                    elif "Tehnične zahteve" in label or "Specifikacije" in label:
+                        # Technical specifications with info icon
+                        st.markdown(f"""
+                        <div style="
+                            background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%);
+                            padding: 1rem;
+                            border-radius: 8px;
+                            border-left: 4px solid #1f4e79;
+                            margin: 1rem 0;
+                        ">
+                            <h3 style="margin: 0; color: #1f4e79;">{label}</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Add dropdown/expandable section with technical specifications explanation
+                        with st.expander("ℹ️ Kaj so tehnične specifikacije?", expanded=False):
+                            st.markdown(f"""
+                            <div style="background: #f8f9fa; padding: 1rem; border-radius: 5px; margin: 0.5rem 0;">
+                                <p style="margin: 0; color: #495057; font-size: 0.9rem; line-height: 1.6;">
+                                    {help_text.replace(chr(10), '<br>')}
+                                </p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    elif "Opozorilo" in label and help_text:
+                        # Warning message styling
+                        st.markdown(f"""
+                        <div style="
+                            background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+                            border: 2px solid #ffc107;
+                            border-radius: 8px;
+                            padding: 1.5rem;
+                            margin: 1rem 0;
+                            box-shadow: 0 2px 4px rgba(255, 193, 7, 0.2);
+                        ">
+                            <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                                <span style="font-size: 1.5rem; margin-right: 0.5rem;">⚠️</span>
+                                <h4 style="margin: 0; color: #856404; font-weight: 600;">Opozorilo</h4>
+                            </div>
+                            <p style="margin: 0; color: #856404; font-size: 0.95rem; line-height: 1.6; font-weight: 500;">
+                                {help_text.replace(chr(10), '<br>')}
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        return  # Don't render form fields for this object
                     else:
                         # Regular sections with truncated description
                         st.markdown(f"""
@@ -145,7 +205,11 @@ def render_form(schema_properties, parent_key=""):
                 render_form(prop_details.get("properties", {}), parent_key=full_key)
         
         elif prop_type == "array":
-            st.subheader(label, help=help_text)
+            # Use smaller header for conditional arrays to reduce visual clutter
+            if prop_details.get("render_if"):
+                st.markdown(f"**{label}**", help=help_text)
+            else:
+                st.subheader(label, help=help_text)
             items_schema = prop_details.get("items", {})
             
             # Array of simple enums (multiselect)
@@ -174,10 +238,14 @@ def render_form(schema_properties, parent_key=""):
                         # Render the form fields for this object
                         render_form(items_schema.get("properties", {}), parent_key=f"{full_key}.{i}")
                 
-                # Add new item with improved UX
+                # Add new item with improved UX and correct Slovenian grammar
                 item_title = items_schema.get('title', 'element')
                 if full_key == "clientInfo.clients" and item_title == "Naročnik":
                     button_text = "➕ Dodaj naročnika"
+                elif "cofinancers" in full_key and item_title == "Sofinancer":
+                    button_text = "➕ Dodaj novega sofinancerja"
+                elif "mixedOrderComponents" in full_key and item_title == "Postavka":
+                    button_text = "➕ Dodaj postavko"
                 else:
                     button_text = f"➕ Dodaj {item_title.lower()}"
                 
@@ -229,10 +297,49 @@ def render_form(schema_properties, parent_key=""):
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
             
             if "enum" in prop_details:
-                # Enhanced selectbox with proper placeholder
-                enum_options = [""] + prop_details["enum"] if not current_value else prop_details["enum"]
+                # Handle dynamic filtering for mixed order component types
+                available_options = prop_details["enum"].copy()
+                
+                # Filter out already selected types in mixed order components
+                if (prop_name == "type" and 
+                    "mixedOrderComponents" in full_key and 
+                    prop_details["enum"] == ["blago", "storitve", "gradnje"]):
+                    
+                    # Get the parent array key - FIXED: extract correctly
+                    # full_key format: "orderType.mixedOrderComponents.0.type" 
+                    # we want: "orderType.mixedOrderComponents"
+                    key_parts = full_key.split('.')
+                    if len(key_parts) >= 3 and key_parts[-1] == "type" and key_parts[-2].isdigit():
+                        parent_array_key = '.'.join(key_parts[:-2])  # Remove index and "type"
+                        current_index = int(key_parts[-2])  # Extract the index
+                    else:
+                        return  # Invalid key format, skip filtering
+                    
+                    current_components = st.session_state.get(parent_array_key, [])
+                    
+                    # Get already selected types (exclude current component being edited)
+                    selected_types = []
+                    for i, component in enumerate(current_components):
+                        if i != current_index and isinstance(component, dict) and 'type' in component:
+                            selected_types.append(component['type'])
+                    
+                    # Filter out already selected types
+                    available_options = [opt for opt in available_options if opt not in selected_types]
+                    
+                    # Show info if no options are available (all types selected)
+                    if not available_options and not current_value:
+                        st.info("ℹ️ Vse vrste naročil (blago, storitve, gradnje) so že izbrane v drugih postavkah.")
+                        return  # Skip rendering the selectbox
+                
+                # Enhanced selectbox with proper placeholder and filtered options
+                # Show placeholder only if there are available options and no current value
+                if available_options:
+                    enum_options = [""] + available_options if not current_value else available_options
+                else:
+                    # If no options available but there's a current value, keep it
+                    enum_options = [current_value] if current_value else []
                 index = 0
-                if current_value and current_value in prop_details["enum"]:
+                if current_value and current_value in available_options:
                     # Calculate correct index based on whether empty option is present
                     if current_value in enum_options:
                         index = enum_options.index(current_value)
@@ -319,14 +426,27 @@ def render_form(schema_properties, parent_key=""):
 
         elif prop_type == "number":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
-            st.number_input(
+            
+            # Use text input styled as number to remove spinner
+            current_str = str(current_value) if current_value != 0.0 else ""
+            number_text = st.text_input(
                 display_label, 
-                value=current_value, 
-                key=full_key, 
+                value=current_str, 
+                key=f"{full_key}_text",
                 help=help_text,
-                step=0.01,
-                format="%.2f"
+                placeholder="0.00"
             )
+            
+            # Convert back to number and store in session state
+            try:
+                if number_text.strip():
+                    number_value = float(number_text.replace(',', '.'))  # Handle both comma and dot
+                else:
+                    number_value = 0.0
+                st.session_state[full_key] = number_value
+            except ValueError:
+                st.warning(f"'{number_text}' ni veljavna številka")
+                st.session_state[full_key] = 0.0
 
         elif prop_type == "boolean":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)

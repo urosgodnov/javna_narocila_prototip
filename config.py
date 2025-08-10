@@ -12,37 +12,43 @@ FORM_STEPS = [
     # Step 1: Client information (7 fields) - OK
     ["clientInfo"],
     
-    # Step 2: Basic project info (7 fields) - OK  
+    # Step 2: Basic project info (reduced) - Without legal basis
     ["projectInfo"],
     
-    # Step 3: Submission procedure (2 fields) - Combined with lots
+    # Step 3: Legal basis - Now standalone with info icon
+    ["legalBasis"],
+    
+    # Step 4: Submission procedure (2 fields) - Combined with lots
     ["submissionProcedure", "lotsInfo"], # Total: 6 fields
     
-    # Step 4: Order type (enum selection) - Combined with others
-    ["orderType", "technicalSpecifications"], # Split technical specs
+    # Step 5: Order type (enum selection) - Standalone for complex logic
+    ["orderType"],
     
-    # Step 5: Execution deadline (6 fields) - Standalone
+    # Step 6: Technical specifications - Now standalone with info icon
+    ["technicalSpecifications"],
+    
+    # Step 7: Execution deadline (6 fields) - Standalone
     ["executionDeadline"],
     
-    # Step 6: Price info only (7 fields) - Split from overloaded step
+    # Step 8: Price info only (7 fields) - Split from overloaded step
     ["priceInfo"],
     
-    # Step 7: Inspection and negotiations (10 fields combined) - More manageable
+    # Step 9: Inspection and negotiations (10 fields combined) - More manageable
     ["inspectionInfo", "negotiationsInfo"],
     
-    # Step 8: Participation criteria - Combined related sections
+    # Step 10: Participation criteria - Combined related sections
     ["exclusionReasons", "participationConditions"],
     
-    # Step 9: Financial and variant offers (4 fields)
+    # Step 11: Financial and variant offers (4 fields)
     ["financialGuarantees", "variantOffers"],
     
-    # Step 10: Selection criteria (complex section)
+    # Step 12: Selection criteria (complex section)
     ["selectionCriteria"],
     
-    # Step 11: Final contract info (6 fields)
+    # Step 13: Final contract info (6 fields)
     ["contractInfo"],
     
-    # Step 12: Additional information and completion
+    # Step 14: Additional information and completion
     ["otherInfo"]
 ]
 

@@ -123,20 +123,22 @@ VALIDATION_MESSAGES = {
     "postal_code": "Vnesite veljavno poštno številko",
 }
 
-# Form section progress indicators - updated for 12-step structure
+# Form section progress indicators - updated for 14-step structure
 STEP_LABELS = {
     1: "Podatki o naročniku",
     2: "Osnovni podatki naročila", 
-    3: "Postopek in sklopi",
-    4: "Vrsta in specifikacije",
-    5: "Roki izvajanja",
-    6: "Informacije o ceni",
-    7: "Ogledi in pogajanja",
-    8: "Pogoji sodelovanja", 
-    9: "Zavarovanja in ponudbe",
-    10: "Merila izbire",
-    11: "Sklepanje pogodbe",
-    12: "Dodatne informacije"
+    3: "Pravna podlaga",
+    4: "Postopek in sklopi",
+    5: "Vrsta naročila",
+    6: "Tehnične zahteve",
+    7: "Roki izvajanja",
+    8: "Informacije o ceni",
+    9: "Ogledi in pogajanja",
+    10: "Pogoji sodelovanja", 
+    11: "Zavarovanja in ponudbe",
+    12: "Merila izbire",
+    13: "Sklepanje pogodbe",
+    14: "Dodatne informacije"
 }
 
 def get_text(key: str, **kwargs) -> str:

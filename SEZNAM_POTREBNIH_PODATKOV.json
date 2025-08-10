@@ -3,7 +3,7 @@
     "type": "object",
     "properties": {
         "clientInfo": {
-            "title": "I. PODATKI O NAROČNIKU",
+            "title": "PODATKI O NAROČNIKU",
             "type": "object",
             "properties": {
                 "isSingleClient": {
@@ -55,12 +55,12 @@
             }
         },
         "projectInfo": {
-            "title": "II. OSNOVNI PODATKI O JAVNEM NAROČILU",
+            "title": "OSNOVNI PODATKI O JAVNEM NAROČILU",
             "type": "object",
             "properties": {
                 "projectName": {
                     "type": "string",
-                    "title": "1. Naziv javnega naročila"
+                    "title": "Naziv javnega naročila"
                 },
                 "internalProjectNumber": {
                     "type": "string",
@@ -69,39 +69,39 @@
                 },
                 "projectSubject": {
                     "type": "string",
-                    "title": "2. Predmet javnega naročila"
+                    "title": "Predmet javnega naročila"
                 },
                 "cpvCodes": {
                     "type": "string",
                     "title": "Vpišite vse CPV kode"
-                },
-                "legalBasis": {
-                    "type": "object",
-                    "title": "3. Pravna podlaga",
-                    "properties": {
-                        "useAdditional": {
-                            "type": "boolean",
-                            "title": "Želim, da se upošteva še kakšna pravna podlaga"
-                        },
-                        "additionalLegalBases": {
-                            "type": "array",
-                            "title": "Dodatne pravne podlage",
-                            "items": {
-                                "type": "string",
-                                "title": "Pravna podlaga"
-                            },
-                            "render_if": {
-                                "field": "projectInfo.legalBasis.useAdditional",
-                                "value": true
-                            }
-                        }
-                    },
-                    "description": "Pri oddaji javnega naročila se bodo uporabljala določila naslednjih predpisov in drugih dokumentov:\n\n• Zakon o javnem naročanju (ZJN-3, Uradni list RS, št. 91/15 s spremembami)\n• Zakon o pravnem varstvu v postopkih javnega naročanja (ZPVPJN, Uradni list RS, št. 43/2011 s spremembami)\n• Uredba o finančnih zavarovanjih pri javnem naročanju (Uradni list RS, št. 27/16)\n• Uredba o zelenem javnem naročanju (Uradni list RS, št. 51/17 s spremembami)\n• Zakon o integriteti in preprečevanju korupcije (ZIntPK-UPB2, Uradni list RS št. 69/2011 s spremembami)\n• Zakon o varstvu osebnih podatkov (ZVOP-2, Uradni list RS št. 163/22)\n• Zakon o poslovni skrivnosti (ZPosS; Uradni list RS, št. 22/19)\n• Obligacijski zakonik (OZ, Uradni list RS, št. 83/2001 s spremembami)\n• Zakon o javnih financah (ZJF, Uradni list RS, št. 11/11 s spremembami)\n• Zakon o davku na dodano vrednost (ZDDV-1, Uradni list RS, št. 13/11 s spremembami)\n• Zakon o splošnem upravnem postopku\n• Zakon o pravdnem postopku (ZPP-UPB3, Uradni list RS št. 73/2007 s spremembami)\n• Predpisi, ki urejajo področje, ki je predmet javnega naročila\n\nNaročnik bo pri izvajanju postopka javnega naročanja ravnal v skladu z vsemi veljavnimi predpisi in zagotovil transparentnost ter enakopravno obravnavo vseh ponudnikov."
                 }
             }
         },
+        "legalBasis": {
+            "title": "Pravna podlaga",
+            "type": "object",
+            "properties": {
+                "useAdditional": {
+                    "type": "boolean",
+                    "title": "Želim, da se upošteva še kakšna pravna podlaga"
+                },
+                "additionalLegalBases": {
+                    "type": "array",
+                    "title": "Dodatne pravne podlage",
+                    "items": {
+                        "type": "string",
+                        "title": "Pravna podlaga"
+                    },
+                    "render_if": {
+                        "field": "legalBasis.useAdditional",
+                        "value": true
+                    }
+                }
+            },
+            "description": "Pri oddaji javnega naročila se bodo uporabljala določila naslednjih predpisov in drugih dokumentov:\n\n• Zakon o javnem naročanju (ZJN-3, Uradni list RS, št. 91/15 s spremembami)\n• Zakon o pravnem varstvu v postopkih javnega naročanja (ZPVPJN, Uradni list RS, št. 43/2011 s spremembami)\n• Uredba o finančnih zavarovanjih pri javnem naročanju (Uradni list RS, št. 27/16)\n• Uredba o zelenem javnem naročanju (Uradni list RS, št. 51/17 s spremembami)\n• Zakon o integriteti in preprečevanju korupcije (ZIntPK-UPB2, Uradni list RS št. 69/2011 s spremembami)\n• Zakon o varstvu osebnih podatkov (ZVOP-2, Uradni list RS št. 163/22)\n• Zakon o poslovni skrivnosti (ZPosS; Uradni list RS, št. 22/19)\n• Obligacijski zakonik (OZ, Uradni list RS, št. 83/2001 s spremembami)\n• Zakon o javnih financah (ZJF, Uradni list RS, št. 11/11 s spremembami)\n• Zakon o davku na dodano vrednost (ZDDV-1, Uradni list RS, št. 13/11 s spremembami)\n• Zakon o splošnem upravnem postopku\n• Zakon o pravdnem postopek (ZPP-UPB3, Uradni list RS št. 73/2007 s spremembami)\n• Predpisi, ki urejajo področje, ki je predmet javnega naročila\n\nNaročnik bo pri izvajanju postopka javnega naročanja ravnal v skladu z vsemi veljavnimi predpisi in zagotovil transparentnost ter enakopravno obravnavo vseh ponudnikov."
+        },
         "submissionProcedure": {
-            "title": "4. Postopek oddaje javnega naročila",
+            "title": "Postopek oddaje javnega naročila",
             "type": "object",
             "properties": {
                 "procedure": {
@@ -131,7 +131,7 @@
             }
         },
         "lotsInfo": {
-            "title": "5. Sklopi",
+            "title": "Sklopi",
             "type": "object",
             "properties": {
                 "hasLots": {
@@ -158,48 +158,118 @@
             }
         },
         "orderType": {
-            "title": "6. Vrsta javnega naročila (če ni sklopov)",
+            "title": "Vrsta javnega naročila (če ni sklopov)",
             "type": "object",
-            "$ref": "#/$defs/orderTypeProperties"
+            "$ref": "#/$defs/orderTypeProperties",
+            "description": "Vrsta javnega naročila"
         },
         "technicalSpecifications": {
-            "title": "7. Tehnične zahteve / Specifikacije",
+            "title": "Tehnične zahteve / Specifikacije",
             "type": "object",
             "properties": {
                 "hasSpecifications": {
-                    "type": "boolean",
-                    "title": "Naročnik že ima pripravljene tehnične zahteve / specifikacije"
-                },
-                "specificationDocumentName": {
                     "type": "string",
-                    "title": "Navedite polni naziv dokumenta/dokumentov"
+                    "title": "Naročnik že ima pripravljene tehnične zahteve / specifikacije",
+                    "enum": ["da", "ne"],
+                    "default": ""
                 },
-                "specificationDocument": {
-                    "type": "string",
-                    "format": "file",
-                    "title": "Naložite dokument/e s tehničnimi zahtevami / specifikacijami"
+                "noSpecificationsWarning": {
+                    "type": "object",
+                    "title": "Opozorilo",
+                    "render_if": {
+                        "field": "technicalSpecifications.hasSpecifications",
+                        "value": "ne"
+                    },
+                    "properties": {},
+                    "description": "Razpisna dokumentacija bo pripravljena brez upoštevanja terminologije v tehničnih zahtevah naročnika. Za pripravo jasne in celovite dokumentacije ter pravno varnost je ključno, da je terminologija v vseh dokumentih v postopku oddaje javnega naročila medsebojno usklajena. Ko boste imeli pripravljene tehnične specifikacije, vam z veseljem ponujamo pomoč pri končnem pregledu in uskladitvi celotnega kompleta dokumentacije. Na ta način bomo skupaj zagotovili, da bo postopek za vas potekal kar se da tekoče in brez nepotrebnih zapletov."
+                },
+                "specificationDocuments": {
+                    "type": "array",
+                    "title": "Dokumenti s tehničnimi zahtevami",
+                    "items": {
+                        "type": "object",
+                        "title": "Dokument",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "title": "Naziv dokumenta"
+                            },
+                            "file": {
+                                "type": "string",
+                                "format": "file",
+                                "title": "Naložite dokument"
+                            }
+                        },
+                        "required": ["name"]
+                    },
+                    "render_if": {
+                        "field": "technicalSpecifications.hasSpecifications",
+                        "value": "da"
+                    }
                 }
             },
-            "description": "Tehnične specifikacije pomenijo skupek tehničnih predpisov... (celoten opis iz PDF)"
+            "description": "»Tehnične specifikacije« pomenijo:\n\na) v primeru javnih naročil gradenj skupek tehničnih predpisov, ki jih vključuje zlasti dokumentacija v zvezi z oddajo javnega naročila in s katerimi so opredeljene zahtevane značilnosti materiala, proizvoda ali blaga, da ustreza uporabi, za katero jo potrebuje naročnik; te značilnosti vključujejo ravni okoljskih in podnebnih vplivov, zahteve v zvezi z oblikovanjem, prilagojenim vsem uporabnikom (vključno z dostopnostjo za invalide), ter ocenjevanje skladnosti, zahteve v zvezi z delovanjem, varnostjo ali dimenzijami, vključno s postopki zagotavljanja kakovosti, izrazoslovjem, simboli, preizkušanjem in preizkusnimi metodami, pakiranjem, označevanjem in uporabo znakov, navodili za uporabnike ter proizvodnimi postopki in metodami na posamezni stopnji življenjske dobe gradenj; te značilnosti vključujejo tudi pravila glede načrtov in izračuna stroškov, pogoje za preizkušanje, inšpekcijske preglede in pogoje za prevzem gradenj ter konstrukcijske metode ali tehnike in vse druge tehnične pogoje, ki jih lahko v zvezi z dokončanimi gradnjami in materiali ali deli, ki jih vključujejo, predpiše naročnik v skladu s splošnimi ali posebnimi predpisi;\n\nb) v primeru javnih naročil blaga ali storitev specifikacijo v dokumentu, ki opredeljuje zahtevane značilnosti proizvoda ali storitve, kot so ravni kakovosti, okoljskih in podnebnih vplivov, zahteve v zvezi z oblikovanjem, prilagojenim vsem uporabnikom (vključno z dostopnostjo za invalide), ter ocenjevanje skladnosti, zahteve v zvezi z delovanjem, uporabo proizvoda, varnostjo ali dimenzijami, vključno z zahtevami v zvezi s proizvodom glede imena, pod katerim se prodaja, izrazoslovjem, simboli, preizkušanjem in preizkusnimi metodami, pakiranjem, označevanjem, uporabo znakov, navodili za uporabnike, proizvodnimi postopki in metodami na posamezni stopnji življenjske dobe blaga ali storitve, ter postopki ocenjevanja skladnosti."
         },
         "executionDeadline": {
-            "title": "8. Rok izvedbe oziroma trajanje javnega naročila",
+            "title": "Rok izvedbe oziroma trajanje javnega naročila",
             "type": "object",
             "properties": {
                 "type": {
                     "type": "string",
-                    "title": "Izberite način določitve roka",
-                    "enum": ["datumsko", "v dnevih", "v mesecih", "v letih"]
+                    "title": "Prosimo navedite rok izvedbe oziroma trajanje javnega naročila in izberite eno od možnosti",
+                    "enum": ["datumsko", "v dnevih", "v mesecih", "v letih"],
+                    "default": ""
                 },
-                "startDate": { "type": "string", "format": "date", "title": "Od" },
-                "endDate": { "type": "string", "format": "date", "title": "Do" },
-                "days": { "type": "number", "title": "Dni od dneva sklenitve pogodbe" },
-                "months": { "type": "number", "title": "Mesecev od dneva sklenitve pogodbe" },
-                "years": { "type": "number", "title": "Let od dneva sklenitve pogodbe" }
-            }
+                "startDate": { 
+                    "type": "string", 
+                    "format": "date", 
+                    "title": "Od",
+                    "render_if": {
+                        "field": "executionDeadline.type",
+                        "value": "datumsko"
+                    }
+                },
+                "endDate": { 
+                    "type": "string", 
+                    "format": "date", 
+                    "title": "Do",
+                    "render_if": {
+                        "field": "executionDeadline.type",
+                        "value": "datumsko"
+                    }
+                },
+                "days": { 
+                    "type": "integer", 
+                    "minimum": 1,
+                    "title": "Dni od dneva sklenitve pogodbe o izvedbi javnega naročila",
+                    "render_if": {
+                        "field": "executionDeadline.type",
+                        "value": "v dnevih"
+                    }
+                },
+                "months": { 
+                    "type": "integer", 
+                    "minimum": 1,
+                    "title": "Mesecev od dneva sklenitve pogodbe o izvedbi javnega naročila",
+                    "render_if": {
+                        "field": "executionDeadline.type",
+                        "value": "v mesecih"
+                    }
+                },
+                "years": { 
+                    "type": "integer", 
+                    "minimum": 1,
+                    "title": "Let od dneva sklenitve pogodbe o izvedbi javnega naročila",
+                    "render_if": {
+                        "field": "executionDeadline.type",
+                        "value": "v letih"
+                    }
+                }
+            },
+            "required": ["type"]
         },
         "priceInfo": {
-            "title": "9. Cena",
+            "title": "Cena",
             "type": "object",
             "properties": {
                 "priceClause": {
@@ -216,7 +286,7 @@
             }
         },
         "inspectionInfo": {
-            "title": "10. Ogled",
+            "title": "Ogled",
             "type": "object",
             "properties": {
                 "hasInspection": { "type": "boolean", "title": "Naročnik bo organiziral ogled" },
@@ -227,7 +297,7 @@
             }
         },
         "negotiationsInfo": {
-            "title": "11. Pogajanja",
+            "title": "Pogajanja",
             "type": "object",
             "properties": {
                 "hasNegotiations": { "type": "boolean", "title": "Vključitev pogajanj (če postopek to omogoča)" },
@@ -239,7 +309,7 @@
             "description": "Pogajanja so mogoča v naslednjih postopkih..."
         },
         "exclusionReasons": {
-            "title": "12. Razlogi za izključitev",
+            "title": "Razlogi za izključitev",
             "type": "array",
             "items": {
                 "type": "object",
@@ -251,12 +321,12 @@
             }
         },
         "participationConditions": {
-            "title": "13. Pogoji za sodelovanje",
+            "title": "Pogoji za sodelovanje",
             "type": "object",
             "$ref": "#/$defs/participationConditionProperties"
         },
         "financialGuarantees": {
-            "title": "14. Finančna zavarovanja",
+            "title": "Finančna zavarovanja",
             "type": "array",
             "items": {
                 "type": "object",
@@ -269,7 +339,7 @@
             }
         },
         "variantOffers": {
-            "title": "15. Variantne ponudbe",
+            "title": "Variantne ponudbe",
             "type": "object",
             "properties": {
                 "areVariantsAllowed": { "type": "boolean", "title": "Dopuščate predložitev variantnih ponudb" },
@@ -279,7 +349,7 @@
             }
         },
         "selectionCriteria": {
-            "title": "16. Merila",
+            "title": "Merila",
             "type": "array",
             "items": {
                 "type": "object",
@@ -292,7 +362,7 @@
             }
         },
         "contractInfo": {
-            "title": "17. Pogodba / Okvirni sporazum",
+            "title": "Pogodba / Okvirni sporazum",
             "type": "object",
             "properties": {
                 "type": { "type": "string", "enum": ["pogodba", "okvirni sporazum"], "title": "Želimo skleniti" },
@@ -304,7 +374,7 @@
             }
         },
         "otherInfo": {
-            "title": "18. Ostalo",
+            "title": "Ostalo",
             "type": "string",
             "format": "textarea",
             "title": "Bi nam želeli še kaj sporočiti?"
@@ -317,16 +387,185 @@
                 "type": {
                     "type": "string",
                     "title": "Vrsta javnega naročila",
-                    "enum": ["blago", "storitve", "gradnje", "mešano javno naročilo"]
+                    "enum": ["blago", "storitve", "gradnje", "mešano javno naročilo"],
+                    "default": "blago"
                 },
-                "estimatedValue": { "type": "number", "title": "Ocenjena vrednost (EUR brez DDV)", "description": "Kako je potrebno izračunati ocenjeno vrednost... (24. člen ZJN-3)" },
-                "deliveryType": { "type": "string", "enum": ["enkratna dobava", "sukcesivne dobave"] },
-                "guaranteedFunds": { "type": "number", "title": "Višina zagotovljenih sredstev za izvedbo (EUR)" },
-                "isCofinanced": { "type": "boolean", "title": "Javno naročilo je sofinancirano" },
-                "cofinancerName": { "type": "string", "title": "Polni naziv in naslov sofinancerja" },
-                "cofinancerProgram": { "type": "string", "title": "Naziv, področje in oznaka programa/projekta" },
-                "cofinancerLogo": { "type": "string", "format": "file", "title": "Naložite logotipe sofinancerja" },
-                "cofinancerSpecialRequirements": { "type": "string", "format": "textarea", "title": "Posebne zahteve sofinancerja" }
+                
+                "estimatedValue": { 
+                    "type": "number", 
+                    "title": "Ocenjena vrednost javnega naročila (EUR brez DDV)", 
+                    "description": "Kako je potrebno izračunati ocenjeno vrednost... (24. člen ZJN-3)",
+                    "render_if": {
+                        "field_parent": "type",
+                        "not_in": ["mešano javno naročilo"]
+                    }
+                },
+                "guaranteedFunds": { 
+                    "type": "number", 
+                    "title": "Višina zagotovljenih sredstev (EUR)",
+                    "render_if": {
+                        "field_parent": "type",
+                        "not_in": ["mešano javno naročilo"]
+                    }
+                },
+                "isCofinanced": { 
+                    "type": "boolean", 
+                    "title": "Javno naročilo je sofinancirano",
+                    "render_if": {
+                        "field_parent": "type",
+                        "not_in": ["mešano javno naročilo"]
+                    }
+                },
+                
+                "cofinancers": {
+                    "type": "array",
+                    "title": "Sofinancerji",
+                    "items": {
+                        "type": "object",
+                        "title": "Sofinancer",
+                        "properties": {
+                            "name": { 
+                                "type": "string", 
+                                "title": "Polni naziv in naslov sofinancerja" 
+                            },
+                            "program": { 
+                                "type": "string", 
+                                "title": "Naziv, področje in oznaka programa/projekta" 
+                            },
+                            "logo": { 
+                                "type": "string", 
+                                "format": "file", 
+                                "title": "Logotipe sofinancerja" 
+                            },
+                            "specialRequirements": { 
+                                "type": "string", 
+                                "format": "textarea", 
+                                "title": "Posebne zahteve sofinancerja" 
+                            }
+                        },
+                        "required": ["name", "program"]
+                    },
+                    "render_if": {
+                        "field_parent": "isCofinanced",
+                        "value": true
+                    }
+                },
+                
+                "deliveryType": { 
+                    "type": "string", 
+                    "title": "Vrsta dobave",
+                    "enum": ["enkratna dobava", "sukcesivne dobave"],
+                    "render_if": {
+                        "field_parent": "type",
+                        "value": "blago"
+                    }
+                },
+                "includeZJN3Obligations": { 
+                    "type": "boolean", 
+                    "title": "Dokumentacija o oddaji javnega naročila naj vsebuje obveznosti iz 94. člena ZJN-3 (npr. nominacijo podizvajalcev)",
+                    "render_if": {
+                        "field_parent": "type",
+                        "value": "blago"
+                    }
+                },
+                
+                "serviceType": { 
+                    "type": "string", 
+                    "title": "Vrsta storitve",
+                    "enum": ["enkratna", "ponavljajoče se storitve"],
+                    "render_if": {
+                        "field_parent": "type",
+                        "value": "storitve"
+                    }
+                },
+                
+                "mixedOrderComponents": {
+                    "type": "array",
+                    "title": "Postavke mešanega javnega naročila",
+                    "items": {
+                        "type": "object",
+                        "title": "Postavka",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "title": "Vrsta postavke",
+                                "enum": ["blago", "storitve", "gradnje"]
+                            },
+                            "description": {
+                                "type": "string",
+                                "title": "Opis postavke"
+                            },
+                            "estimatedValue": {
+                                "type": "number",
+                                "title": "Ocenjena vrednost postavke (EUR brez DDV)"
+                            },
+                            "guaranteedFunds": {
+                                "type": "number",
+                                "title": "Višina zagotovljenih sredstev za postavko (EUR)"
+                            },
+                            "isCofinanced": {
+                                "type": "boolean",
+                                "title": "Ta postavka je sofinancirana"
+                            },
+                            "cofinancers": {
+                                "type": "array",
+                                "title": "Sofinancerji za to postavko",
+                                "items": {
+                                    "type": "object",
+                                    "title": "Sofinancer",
+                                    "properties": {
+                                        "name": { 
+                                            "type": "string", 
+                                            "title": "Polni naziv in naslov sofinancerja" 
+                                        },
+                                        "program": { 
+                                            "type": "string", 
+                                            "title": "Naziv, področje in oznaka programa/projekta" 
+                                        },
+                                        "logo": { 
+                                            "type": "string", 
+                                            "format": "file", 
+                                            "title": "Logotipe sofinancerja" 
+                                        },
+                                        "specialRequirements": { 
+                                            "type": "string", 
+                                            "format": "textarea", 
+                                            "title": "Posebne zahteve sofinancerja" 
+                                        }
+                                    },
+                                    "required": ["name", "program"]
+                                },
+                                "render_if": {
+                                    "field_parent": "isCofinanced",
+                                    "value": true
+                                }
+                            },
+                            "deliveryType": { 
+                                "type": "string", 
+                                "title": "Vrsta dobave",
+                                "enum": ["enkratna dobava", "sukcesivne dobave"],
+                                "render_if": {
+                                    "field_parent": "type",
+                                    "value": "blago"
+                                }
+                            },
+                            "serviceType": { 
+                                "type": "string", 
+                                "title": "Vrsta storitve",
+                                "enum": ["enkratna", "ponavljajoče se storitve"],
+                                "render_if": {
+                                    "field_parent": "type",
+                                    "value": "storitve"
+                                }
+                            }
+                        },
+                        "required": ["type", "description", "estimatedValue", "guaranteedFunds"]
+                    },
+                    "render_if": {
+                        "field_parent": "type",
+                        "value": "mešano javno naročilo"
+                    }
+                }
             }
         },
         "participationConditionProperties": {
