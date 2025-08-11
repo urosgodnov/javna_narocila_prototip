@@ -194,6 +194,10 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     elif "Opozorilo" in label:
                         st.warning(help_text)
                         return  # Don't render form fields for warning objects
+                    elif "Informacija" in label and label.startswith("ℹ️"):
+                        # Handle information tooltip objects
+                        st.info(help_text)
+                        # Continue processing other fields in this section
                         
                 render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context)
         

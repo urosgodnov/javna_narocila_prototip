@@ -939,31 +939,343 @@
         "participationConditionProperties": {
             "type": "object",
             "properties": {
-                 "professionalActivity": {
+                "participationConditionsHeader": {
                     "type": "object",
-                    "title": "Ustreznost za opravljanje poklicne dejavnosti",
+                    "title": "Pogoji za sodelovanje",
+                    "properties": {},
+                    "description": "Prosimo označite vse pogoje za sodelovanje, ki jih želite vključiti v dokumentacijo v zvezi z oddajo javnega naročila."
+                },
+                "participationSelection": {
+                    "type": "string",
+                    "title": "Ali želite vključiti pogoje za sodelovanje?",
+                    "enum": [
+                        "da, specifični pogoji",
+                        "ne, ne želimo postaviti posebnih pogojev",
+                        "vseeno nam je, uporabite privzete"
+                    ],
+                    "default": ""
+                },
+                "professionalActivitySection": {
+                    "type": "object",
+                    "title": "1. Ustreznost za opravljanje poklicne dejavnosti",
+                    "render_if": {
+                        "field": "participationConditions.participationSelection",
+                        "value": "da, specifični pogoji"
+                    },
                     "properties": {
-                        "required": { "type": "boolean", "title": "Zahtevaj pogoj" },
-                        "options": { "type": "array", "items": { "type": "string", "enum": ["vpis v ustrezni poklicni register", "vpis v poslovni register", "potrebno določeno dovoljenje", "potrebno članstvo določene organizacije", "drugo"] } },
-                        "otherText": { "type": "string", "title": "Druga zahteva" }
+                        "professionalRegister": {
+                            "type": "boolean",
+                            "title": "vpis v ustrezni poklicni register",
+                            "default": false
+                        },
+                        "professionalRegisterDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.professionalActivitySection.professionalRegister",
+                                "value": true
+                            }
+                        },
+                        "businessRegister": {
+                            "type": "boolean",
+                            "title": "vpis v poslovni register",
+                            "default": false
+                        },
+                        "businessRegisterDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.professionalActivitySection.businessRegister",
+                                "value": true
+                            }
+                        },
+                        "specificLicense": {
+                            "type": "boolean",
+                            "title": "potrebno določeno dovoljenje (za naročilo storitev)",
+                            "default": false
+                        },
+                        "licenseInfo": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o dovoljenju",
+                            "properties": {},
+                            "description": "Če morajo imeti gospodarski subjekti določeno dovoljenje ali biti člani določene organizacije, da lahko v svoji matični državi opravljajo določeno storitev, lahko naročnik v postopku za oddajo javnega naročila storitev od njih zahteva, da predložijo dokazilo o tem dovoljenju ali članstvu.",
+                            "render_if": {
+                                "field": "participationConditions.professionalActivitySection.specificLicense",
+                                "value": true
+                            }
+                        },
+                        "licenseDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "description": "Opišite konkretno dovoljenje, ki ga mora imeti ponudnik.",
+                            "render_if": {
+                                "field": "participationConditions.professionalActivitySection.specificLicense",
+                                "value": true
+                            }
+                        },
+                        "organizationMembership": {
+                            "type": "boolean",
+                            "title": "potrebno članstvo določene organizacije (za naročilo storitev)",
+                            "default": false
+                        },
+                        "membershipInfo": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o članstvu",
+                            "properties": {},
+                            "description": "Če morajo imeti gospodarski subjekti določeno dovoljenje ali biti člani določene organizacije, da lahko v svoji matični državi opravljajo določeno storitev, lahko naročnik v postopku za oddajo javnega naročila storitev od njih zahteva, da predložijo dokazilo o tem dovoljenju ali članstvu.",
+                            "render_if": {
+                                "field": "participationConditions.professionalActivitySection.organizationMembership",
+                                "value": true
+                            }
+                        },
+                        "membershipDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "description": "Opišite konkretno organizacijo in vrsto članstva.",
+                            "render_if": {
+                                "field": "participationConditions.professionalActivitySection.organizationMembership",
+                                "value": true
+                            }
+                        },
+                        "professionalOther": {
+                            "type": "boolean",
+                            "title": "drugo",
+                            "default": false
+                        },
+                        "professionalOtherDetails": {
+                            "type": "string",
+                            "title": "→ Navedite kaj bi želeli zahtevati:",
+                            "render_if": {
+                                "field": "participationConditions.professionalActivitySection.professionalOther",
+                                "value": true
+                            }
+                        },
+                        "professionalAI": {
+                            "type": "boolean",
+                            "title": "drugo, prosim za predlog umetne inteligence",
+                            "default": false
+                        }
                     }
-                 },
-                 "economicAndFinancial": {
-                     "type": "object",
-                     "title": "Ekonomski in finančni položaj",
-                     "properties": {
-                         "required": { "type": "boolean", "title": "Zahtevaj pogoj" },
-                         "options": { "type": "array", "items": { "type": "string", "enum": ["splošni letni promet", "posebni letni promet", "zavarovanje poklicne odgovornosti", "neblokada TRR"] } }
-                     }
-                 },
-                 "technicalAndProfessional": {
-                     "type": "object",
-                     "title": "Tehnična in strokovna sposobnost",
-                     "properties": {
-                         "required": { "type": "boolean", "title": "Zahtevaj pogoj" },
-                         "options": { "type": "array", "items": { "type": "string", "enum": ["reference gospodarskega subjekta", "reference kadra", "kader", "certifikati/standardi", "drugo"] } }
-                     }
-                 }
+                },
+                "economicFinancialSection": {
+                    "type": "object",
+                    "title": "2. Ekonomski in finančni položaj",
+                    "render_if": {
+                        "field": "participationConditions.participationSelection",
+                        "value": "da, specifični pogoji"
+                    },
+                    "properties": {
+                        "generalTurnover": {
+                            "type": "boolean",
+                            "title": "splošni letni promet",
+                            "default": false
+                        },
+                        "generalTurnoverDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.generalTurnover",
+                                "value": true
+                            }
+                        },
+                        "specificTurnover": {
+                            "type": "boolean",
+                            "title": "posebni letni promet na področju poslovanja, zajetem v javnem naročilu",
+                            "default": false
+                        },
+                        "specificTurnoverDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.specificTurnover",
+                                "value": true
+                            }
+                        },
+                        "averageTurnover": {
+                            "type": "boolean",
+                            "title": "povprečni letni promet",
+                            "default": false
+                        },
+                        "averageTurnoverDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.averageTurnover",
+                                "value": true
+                            }
+                        },
+                        "averageSpecificTurnover": {
+                            "type": "boolean",
+                            "title": "povprečni posebni letni promet na področju poslovanja, zajetem v javnem naročilu",
+                            "default": false
+                        },
+                        "averageSpecificTurnoverDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.averageSpecificTurnover",
+                                "value": true
+                            }
+                        },
+                        "turnoverInfoGeneral": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o prometu",
+                            "properties": {},
+                            "description": "Zahtevani najnižji letni promet ne sme presegati dvakratne ocenjene vrednosti javnega naročila, razen v ustrezno utemeljenih primerih, ki se glede na primer nanašajo na posebna tveganja, povezana z naravo gradenj, storitev ali blaga. Če se ponudniku odda več sklopov, ki se izvajajo sočasno, lahko naročnik določi najnižji letni promet, ki ga morajo imeti gospodarski subjekti za posamezno skupino sklopov. Če se javna naročila na podlagi okvirnega sporazuma oddajo po ponovnem odpiranju konkurence, se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo izvajala sočasno, če to ni znano, pa na podlagi ocenjene vrednosti okvirnega sporazuma. Pri dinamičnih nabavnih sistemih se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo oddala v okviru tega sistema.",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.generalTurnover",
+                                "value": true
+                            }
+                        },
+                        "turnoverInfoSpecific": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o prometu",
+                            "properties": {},
+                            "description": "Zahtevani najnižji letni promet ne sme presegati dvakratne ocenjene vrednosti javnega naročila, razen v ustrezno utemeljenih primerih, ki se glede na primer nanašajo na posebna tveganja, povezana z naravo gradenj, storitev ali blaga. Če se ponudniku odda več sklopov, ki se izvajajo sočasno, lahko naročnik določi najnižji letni promet, ki ga morajo imeti gospodarski subjekti za posamezno skupino sklopov. Če se javna naročila na podlagi okvirnega sporazuma oddajo po ponovnem odpiranju konkurence, se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo izvajala sočasno, če to ni znano, pa na podlagi ocenjene vrednosti okvirnega sporazuma. Pri dinamičnih nabavnih sistemih se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo oddala v okviru tega sistema.",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.specificTurnover",
+                                "value": true
+                            }
+                        },
+                        "financialRatio": {
+                            "type": "boolean",
+                            "title": "finančni delež (kot je delež sredstev glede na obveznosti)",
+                            "default": false
+                        },
+                        "financialRatioDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.financialRatio",
+                                "value": true
+                            }
+                        },
+                        "professionalInsurance": {
+                            "type": "boolean",
+                            "title": "zavarovanje poklicne odgovornosti",
+                            "default": false
+                        },
+                        "professionalInsuranceDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.professionalInsurance",
+                                "value": true
+                            }
+                        },
+                        "accountNotBlocked": {
+                            "type": "boolean",
+                            "title": "neblokada TRR",
+                            "default": false
+                        },
+                        "accountNotBlockedDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.accountNotBlocked",
+                                "value": true
+                            }
+                        },
+                        "otherEconomic": {
+                            "type": "boolean",
+                            "title": "druge ekonomske ali finančne zahteve",
+                            "default": false
+                        },
+                        "otherEconomicDetails": {
+                            "type": "string",
+                            "title": "→ Navedite kaj bi želeli zahtevati:",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.otherEconomic",
+                                "value": true
+                            }
+                        },
+                        "economicAI": {
+                            "type": "boolean",
+                            "title": "drugo, prosim za predlog AI",
+                            "default": false
+                        }
+                    }
+                },
+                "technicalProfessionalSection": {
+                    "type": "object",
+                    "title": "3. Tehnična in strokovna sposobnost",
+                    "render_if": {
+                        "field": "participationConditions.participationSelection",
+                        "value": "da, specifični pogoji"
+                    },
+                    "properties": {
+                        "companyReferences": {
+                            "type": "boolean",
+                            "title": "reference gospodarskega subjekta",
+                            "default": false
+                        },
+                        "companyReferencesDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.technicalProfessionalSection.companyReferences",
+                                "value": true
+                            }
+                        },
+                        "staffReferences": {
+                            "type": "boolean",
+                            "title": "reference kadra",
+                            "default": false
+                        },
+                        "staffReferencesDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.technicalProfessionalSection.staffReferences",
+                                "value": true
+                            }
+                        },
+                        "staffRequirements": {
+                            "type": "boolean",
+                            "title": "kader",
+                            "default": false
+                        },
+                        "staffRequirementsDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.technicalProfessionalSection.staffRequirements",
+                                "value": true
+                            }
+                        },
+                        "qualityCertificates": {
+                            "type": "boolean",
+                            "title": "potrdila pristojnih ustanov za nadzor kakovosti (certifikate/standarde)",
+                            "default": false
+                        },
+                        "qualityCertificatesDetails": {
+                            "type": "string",
+                            "title": "→ Opišite zahtevo",
+                            "render_if": {
+                                "field": "participationConditions.technicalProfessionalSection.qualityCertificates",
+                                "value": true
+                            }
+                        },
+                        "technicalOther": {
+                            "type": "boolean",
+                            "title": "drugo",
+                            "default": false
+                        },
+                        "technicalOtherDetails": {
+                            "type": "string",
+                            "title": "→ Navedite kaj bi želeli zahtevati:",
+                            "render_if": {
+                                "field": "participationConditions.technicalProfessionalSection.technicalOther",
+                                "value": true
+                            }
+                        },
+                        "technicalAI": {
+                            "type": "boolean",
+                            "title": "drugo, prosim za predlog AI",
+                            "default": false
+                        }
+                    }
+                }
             }
         }
     }
