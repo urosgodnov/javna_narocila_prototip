@@ -5,6 +5,7 @@ from datetime import datetime
 import template_service
 from config import ADMIN_PASSWORD
 import json
+import uuid
 
 def render_admin_header():
     """Render the admin header with status and logout option."""
@@ -204,6 +205,43 @@ def render_organization_management_tab():
         with open(org_file_path, 'w') as f:
             json.dump([], f)
 
+    # Load organizations and perform migration if necessary
+    with open(org_file_path, 'r') as f:
+        organizations = json.load(f)
+
+    migrated = False
+    new_organizations = []
+    demo_org_id = None
+
+    # Migration logic
+    for org in organizations:
+        if isinstance(org, str):
+            # Old format, migrate it
+            org_id = str(uuid.uuid4())
+            if org == "demo_organizacije":
+                demo_org_id = org_id
+            new_organizations.append({"id": org_id, "name": org})
+            migrated = True
+        else:
+            # Already new format
+            if org["name"] == "demo_organizacije":
+                demo_org_id = org["id"]
+            new_organizations.append(org)
+    
+    # Ensure demo_organizacije exists and get its ID
+    if not any(org["name"] == "demo_organizacije" for org in new_organizations):
+        demo_org_id = str(uuid.uuid4())
+        new_organizations.append({"id": demo_org_id, "name": "demo_organizacije"})
+        migrated = True
+
+    if migrated:
+        with open(org_file_path, 'w') as f:
+            json.dump(new_organizations, f, indent=4)
+        st.success("Organizacije uspešno migrirane na nov format.")
+        st.rerun()
+
+    st.session_state["demo_organizacije_id"] = demo_org_id
+
     with st.container():
         st.markdown("### 🏢 Upravljanje organizacij")
 
@@ -212,34 +250,32 @@ def render_organization_management_tab():
             new_org_name = st.text_input("Naziv nove organizacije")
             submitted = st.form_submit_button("Dodaj organizacijo")
             if submitted and new_org_name:
-                with open(org_file_path, "r+") as f:
-                    organizations = json.load(f)
-                    if new_org_name not in organizations:
-                        organizations.append(new_org_name)
-                        f.seek(0)
-                        json.dump(organizations, f)
-                        st.success(f"Organizacija '{new_org_name}' dodana.")
-                        st.rerun()
-                    else:
-                        st.warning(f"Organizacija '{new_org_name}' že obstaja.")
+                # Check if organization already exists by name
+                if any(org["name"] == new_org_name for org in new_organizations):
+                    st.warning(f"Organizacija '{new_org_name}' že obstaja.")
+                else:
+                    new_org_id = str(uuid.uuid4())
+                    new_organizations.append({"id": new_org_id, "name": new_org_name})
+                    with open(org_file_path, "w") as f_write:
+                        json.dump(new_organizations, f_write, indent=4)
+                    st.success(f"Organizacija '{new_org_name}' dodana.")
+                    st.rerun()
 
         st.markdown("---")
         st.markdown("### 📋 Seznam obstoječih organizacij")
-        with open(org_file_path, "r") as f:
-            organizations = json.load(f)
-            if organizations:
-                for i, org in enumerate(organizations):
-                    col1, col2 = st.columns([4, 1])
-                    with col1:
-                        st.markdown(f"- {org}")
-                    with col2:
-                        if st.button(f"🗑️ Izbriši", key=f"delete_org_{i}"):
-                            organizations.pop(i)
-                            with open(org_file_path, "w") as f_write:
-                                json.dump(organizations, f_write)
-                            st.rerun()
-            else:
-                st.info("Ni najdenih organizacij.")
+        if new_organizations:
+            for i, org in enumerate(new_organizations):
+                col1, col2 = st.columns([4, 1])
+                with col1:
+                    st.markdown(f"- **{org["name"]}** (ID: `{org["id"]}`)")
+                with col2:
+                    if st.button(f"🗑️ Izbriši", key=f"delete_org_{org["id"]}"):
+                        new_organizations.pop(i)
+                        with open(org_file_path, "w") as f_write:
+                            json.dump(new_organizations, f_write, indent=4)
+                        st.rerun()
+        else:
+            st.info("Ni najdenih organizacij.")
 
 
 def render_admin_panel():
