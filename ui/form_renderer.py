@@ -8,7 +8,7 @@ from utils.lot_utils import get_lot_scoped_key, render_lot_context_step
 def _get_default_value(full_key, prop_details, lot_context=None):
     """Get appropriate default value for form field."""
     # Apply lot scoping if context is provided, but respect global fields
-    global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo']
+    global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline']
     is_global_field = any(full_key.startswith(gf) for gf in global_fields)
     
     if is_global_field:
@@ -57,7 +57,7 @@ def _should_render(prop_details, parent_key="", lot_context=None, session_key_pr
     # Resolve the actual session key considering lot context
     if condition_field:
         # Check if this is a global field that shouldn't be scoped
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo']
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline']
         is_global_field = any(condition_field.startswith(gf) for gf in global_fields)
         
         if is_global_field:
@@ -155,7 +155,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
         
         # Create the session state key (scoped for lots)
         # Some fields should never be lot-scoped as they control global form behavior
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo']
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline']
         is_global_field = any(full_key.startswith(gf) for gf in global_fields)
         
         if is_global_field:
@@ -342,11 +342,19 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                         index = 0
                 
                 # Special handling for "vseeno" auto-selection in procedure field
+                                                # Enhanced selectbox with proper placeholder and filtered options
+                enum_options = available_options
+                
+                index = None
+                if current_value and current_value in enum_options:
+                    index = enum_options.index(current_value)
+
+                # Special handling for "vseeno" auto-selection in procedure field
                 selected_value = st.selectbox(
                     display_label, 
                     options=enum_options, 
                     index=index,
-                    key=session_key, 
+                    key=full_key, 
                     help=help_text,
                     placeholder=get_text("select_option")
                 )

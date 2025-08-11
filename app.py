@@ -47,16 +47,26 @@ def validate_step(step_keys, schema):
     """Validate the fields for the current step based on 'required' keys in the schema."""
     is_valid = True
     for key in step_keys:
-        # This validation is simplistic and only checks top-level properties.
-        # A robust solution would recursively check nested objects and arrays.
-        prop_details = schema["properties"].get(key, {})
+        original_key = key
+        if key.startswith('lot_'):
+            try:
+                original_key = key.split('_', 2)[2]
+            except IndexError:
+                continue  # Skip malformed keys
+
+        prop_details = schema["properties"].get(original_key, {})
         if "required" in prop_details:
             for required_field in prop_details["required"]:
+                # The full key in session_state includes the lot-specific prefix
                 full_key = f"{key}.{required_field}"
                 if not st.session_state.get(full_key):
-                    field_title = prop_details['properties'][required_field]['title']
-                    st.warning(get_text("fill_required_field", field_name=field_title))
-                    is_valid = False
+                    try:
+                        field_title = prop_details['properties'][required_field]['title']
+                        st.warning(get_text("fill_required_field", field_name=field_title))
+                        is_valid = False
+                    except KeyError:
+                        # Failsafe if schema is structured unexpectedly
+                        pass
     return is_valid
 
 def render_main_form():
