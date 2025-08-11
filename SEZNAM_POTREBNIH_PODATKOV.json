@@ -288,14 +288,98 @@
                 "priceClause": {
                     "type": "string",
                     "title": "Katero cenovno klavzulo bi želeli imeti v pogodbi?",
-                    "enum": ["cena na enoto mere", "pavšalna cena", "skupaj dogovorjena cena", "ključ v roke", "drugo"]
+                    "enum": [
+                        "cena na enoto mere",
+                        "pavšalna cena za izvedbo vseh pogodbenih obveznosti in kot izračun z izrecnim jamstvom (643. člen OZ) – v primeru, da gre za javno naročilo storitev in bo sklenjena podjemna pogodba",
+                        "skupaj dogovorjena cena",
+                        "ključ v roke",
+                        "drugo"
+                    ]
                 },
-                "otherPriceClause": { "type": "string", "title": "Druga cenovna klavzula" },
-                "arePricesFixed": { "type": "boolean", "title": "Naročnik želi, da bodo ponudbene cene fiksne ves čas izvajanja pogodbe" },
-                "valorizationPeriod": { "type": "string", "title": "Navedite obdobje po sklenitvi pogodbe, za katero želite, da so cene fiksne" },
-                "hasOfferBillOfQuantities": { "type": "boolean", "title": "Naročnik že ima pripravljen ponudbeni predračun" },
-                "areQuantitiesFixed": { "type": "boolean", "title": "Količine navedene v ponudbenem predračunu so fiksne" },
-                "offerBillOfQuantitiesDocument": { "type": "string", "format": "file", "title": "Naložite dokument ponudbeni predračun" }
+                "otherPriceClause": {
+                    "type": "string",
+                    "title": "Navedite kakšno cenovno klavzulo bi želeli",
+                    "render_if": {
+                        "field": "priceInfo.priceClause",
+                        "value": "drugo"
+                    }
+                },
+                "priceFixation": {
+                    "type": "string",
+                    "title": "Naročnik želi, da",
+                    "enum": [
+                        "bodo ponudbene cene fiksne ves čas izvajanja pogodbe",
+                        "se bodo ponudbene cene valorizirale, skladno z valorizacijsko klavzulo"
+                    ]
+                },
+                "valorization": {
+                    "title": "Navedite obdobje po sklenitvi pogodbe, za katero želite, da so cene fiksne",
+                    "type": "object",
+                    "render_if": {
+                        "field": "priceInfo.priceFixation",
+                        "value": "se bodo ponudbene cene valorizirale, skladno z valorizacijsko klavzulo"
+                    },
+                    "properties": {
+                        "type": {
+                            "type": "string",
+                            "title": "Izberite eno od možnosti",
+                            "enum": ["v dnevih", "v mesecih", "v letih"],
+                            "default": ""
+                        },
+                        "days": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "title": "Dni od dneva sklenitve pogodbe o izvedbi javnega naročila",
+                            "render_if": {
+                                "field": "priceInfo.valorization.type",
+                                "value": "v dnevih"
+                            }
+                        },
+                        "months": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "title": "Mesecev od dneva sklenitve pogodbe o izvedbi javnega naročila",
+                            "render_if": {
+                                "field": "priceInfo.valorization.type",
+                                "value": "v mesecih"
+                            }
+                        },
+                        "years": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "title": "Let od dneva sklenitve pogodbe o izvedbi javnega naročila",
+                            "render_if": {
+                                "field": "priceInfo.valorization.type",
+                                "value": "v letih"
+                            }
+                        }
+                    }
+                },
+                "hasOfferBillOfQuantities": {
+                    "type": "boolean",
+                    "title": "Naročnik že ima pripravljen ponudbeni predračun"
+                },
+                "quantitiesType": {
+                    "type": "string",
+                    "title": "Količine v ponudbenem predračunu",
+                    "enum": [
+                        "količine navedene v ponudbenem predračunu so fiksne",
+                        "količine navedene v ponudbenem predračunu so okvirne in naročnik pri izvedbi javnega naročila nanje ni vezan"
+                    ],
+                    "render_if": {
+                        "field": "priceInfo.hasOfferBillOfQuantities",
+                        "value": true
+                    }
+                },
+                "offerBillOfQuantitiesDocument": {
+                    "type": "string",
+                    "format": "file",
+                    "title": "Naložite dokument ponudbeni predračun",
+                    "render_if": {
+                        "field": "priceInfo.hasOfferBillOfQuantities",
+                        "value": true
+                    }
+                }
             }
         },
         "inspectionInfo": {
