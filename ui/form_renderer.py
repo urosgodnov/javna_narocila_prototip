@@ -57,7 +57,7 @@ def _should_render(prop_details, parent_key="", lot_context=None, session_key_pr
     # Resolve the actual session key considering lot context
     if condition_field:
         # Check if this is a global field that shouldn't be scoped
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo']
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo']
         is_global_field = any(condition_field.startswith(gf) for gf in global_fields)
         
         if is_global_field:
@@ -155,7 +155,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
         
         # Create the session state key (scoped for lots)
         # Some fields should never be lot-scoped as they control global form behavior
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo']
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo']
         is_global_field = any(full_key.startswith(gf) for gf in global_fields)
         
         if is_global_field:
@@ -241,6 +241,8 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     button_text = "➕ Dodaj postavko"
                 elif full_key == "lots" and item_title == "Sklop":
                     button_text = "➕ Dodaj sklop"
+                elif "inspectionDates" in full_key:
+                    button_text = "➕ Dodaj nov termin ogleda"
                 else:
                     button_text = f"➕ Dodaj {item_title.lower()}"
                 

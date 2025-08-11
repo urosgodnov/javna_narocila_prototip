@@ -11,6 +11,30 @@
                     "title": "Naročnik je eden",
                     "default": true
                 },
+                "singleClientName": {
+                    "type": "string",
+                    "title": "Naziv",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientAddress": {
+                    "type": "string",
+                    "title": "Naslov (ulica, hišna številka, poštna številka in kraj)",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientLegalRepresentative": {
+                    "type": "string",
+                    "title": "Zakoniti zastopnik (ime in priimek)",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
                 "clients": {
                     "type": "array",
                     "title": "Naročniki",
@@ -406,24 +430,133 @@
             "title": "Ogled lokacije",
             "type": "object",
             "properties": {
-                "hasInspection": { "type": "boolean", "title": "Naročnik bo organiziral ogled" },
-                "isInspectionMandatory": { "type": "boolean", "title": "Ogled je obvezen" },
-                "inspectionTerms": { "type": "array", "items": { "type": "string", "format": "date-time", "title": "Termin ogleda"} },
-                "inspectionLocation": { "type": "string", "title": "Kam naj ob navedenem terminu pridejo potencialni ponudniki?" },
-                "isOfferAfterInspectionOnly": { "type": "boolean", "title": "Ali bodo lahko ponudniki ponudbo sestavili šele po ogledu lokacije?" }
+                "hasInspection": {
+                    "type": "boolean",
+                    "title": "Ali naročnik organizira ogled lokacije?",
+                    "default": false
+                },
+                "isInspectionMandatory": {
+                    "type": "boolean",
+                    "title": "Ali je ogled obvezen za vse ponudnike?",
+                    "default": false,
+                    "render_if": {
+                        "field": "inspectionInfo.hasInspection",
+                        "value": true
+                    }
+                },
+                "inspectionDates": {
+                    "type": "array",
+                    "title": "Datumi in ure ogledov",
+                    "items": {
+                        "type": "object",
+                        "title": "Termin",
+                        "properties": {
+                            "date": {
+                                "type": "string",
+                                "format": "date",
+                                "title": "Datum ogleda"
+                            },
+                            "time": {
+                                "type": "string",
+                                "format": "time",
+                                "title": "Ura ogleda"
+                            }
+                        },
+                        "required": ["date", "time"]
+                    },
+                    "minItems": 1,
+                    "render_if": {
+                        "field": "inspectionInfo.hasInspection",
+                        "value": true
+                    }
+                },
+                "inspectionLocation": {
+                    "type": "string",
+                    "title": "Kam naj pridejo potencialni ponudniki za ogled?",
+                    "description": "Navedite natančno lokacijo, naslov, kontaktno osebo in morebitne dodatne napotke za ogled lokacije.",
+                    "render_if": {
+                        "field": "inspectionInfo.hasInspection",
+                        "value": true
+                    }
+                },
+                "isOfferAfterInspectionOnly": {
+                    "type": "boolean",
+                    "title": "Ponudniki lahko sestavijo ponudbo šele po opravljenem ogledu lokacije na kraju samem",
+                    "default": false,
+                    "render_if": {
+                        "field": "inspectionInfo.hasInspection",
+                        "value": true
+                    }
+                },
+                "zjn3ComplianceWarning": {
+                    "type": "object",
+                    "title": "Opozorilo",
+                    "render_if": {
+                        "field": "inspectionInfo.isOfferAfterInspectionOnly",
+                        "value": true
+                    },
+                    "properties": {},
+                    "description": "Ko označite, da lahko ponudniki sestavijo ponudbo šele po ogledu lokacije, morate zagotoviti, da so roki za prejem ponudb daljši od minimalnih rokov, določenih v ZJN-3. To je potrebno zato, ker ponudniki potrebujejo čas za izvedbo ogleda in pripravo kakovostne ponudbe na podlagi ogledanih razmer."
+                }
             }
         },
         "negotiationsInfo": {
             "title": "Informacije o pogajanjih",
             "type": "object",
             "properties": {
-                "hasNegotiations": { "type": "boolean", "title": "Vključitev pogajanj (če postopek to omogoča)" },
-                "negotiationSubjects": { "type": "array", "items": { "type": "string", "enum": ["cena", "drugo"] }, "title": "V zvezi s čim bi se želeli pogajati?" },
-                "otherNegotiationSubject": { "type": "string", "title": "Navedite v zvezi s čim se želite pogajati" },
-                "negotiationRounds": { "type": "string", "enum": ["1 krog", "več krogov, ne vem še koliko"], "title": "Koliko krogov pogajanj boste izvedli?" },
-                "specialNegotiationWishes": { "type": "string", "title": "Posebne želje v zvezi s pogajanji" }
+                "hasNegotiations": {
+                    "type": "boolean",
+                    "title": "Ali želite vključiti pogajanja (če postopek to omogoča)?",
+                    "default": false
+                },
+                "negotiationSubject": {
+                    "type": "string",
+                    "title": "V zvezi s čim bi se želeli pogajati?",
+                    "enum": ["cena", "drugo"],
+                    "default": "",
+                    "render_if": {
+                        "field": "negotiationsInfo.hasNegotiations",
+                        "value": true
+                    }
+                },
+                "otherNegotiationSubject": {
+                    "type": "string",
+                    "title": "Navedite v zvezi s čim se želite pogajati",
+                    "render_if": {
+                        "field": "negotiationsInfo.negotiationSubject",
+                        "value": "drugo"
+                    }
+                },
+                "negotiationRounds": {
+                    "type": "string",
+                    "title": "Označite koliko krogov pogajanj boste izvedli",
+                    "enum": ["1 krog", "več krogov, ne vem še koliko"],
+                    "default": "",
+                    "render_if": {
+                        "field": "negotiationsInfo.hasNegotiations",
+                        "value": true
+                    }
+                },
+                "hasSpecialWishes": {
+                    "type": "boolean",
+                    "title": "Ali imate posebne želje v zvezi s pogajanji?",
+                    "default": false,
+                    "render_if": {
+                        "field": "negotiationsInfo.hasNegotiations",
+                        "value": true
+                    }
+                },
+                "specialNegotiationWishes": {
+                    "type": "string",
+                    "title": "Opišite vaše posebne želje v zvezi s pogajanji",
+                    "description": "Navedite morebitne posebne zahteve, omejitve ali pojasnila glede poteka pogajanj.",
+                    "render_if": {
+                        "field": "negotiationsInfo.hasSpecialWishes",
+                        "value": true
+                    }
+                }
             },
-            "description": "Pogajanja so mogoča v naslednjih postopkih..."
+            "description": "Pogajanja so mogoča v naslednjih postopkih oddaje javnega naročila in omogočajo prilagoditev ponudb specifičnim potrebam naročnika."
         },
         "exclusionReasons": {
             "title": "Razlogi za izključitev ponudnikov",
