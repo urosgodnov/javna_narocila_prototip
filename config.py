@@ -43,7 +43,7 @@ LOT_SPECIFIC_STEPS = [
     ["inspectionInfo", "negotiationsInfo"],
     
     # Participation criteria (per lot)
-    ["exclusionReasons", "participationConditions"],
+    ["participationAndExclusion", "participationConditions"],
     
     # Financial and variant offers (per lot)
     ["financialGuarantees", "variantOffers"],

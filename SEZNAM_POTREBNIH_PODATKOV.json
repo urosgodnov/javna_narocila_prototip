@@ -558,15 +558,133 @@
             },
             "description": "Pogajanja so mogoča v naslednjih postopkih oddaje javnega naročila in omogočajo prilagoditev ponudb specifičnim potrebam naročnika."
         },
-        "exclusionReasons": {
-            "title": "Razlogi za izključitev ponudnikov",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "reason": { "type": "string", "title": "Razlog" },
-                    "selected": { "type": "boolean" },
-                    "justification": { "type": "string", "title": "Pojasnilo (če je potrebno)" }
+        "participationAndExclusion": {
+            "title": "Pogoji za sodelovanje in razlogi za izključitev",
+            "type": "object",
+            "properties": {
+                "sectionHeader": {
+                    "type": "object",
+                    "title": "Razlogi za izključitev",
+                    "properties": {},
+                    "description": "Prosimo označite vse neobvezne razloge za izključitev, ki jih želite vključiti v dokumentacijo v zvezi z oddajo javnega naročila."
+                },
+                "exclusionReasonsSelection": {
+                    "type": "string",
+                    "title": "Prosimo označite vse neobvezne razloge za izključitev, ki jih želite vključiti v dokumentacijo:",
+                    "enum": [
+                        "specifični razlogi",
+                        "ne želimo vključiti neobveznih razlogov za izključitev", 
+                        "vseeno nam je"
+                    ],
+                    "default": ""
+                },
+                "exclusionReason_a": {
+                    "type": "boolean",
+                    "title": "kršitev obveznosti na področju okoljskega, socialnega in delovnega prava (a. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "exclusionReason_b": {
+                    "type": "boolean",
+                    "title": "postopek insolventnosti ali prisilnega prenehanja, likvidacije, sredstva ali poslovanje upravlja upravitelj ali sodišče, poslovne dejavnosti so začasno ustavljene (b. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "exclusionReason_c": {
+                    "type": "boolean",
+                    "title": "hujša kršitev poklicnih pravil, zaradi česar je omajana integriteta (c. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "professionalMisconductDetails": {
+                    "type": "string",
+                    "title": "→ Napišite kaj štejete za hujšo kršitev poklicnih pravil:",
+                    "description": "Navedite konkretne primere ali kategorije kršitev, ki po vašem mnenju predstavljajo hujšo kršitev poklicnih pravil.",
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReason_c",
+                        "value": true
+                    }
+                },
+                "exclusionReason_ch": {
+                    "type": "boolean",
+                    "title": "dogovor z drugimi gospodarskimi subjekti z namenom izkrivljanja konkurence (č. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "exclusionReason_d": {
+                    "type": "boolean",
+                    "title": "nasprotja interesov (v komisiji naročnika je nekdo povezan s ponudnikom) ni mogoče učinkovito odpraviti z drugimi blažjimi ukrepi (d. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "exclusionReason_e": {
+                    "type": "boolean",
+                    "title": "predhodno sodelovanje pri pripravi tega postopka javnega naročanja - izkrivljanje konkurence, ki ga ni mogoče učinkovito odpraviti na drug način (e. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "exclusionReason_f": {
+                    "type": "boolean",
+                    "title": "precejšnje ali stalne pomanjkljivosti gospodarskega subjekta pri izpolnjevanju ključne obveznosti pri prejšnji pogodbi o izvedbi javnega naročila (f. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "contractDeficienciesDetails": {
+                    "type": "string", 
+                    "title": "→ Napišite kaj štejete za precejšnje ali stalne pomanjkljivosti:",
+                    "description": "Definirajte konkretne primere pomanjkljivosti pri izpolnjevanju pogodbenih obveznosti.",
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReason_f",
+                        "value": true
+                    }
+                },
+                "comparableSanctionsDetails": {
+                    "type": "string",
+                    "title": "→ Napišite kaj štejete za primerljive sankcije:",
+                    "description": "Navedite vrste sankcij, ki jih obravnavate kot primerljive predčasnemu odstopu ali uveljavljanju odškodnine.",
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReason_f",
+                        "value": true
+                    }
+                },
+                "exclusionReason_g": {
+                    "type": "boolean",
+                    "title": "dajanje resnih zavajajočih informacij ali razlag / nerazkrivanje (g. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
+                },
+                "exclusionReason_h": {
+                    "type": "boolean",
+                    "title": "poskus neupravičenega vplivanja na naročnika (h. točka šestega odstavka 75. člena ZJN-3)",
+                    "default": false,
+                    "render_if": {
+                        "field": "participationAndExclusion.exclusionReasonsSelection",
+                        "value": "specifični razlogi"
+                    }
                 }
             }
         },

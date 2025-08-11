@@ -135,7 +135,7 @@ STEP_LABELS = {
     8: "Roki izvajanja",
     9: "Informacije o ceni",
     10: "Ogledi in pogajanja",
-    11: "Pogoji sodelovanja", 
+    11: "Pogoji za sodelovanje in razlogi za izključitev", 
     12: "Zavarovanja in ponudbe",
     13: "Merila izbire",
     14: "Sklepanje pogodbe",

@@ -57,7 +57,7 @@ def _should_render(prop_details, parent_key="", lot_context=None, session_key_pr
     # Resolve the actual session key considering lot context
     if condition_field:
         # Check if this is a global field that shouldn't be scoped
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo']
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo', 'participationAndExclusion', 'participationConditions', 'financialGuarantees']
         is_global_field = any(condition_field.startswith(gf) for gf in global_fields)
         
         if is_global_field:
@@ -155,7 +155,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
         
         # Create the session state key (scoped for lots)
         # Some fields should never be lot-scoped as they control global form behavior
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo']
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo', 'participationAndExclusion', 'participationConditions', 'financialGuarantees']
         is_global_field = any(full_key.startswith(gf) for gf in global_fields)
         
         if is_global_field:
@@ -207,7 +207,15 @@ def render_form(schema_properties, parent_key="", lot_context=None):
             
             # Array of simple enums (multiselect)
             if "enum" in items_schema:
-                st.multiselect(label, options=items_schema["enum"], default=current_value, key=session_key, help=help_text)
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = []
+                selected_values = st.multiselect(
+                    label, 
+                    options=items_schema["enum"], 
+                    default=st.session_state.get(session_key, []), 
+                    key=session_key, 
+                    help=help_text
+                )
             
             # Array of objects
             elif items_schema.get("type") == "object":

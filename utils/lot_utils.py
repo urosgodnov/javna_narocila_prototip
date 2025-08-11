@@ -110,7 +110,7 @@ def migrate_existing_data_to_lot_structure():
     lot_specific_fields = [
         "orderType", "technicalSpecifications", "executionDeadline", 
         "priceInfo", "inspectionInfo", "negotiationsInfo",
-        "exclusionReasons", "participationConditions", 
+        "participationAndExclusion", "participationConditions", 
         "financialGuarantees", "variantOffers", "selectionCriteria"
     ]
     
