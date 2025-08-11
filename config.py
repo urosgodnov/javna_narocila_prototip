@@ -7,50 +7,89 @@ load_dotenv()
 # Admin authentication
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")  # Default for demonstration
 
-# Optimized form configuration with better field distribution
-FORM_STEPS = [
-    # Step 1: Client information (7 fields) - OK
+# Base form steps - always included
+BASE_STEPS = [
+    # Step 1: Client information
     ["clientInfo"],
     
-    # Step 2: Basic project info (reduced) - Without legal basis
+    # Step 2: Basic project info
     ["projectInfo"],
     
-    # Step 3: Legal basis - Now standalone with info icon
+    # Step 3: Legal basis
     ["legalBasis"],
     
-    # Step 4: Submission procedure (2 fields) - Combined with lots
-    ["submissionProcedure", "lotsInfo"], # Total: 6 fields
+    # Step 4: Submission procedure
+    ["submissionProcedure"],
     
-    # Step 5: Order type (enum selection) - Standalone for complex logic
+    # Step 5: Lots configuration
+    ["lotsInfo", "lots"],
+]
+
+# Steps that are repeated per lot (or used for general lot if no lots)
+LOT_SPECIFIC_STEPS = [
+    # Order type (per lot or general)
     ["orderType"],
     
-    # Step 6: Technical specifications - Now standalone with info icon
+    # Technical specifications (per lot)
     ["technicalSpecifications"],
     
-    # Step 7: Execution deadline (6 fields) - Standalone
+    # Execution deadline (per lot)
     ["executionDeadline"],
     
-    # Step 8: Price info only (7 fields) - Split from overloaded step
+    # Price info (per lot)
     ["priceInfo"],
     
-    # Step 9: Inspection and negotiations (10 fields combined) - More manageable
+    # Inspection and negotiations (per lot)
     ["inspectionInfo", "negotiationsInfo"],
     
-    # Step 10: Participation criteria - Combined related sections
+    # Participation criteria (per lot)
     ["exclusionReasons", "participationConditions"],
     
-    # Step 11: Financial and variant offers (4 fields)
+    # Financial and variant offers (per lot)
     ["financialGuarantees", "variantOffers"],
     
-    # Step 12: Selection criteria (complex section)
+    # Selection criteria (per lot)
     ["selectionCriteria"],
-    
-    # Step 13: Final contract info (6 fields)
+]
+
+# Final steps - always included at the end
+FINAL_STEPS = [
+    # Contract info
     ["contractInfo"],
     
-    # Step 14: Additional information and completion
+    # Additional information and completion
     ["otherInfo"]
 ]
+
+def get_dynamic_form_steps(session_state):
+    """Generate dynamic form steps based on lots configuration."""
+    steps = BASE_STEPS.copy()
+    
+    # Check if lots are configured
+    has_lots = session_state.get("lotsInfo.hasLots", False)
+    lots = session_state.get("lots", [])
+    
+    if not has_lots or len(lots) == 0:
+        # No lots - treat as general lot
+        steps.extend(LOT_SPECIFIC_STEPS)
+    else:
+        # Per-lot steps
+        for i, lot in enumerate(lots):
+            lot_name = lot.get("name", f"Sklop {i+1}")
+            # Add lot context step
+            steps.append([f"lot_context_{i}"])
+            # Add all lot-specific steps for this lot
+            for step in LOT_SPECIFIC_STEPS:
+                lot_step = [f"lot_{i}_{field}" for field in step]
+                steps.append(lot_step)
+    
+    # Add final steps
+    steps.extend(FINAL_STEPS)
+    
+    return steps
+
+# Backward compatibility - will be dynamically generated
+FORM_STEPS = BASE_STEPS + LOT_SPECIFIC_STEPS + FINAL_STEPS
 
 # Schema file path
 SCHEMA_FILE = "SEZNAM_POTREBNIH_PODATKOV.json"

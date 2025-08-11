@@ -3,24 +3,38 @@
 import streamlit as st
 from datetime import date
 from localization import get_text, get_validation_message
+from utils.lot_utils import get_lot_scoped_key, render_lot_context_step
 
-def _get_default_value(full_key, prop_details):
+def _get_default_value(full_key, prop_details, lot_context=None):
     """Get appropriate default value for form field."""
+    # Apply lot scoping if context is provided, but respect global fields
+    global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo']
+    is_global_field = any(full_key.startswith(gf) for gf in global_fields)
+    
+    if is_global_field:
+        scoped_key = full_key  # Global fields always use original key
+    elif lot_context and lot_context['mode'] == 'lots' and lot_context['lot_index'] is not None:
+        scoped_key = get_lot_scoped_key(full_key, lot_context['lot_index'])
+    elif lot_context and lot_context['mode'] == 'general':
+        scoped_key = get_lot_scoped_key(full_key, None)
+    else:
+        scoped_key = full_key
+    
     default_value = prop_details.get("default")
     if prop_details.get("type") == "number":
-        return st.session_state.get(full_key, default_value if default_value is not None else 0.0)
+        return st.session_state.get(scoped_key, default_value if default_value is not None else 0.0)
     elif prop_details.get("type") == "integer":
-        return st.session_state.get(full_key, default_value if default_value is not None else 0)
+        return st.session_state.get(scoped_key, default_value if default_value is not None else 0)
     elif prop_details.get("format") == "date":
-        return st.session_state.get(full_key, default_value if default_value is not None else date.today())
+        return st.session_state.get(scoped_key, default_value if default_value is not None else date.today())
     elif prop_details.get("type") == "array":
-        return st.session_state.get(full_key, default_value if default_value is not None else [])
+        return st.session_state.get(scoped_key, default_value if default_value is not None else [])
     elif prop_details.get("type") == "boolean":
-        return st.session_state.get(full_key, default_value if default_value is not None else False)
+        return st.session_state.get(scoped_key, default_value if default_value is not None else False)
     else:
-        return st.session_state.get(full_key, default_value if default_value is not None else "")
+        return st.session_state.get(scoped_key, default_value if default_value is not None else "")
 
-def _should_render(prop_details, parent_key=""):
+def _should_render(prop_details, parent_key="", lot_context=None, session_key_prefix=""):
     """Check if a field should be rendered based on a conditional flag in the schema."""
     render_if = prop_details.get("render_if")
     if not render_if:
@@ -40,7 +54,27 @@ def _should_render(prop_details, parent_key=""):
         # No parent context, use as-is
         condition_field = condition_field_parent
     
-    current_field_value = st.session_state.get(condition_field) if condition_field else None
+    # Resolve the actual session key considering lot context
+    if condition_field:
+        # Check if this is a global field that shouldn't be scoped
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo']
+        is_global_field = any(condition_field.startswith(gf) for gf in global_fields)
+        
+        if is_global_field:
+            actual_session_key = condition_field
+        elif session_key_prefix:
+            # If we have a session key prefix (from lot scoping), use it
+            actual_session_key = f"{session_key_prefix}.{condition_field}"
+        elif lot_context and lot_context['mode'] == 'lots' and lot_context['lot_index'] is not None:
+            actual_session_key = get_lot_scoped_key(condition_field, lot_context['lot_index'])
+        elif lot_context and lot_context['mode'] == 'general':
+            actual_session_key = get_lot_scoped_key(condition_field, None)
+        else:
+            actual_session_key = condition_field
+        
+        current_field_value = st.session_state.get(actual_session_key)
+    else:
+        current_field_value = None
     
     # Handle 'value' condition (exact match)
     if condition_value is not None and condition_field:
@@ -95,16 +129,43 @@ def _is_field_required(parent_key, prop_name):
     except (KeyError, TypeError):
         return False
 
-def render_form(schema_properties, parent_key=""):
-    """Recursively render form fields based on JSON schema properties."""
+def render_form(schema_properties, parent_key="", lot_context=None):
+    """Recursively render form fields based on JSON schema properties.
+    
+    Args:
+        schema_properties: Schema properties to render
+        parent_key: Parent key for nested fields
+        lot_context: Lot context information (from get_current_lot_context)
+    """
     for prop_name, prop_details in schema_properties.items():
-        if not _should_render(prop_details, parent_key):
+        if not _should_render(prop_details, parent_key, lot_context):
             continue
 
         full_key = f"{parent_key}.{prop_name}" if parent_key else prop_name
+        
+        # Handle lot context steps
+        if full_key.startswith('lot_context_'):
+            lot_index = int(full_key.split('_')[2])
+            render_lot_context_step(lot_index)
+            continue
+            
         label = prop_details.get("title", prop_name)
         help_text = prop_details.get("description")
-        current_value = _get_default_value(full_key, prop_details)
+        current_value = _get_default_value(full_key, prop_details, lot_context)
+        
+        # Create the session state key (scoped for lots)
+        # Some fields should never be lot-scoped as they control global form behavior
+        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo']
+        is_global_field = any(full_key.startswith(gf) for gf in global_fields)
+        
+        if is_global_field:
+            session_key = full_key  # Global fields always use original key
+        elif lot_context and lot_context['mode'] == 'lots' and lot_context['lot_index'] is not None:
+            session_key = get_lot_scoped_key(full_key, lot_context['lot_index'])
+        elif lot_context and lot_context['mode'] == 'general':
+            session_key = get_lot_scoped_key(full_key, None)
+        else:
+            session_key = full_key
 
         prop_type = prop_details.get("type")
 
@@ -117,7 +178,7 @@ def render_form(schema_properties, parent_key=""):
                 ref_props = st.session_state['schema']
                 for part in ref_path:
                     ref_props = ref_props[part]
-                render_form(ref_props.get("properties", {}), parent_key=full_key)
+                render_form(ref_props.get("properties", {}), parent_key=full_key, lot_context=lot_context)
             else:
                 # Use consistent simple styling for all sections
                 st.subheader(label)
@@ -134,7 +195,7 @@ def render_form(schema_properties, parent_key=""):
                         st.warning(help_text)
                         return  # Don't render form fields for warning objects
                         
-                render_form(prop_details.get("properties", {}), parent_key=full_key)
+                render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context)
         
         elif prop_type == "array":
             # Use smaller header for conditional arrays to reduce visual clutter
@@ -146,14 +207,14 @@ def render_form(schema_properties, parent_key=""):
             
             # Array of simple enums (multiselect)
             if "enum" in items_schema:
-                st.multiselect(label, options=items_schema["enum"], default=current_value, key=full_key, help=help_text)
+                st.multiselect(label, options=items_schema["enum"], default=current_value, key=session_key, help=help_text)
             
             # Array of objects
             elif items_schema.get("type") == "object":
-                if full_key not in st.session_state:
-                    st.session_state[full_key] = []
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = []
 
-                for i in range(len(st.session_state[full_key])):
+                for i in range(len(st.session_state[session_key])):
                     # Create container with header row for remove button
                     container = st.container(border=True)
                     with container:
@@ -163,12 +224,12 @@ def render_form(schema_properties, parent_key=""):
                             item_title = items_schema.get('title', 'element')
                             st.markdown(f"**{item_title} {i + 1}**")
                         with col_remove:
-                            if st.button("❌", key=f"remove_{full_key}_{i}", help=f"Odstrani {item_title.lower()} {i + 1}"):
-                                st.session_state[full_key].pop(i)
+                            if st.button("❌", key=f"remove_{session_key}_{i}", help=f"Odstrani {item_title.lower()} {i + 1}"):
+                                st.session_state[session_key].pop(i)
                                 st.rerun()
                         
                         # Render the form fields for this object
-                        render_form(items_schema.get("properties", {}), parent_key=f"{full_key}.{i}")
+                        render_form(items_schema.get("properties", {}), parent_key=f"{full_key}.{i}", lot_context=lot_context)
                 
                 # Add new item with improved UX and correct Slovenian grammar
                 item_title = items_schema.get('title', 'element')
@@ -178,39 +239,41 @@ def render_form(schema_properties, parent_key=""):
                     button_text = "➕ Dodaj novega sofinancerja"
                 elif "mixedOrderComponents" in full_key and item_title == "Postavka":
                     button_text = "➕ Dodaj postavko"
+                elif full_key == "lots" and item_title == "Sklop":
+                    button_text = "➕ Dodaj sklop"
                 else:
                     button_text = f"➕ Dodaj {item_title.lower()}"
                 
-                if st.button(button_text, key=f"add_{full_key}"):
-                    st.session_state[full_key].append({})
+                if st.button(button_text, key=f"add_{session_key}"):
+                    st.session_state[session_key].append({})
                     st.rerun()
             
             # Array of strings (like additional legal bases)
             elif items_schema.get("type") == "string":
-                if full_key not in st.session_state:
-                    st.session_state[full_key] = []
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = []
 
                 # Display existing string entries with X buttons
-                for i in range(len(st.session_state[full_key])):
+                for i in range(len(st.session_state[session_key])):
                     col_input, col_remove = st.columns([5, 1])
                     
                     with col_input:
-                        current_text = st.session_state[full_key][i]
+                        current_text = st.session_state[session_key][i]
                         new_text = st.text_input(
                             f"{items_schema.get('title', 'Vnos')} {i + 1}",
                             value=current_text,
-                            key=f"{full_key}_item_{i}",
+                            key=f"{session_key}_item_{i}",
                             placeholder="Vnesite naziv zakona/predpisa"
                         )
                         # Update the value if changed
                         if new_text != current_text:
-                            st.session_state[full_key][i] = new_text
+                            st.session_state[session_key][i] = new_text
                     
                     with col_remove:
                         # Add some vertical spacing to align with input field
                         st.write("")
-                        if st.button("❌", key=f"remove_{full_key}_{i}", help="Odstrani to pravno podlago"):
-                            st.session_state[full_key].pop(i)
+                        if st.button("❌", key=f"remove_{session_key}_{i}", help="Odstrani to pravno podlago"):
+                            st.session_state[session_key].pop(i)
                             st.rerun()
 
                 # Special handling for additional legal bases
@@ -220,8 +283,8 @@ def render_form(schema_properties, parent_key=""):
                     item_title = items_schema.get('title', 'element').lower()
                     button_text = f"➕ Dodaj {item_title}"
                 
-                if st.button(button_text, key=f"add_{full_key}"):
-                    st.session_state[full_key].append("")
+                if st.button(button_text, key=f"add_{session_key}"):
+                    st.session_state[session_key].append("")
                     st.rerun()
 
         elif prop_type == "string":
@@ -283,7 +346,7 @@ def render_form(schema_properties, parent_key=""):
                     display_label, 
                     options=enum_options, 
                     index=index,
-                    key=full_key, 
+                    key=session_key, 
                     help=help_text,
                     placeholder=get_text("select_option")
                 )
@@ -294,8 +357,8 @@ def render_form(schema_properties, parent_key=""):
                     selected_value == "vseeno"):
                     
                     # Use session state to track user interaction
-                    user_clicked_key = f"{full_key}_user_clicked_vseeno"
-                    previous_value_key = f"{full_key}_previous_value"
+                    user_clicked_key = f"{session_key}_user_clicked_vseeno"
+                    previous_value_key = f"{session_key}_previous_value"
                     
                     # Check if user actively selected "vseeno" (not just default)
                     previous_value = st.session_state.get(previous_value_key, "")
@@ -303,7 +366,7 @@ def render_form(schema_properties, parent_key=""):
                     
                     # If user actively clicked "vseeno", trigger auto-selection
                     if user_actively_selected and not st.session_state.get(user_clicked_key, False):
-                        st.session_state[full_key] = "odprti postopek"
+                        st.session_state[session_key] = "odprti postopek"
                         st.session_state[user_clicked_key] = True  # Mark that user interaction occurred
                         st.info("ℹ️ Ker ste izbrali 'vseeno', smo avtomatsko nastavili 'odprti postopek', ki je najčešji in priporočeni postopek za večino javnih naročil.")
                         st.rerun()
@@ -315,8 +378,8 @@ def render_form(schema_properties, parent_key=""):
                 if (prop_name == "procedure" and 
                     "submissionProcedure" in full_key and 
                     selected_value != "vseeno"):
-                    user_clicked_key = f"{full_key}_user_clicked_vseeno"
-                    previous_value_key = f"{full_key}_previous_value"
+                    user_clicked_key = f"{session_key}_user_clicked_vseeno"
+                    previous_value_key = f"{session_key}_previous_value"
                     st.session_state[user_clicked_key] = False
                     st.session_state[previous_value_key] = selected_value
             elif prop_details.get("format") == "textarea":
@@ -324,7 +387,7 @@ def render_form(schema_properties, parent_key=""):
                 st.text_area(
                     display_label, 
                     value=current_value, 
-                    key=full_key, 
+                    key=session_key, 
                     help=help_text,
                     placeholder=get_text("enter_text"),
                     height=100
@@ -333,7 +396,7 @@ def render_form(schema_properties, parent_key=""):
                 # Enhanced file uploader
                 st.file_uploader(
                     display_label, 
-                    key=full_key, 
+                    key=session_key, 
                     help=help_text,
                     type=['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']
                 )
@@ -342,7 +405,7 @@ def render_form(schema_properties, parent_key=""):
                 st.date_input(
                     display_label, 
                     value=current_value, 
-                    key=full_key, 
+                    key=session_key, 
                     help=help_text,
                     format="DD.MM.YYYY"
                 )
@@ -351,7 +414,7 @@ def render_form(schema_properties, parent_key=""):
                 st.text_input(
                     display_label, 
                     value=current_value, 
-                    key=full_key, 
+                    key=session_key, 
                     help=help_text,
                     placeholder=get_text("enter_text")
                 )
@@ -364,7 +427,7 @@ def render_form(schema_properties, parent_key=""):
             number_text = st.text_input(
                 display_label, 
                 value=current_str, 
-                key=f"{full_key}_text",
+                key=f"{session_key}_text",
                 help=help_text,
                 placeholder="0.00"
             )
@@ -375,10 +438,10 @@ def render_form(schema_properties, parent_key=""):
                     number_value = float(number_text.replace(',', '.'))  # Handle both comma and dot
                 else:
                     number_value = 0.0
-                st.session_state[full_key] = number_value
+                st.session_state[session_key] = number_value
             except ValueError:
                 st.warning(f"'{number_text}' ni veljavna številka")
-                st.session_state[full_key] = 0.0
+                st.session_state[session_key] = 0.0
 
         elif prop_type == "integer":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
@@ -391,7 +454,7 @@ def render_form(schema_properties, parent_key=""):
             integer_text = st.text_input(
                 display_label, 
                 value=current_str, 
-                key=f"{full_key}_text",
+                key=f"{session_key}_text",
                 help=help_text,
                 placeholder=f"Vnesite celo število (min. {minimum})"
             )
@@ -402,18 +465,18 @@ def render_form(schema_properties, parent_key=""):
                     integer_value = int(integer_text)
                     if integer_value < minimum:
                         st.warning(f"Vrednost mora biti najmanj {minimum}")
-                        st.session_state[full_key] = minimum
+                        st.session_state[session_key] = minimum
                     else:
-                        st.session_state[full_key] = integer_value
+                        st.session_state[session_key] = integer_value
                 else:
-                    st.session_state[full_key] = 0
+                    st.session_state[session_key] = 0
             except ValueError:
                 st.warning(f"'{integer_text}' ni veljavno celo število")
-                st.session_state[full_key] = 0
+                st.session_state[session_key] = 0
 
         elif prop_type == "boolean":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
-            checkbox_value = st.checkbox(display_label, value=current_value, key=full_key, help=help_text)
+            checkbox_value = st.checkbox(display_label, value=current_value, key=session_key, help=help_text)
             
             # Special handling for wantsLogo to provide user feedback
             if prop_name == "wantsLogo" and checkbox_value != current_value:

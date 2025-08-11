@@ -117,7 +117,7 @@
                         "postopek naročila male vrednosti",
                         "vseeno"
                     ],
-                    "default": "vseeno"
+                    "default": "odprti postopek"
                 },
                 "justification": {
                     "type": "string",
@@ -131,37 +131,50 @@
             }
         },
         "lotsInfo": {
-            "title": "Sklopi",
+            "title": "Informacije o sklopih",
             "type": "object",
             "properties": {
                 "hasLots": {
                     "type": "boolean",
-                    "title": "Naročilo je razdeljeno na sklope"
-                },
-                "lots": {
-                    "type": "array",
-                    "title": "Sklopi",
-                    "items": {
-                        "type": "object",
-                        "title": "Sklop",
-                        "properties": {
-                            "name": { "type": "string", "title": "Naziv sklopa" },
-                            "orderType": { "$ref": "#/$defs/orderTypeProperties" }
-                        },
-                        "required": ["name"]
-                    },
-                    "render_if": {
-                        "field": "lotsInfo.hasLots",
-                        "value": true
-                    }
+                    "title": "Naročilo je razdeljeno na sklope",
+                    "default": false
                 }
             }
         },
+        "lots": {
+            "title": "Sklopi javnega naročila",
+            "type": "array",
+            "items": {
+                "type": "object", 
+                "title": "Sklop",
+                "properties": {
+                    "name": { 
+                        "type": "string", 
+                        "title": "Naziv sklopa" 
+                    },
+                    "orderType": {
+                        "type": "object",
+                        "title": "Vrsta naročila za ta sklop",
+                        "$ref": "#/$defs/orderTypeProperties"
+                    }
+                },
+                "required": ["name"]
+            },
+            "render_if": {
+                "field": "lotsInfo.hasLots",
+                "value": true
+            },
+            "default": []
+        },
         "orderType": {
-            "title": "Vrsta javnega naročila (če ni sklopov)",
+            "title": "Vrsta javnega naročila",
             "type": "object",
             "$ref": "#/$defs/orderTypeProperties",
-            "description": "Vrsta javnega naročila"
+            "description": "Vrsta javnega naročila",
+            "render_if": {
+                "field": "lotsInfo.hasLots",
+                "value": false
+            }
         },
         "technicalSpecifications": {
             "title": "Tehnične zahteve oziroma specifikacije",

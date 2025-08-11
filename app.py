@@ -2,8 +2,12 @@
 """Main Streamlit application for public procurement document generation."""
 import streamlit as st
 import database
-from config import FORM_STEPS, SCHEMA_FILE
+from config import get_dynamic_form_steps, SCHEMA_FILE
 from utils.schema_utils import load_json_schema, get_form_data_from_session
+from utils.lot_utils import (
+    get_current_lot_context, initialize_lot_session_state, 
+    migrate_existing_data_to_lot_structure, get_lot_progress_info
+)
 from ui.form_renderer import render_form
 from ui.admin_panel import render_admin_panel
 from localization import get_text, format_step_indicator
@@ -19,6 +23,10 @@ def main():
         except FileNotFoundError:
             st.error(get_text("schema_file_not_found", filename=SCHEMA_FILE))
             st.stop()
+
+    # Initialize lot-aware session state
+    initialize_lot_session_state()
+    migrate_existing_data_to_lot_structure()
 
     if "current_step" not in st.session_state:
         st.session_state.current_step = 0
@@ -63,13 +71,26 @@ def render_main_form():
     col1, col2 = st.columns([3, 1])
 
     with col1:
+        # Get dynamic form steps based on lots
+        dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+        
         # Enhanced header with step information
         current_step_num = st.session_state.current_step + 1
-        total_steps = len(FORM_STEPS)
+        total_steps = len(dynamic_form_steps)
+        
+        # Get lot progress info for enhanced header
+        lot_progress = get_lot_progress_info()
+        
+        # Enhanced header with lot context
+        header_content = f"<h1>{st.session_state.schema.get('title', 'Obrazec')}</h1>"
+        if lot_progress['mode'] == 'lots':
+            header_content += f"<h3>📦 {lot_progress['lot_name']} ({lot_progress['current_lot']}/{lot_progress['total_lots']})</h3>"
+        elif lot_progress['mode'] == 'general':
+            header_content += f"<h3>📄 {lot_progress['lot_name']}</h3>"
         
         st.markdown(f"""
         <div class="form-header">
-            <h1>{st.session_state.schema.get("title", "Obrazec")}</h1>
+            {header_content}
             <div class="step-indicator">
                 {format_step_indicator(st.session_state.current_step, total_steps)}
             </div>
@@ -84,12 +105,44 @@ def render_main_form():
         render_step_breadcrumbs()
 
         # Get properties for the current step and render the form
-        current_step_keys = FORM_STEPS[st.session_state.current_step]
-        current_step_properties = {k: st.session_state.schema["properties"][k] for k in current_step_keys}
+        current_step_keys = dynamic_form_steps[st.session_state.current_step]
         
-        # Render form with enhanced styling
+        # Get lot context for current step
+        lot_context = get_current_lot_context(current_step_keys)
+        
+        # Store current step keys for use in lot utilities
+        st.session_state.current_step_keys = current_step_keys
+        
+        # Get properties - handle lot context steps and regular properties  
+        current_step_properties = {}
+        for key in current_step_keys:
+            if key.startswith('lot_context_'):
+                # Lot context steps don't need schema properties
+                current_step_properties[key] = {"type": "lot_context"}
+            elif key.startswith('lot_'):
+                # Map lot-specific keys back to original schema properties
+                original_key = key.split('_', 2)[2]  # lot_0_orderType -> orderType
+                if original_key in st.session_state.schema["properties"]:
+                    # Copy the schema property but remove render_if conditions for lot-specific fields
+                    prop_copy = st.session_state.schema["properties"][original_key].copy()
+                    if "render_if" in prop_copy:
+                        del prop_copy["render_if"]  # Lot logic handles visibility
+                    current_step_properties[key] = prop_copy
+            else:
+                # Regular properties
+                if key in st.session_state.schema["properties"]:
+                    prop_copy = st.session_state.schema["properties"][key].copy()
+                    
+                    # For orderType in general mode, remove render_if condition
+                    if key == "orderType" and lot_context and lot_context['mode'] == 'general':
+                        if "render_if" in prop_copy:
+                            del prop_copy["render_if"]
+                    
+                    current_step_properties[key] = prop_copy
+        
+        # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)
-        render_form(current_step_properties)
+        render_form(current_step_properties, lot_context=lot_context)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # Enhanced Navigation buttons
@@ -99,118 +152,516 @@ def render_main_form():
         render_drafts_sidebar(draft_options)
 
 def add_custom_css():
-    """Add custom CSS for enhanced styling."""
+    """Add premium custom CSS for professional government application styling."""
     st.markdown("""
     <style>
-    .form-header {
-        background: linear-gradient(90deg, #1f4e79 0%, #2e6da4 100%);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 10px;
+    /* Import Inter font for modern, professional typography */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    /* === CSS VARIABLES - DESIGN SYSTEM === */
+    :root {
+        /* Primary Colors - Government Professional */
+        --primary-900: #1e3a8a;
+        --primary-700: #1d4ed8;
+        --primary-500: #3b82f6;
+        --primary-100: #dbeafe;
+        --primary-50: #eff6ff;
+        
+        /* Neutral Colors */
+        --gray-900: #111827;
+        --gray-700: #374151;
+        --gray-500: #6b7280;
+        --gray-300: #d1d5db;
+        --gray-100: #f3f4f6;
+        --gray-50: #f9fafb;
+        --white: #ffffff;
+        
+        /* Semantic Colors */
+        --success: #059669;
+        --success-light: #d1fae5;
+        --warning: #d97706;
+        --warning-light: #fef3c7;
+        --error: #dc2626;
+        --error-light: #fee2e2;
+        --info: #0ea5e9;
+        --info-light: #e0f2fe;
+        
+        /* Shadows */
+        --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        
+        /* Border radius */
+        --radius-sm: 0.375rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+        --radius-xl: 1rem;
+    }
+    
+    /* === GLOBAL TYPOGRAPHY === */
+    html, body, [class*="css"] {
+        font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        color: var(--gray-900);
+        line-height: 1.6;
+    }
+    
+    /* Typography Hierarchy */
+    h1 { 
+        font-size: 2.5rem; 
+        font-weight: 700; 
+        line-height: 1.2; 
+        color: var(--gray-900);
         margin-bottom: 1rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h2 { 
+        font-size: 2rem; 
+        font-weight: 600; 
+        line-height: 1.3; 
+        color: var(--primary-900);
+        margin-bottom: 0.75rem;
+    }
+    h3 { 
+        font-size: 1.5rem; 
+        font-weight: 600; 
+        line-height: 1.4; 
+        color: var(--primary-700);
+        margin-bottom: 0.5rem;
+    }
+    
+    /* === MAIN LAYOUT === */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+        max-width: 1200px;
+    }
+    
+    /* === FORM HEADER === */
+    .form-header {
+        background: linear-gradient(135deg, var(--primary-900) 0%, var(--primary-700) 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: var(--radius-lg);
+        margin-bottom: 2rem;
+        box-shadow: var(--shadow-xl);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .form-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%),
+                    linear-gradient(-45deg, rgba(255,255,255,0.1) 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.1) 75%),
+                    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.1) 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        opacity: 0.3;
+        pointer-events: none;
     }
     
     .form-header h1 {
         margin: 0;
-        font-size: 1.8rem;
-        font-weight: 600;
+        font-size: 2.25rem;
+        font-weight: 700;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .form-header h3 {
+        margin: 0.5rem 0 0 0;
+        font-size: 1.125rem;
+        font-weight: 500;
+        opacity: 0.9;
+        position: relative;
+        z-index: 1;
+        color: var(--primary-50);
     }
     
     .step-indicator {
-        font-size: 0.9rem;
+        font-size: 0.875rem;
+        font-weight: 500;
         opacity: 0.9;
-        margin-top: 0.5rem;
+        margin-top: 0.75rem;
+        position: relative;
+        z-index: 1;
+        background: rgba(255,255,255,0.2);
+        padding: 0.5rem 1rem;
+        border-radius: var(--radius-md);
+        display: inline-block;
     }
     
-    .form-content {
-        background: white;
-        padding: 2rem;
-        border-radius: 10px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        border: 1px solid #e1e5e9;
-        margin-bottom: 2rem;
+    /* === PROGRESS BAR === */
+    .stProgress .st-bo {
+        background-color: var(--primary-100) !important;
+        height: 1rem !important;
+        border-radius: var(--radius-md) !important;
+        overflow: hidden;
     }
     
+    .stProgress .st-bp {
+        background: linear-gradient(90deg, var(--primary-500), var(--primary-700)) !important;
+        border-radius: var(--radius-md) !important;
+        position: relative;
+    }
+    
+    .stProgress .st-bp::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        animation: shimmer 2s infinite;
+    }
+    
+    @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
+    
+    /* === BREADCRUMBS === */
     .step-breadcrumbs {
         display: flex;
         justify-content: center;
-        margin: 1rem 0 2rem 0;
+        margin: 1.5rem 0 2rem 0;
         flex-wrap: wrap;
+        gap: 0.5rem;
     }
     
     .breadcrumb-item {
-        padding: 0.5rem 1rem;
-        margin: 0.25rem;
-        border-radius: 20px;
-        font-size: 0.85rem;
+        padding: 0.625rem 1.25rem;
+        border-radius: var(--radius-lg);
+        font-size: 0.875rem;
         font-weight: 500;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
+        border: 2px solid transparent;
+        position: relative;
+        overflow: hidden;
     }
     
     .breadcrumb-item.completed {
-        background: #d4edda;
-        color: #155724;
-        border: 1px solid #c3e6cb;
+        background: var(--success-light);
+        color: var(--success);
+        border-color: var(--success);
+        box-shadow: var(--shadow-sm);
     }
     
     .breadcrumb-item.current {
-        background: #1f4e79;
+        background: var(--primary-700);
         color: white;
-        border: 1px solid #1f4e79;
+        border-color: var(--primary-700);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+    
+    .breadcrumb-item.current::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(45deg, rgba(255,255,255,0.2), transparent);
     }
     
     .breadcrumb-item.pending {
-        background: #f8f9fa;
-        color: #6c757d;
-        border: 1px solid #dee2e6;
+        background: var(--gray-100);
+        color: var(--gray-500);
+        border-color: var(--gray-300);
     }
     
+    .breadcrumb-item:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+    }
+    
+    /* === FORM CONTENT === */
+    .form-content {
+        background: white;
+        padding: 2.5rem;
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-lg);
+        border: 1px solid var(--gray-200);
+        margin-bottom: 2rem;
+        position: relative;
+    }
+    
+    .form-content::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, var(--primary-500), var(--primary-700));
+        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    }
+    
+    /* === NAVIGATION BUTTONS === */
     .navigation-buttons {
         display: flex;
         justify-content: space-between;
-        padding: 1rem 0;
+        align-items: center;
+        padding: 1.5rem 0;
         margin-top: 2rem;
+        border-top: 1px solid var(--gray-200);
     }
     
-    .stProgress > div > div > div {
-        background: linear-gradient(90deg, #1f4e79 0%, #2e6da4 100%);
+    /* === STREAMLIT COMPONENT OVERRIDES === */
+    
+    /* Buttons */
+    .stButton button {
+        background: linear-gradient(135deg, var(--primary-700), var(--primary-500)) !important;
+        border: none !important;
+        border-radius: var(--radius-md) !important;
+        font-weight: 600 !important;
+        padding: 0.75rem 2rem !important;
+        font-size: 1rem !important;
+        transition: all 0.2s ease !important;
+        box-shadow: var(--shadow-sm) !important;
+        color: white !important;
+        text-transform: none !important;
     }
     
-    .sidebar-header {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-        border-left: 4px solid #1f4e79;
+    .stButton button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: var(--shadow-lg) !important;
+        background: linear-gradient(135deg, var(--primary-900), var(--primary-700)) !important;
     }
     
-    /* Enhanced form fields */
+    .stButton button:active {
+        transform: translateY(0) !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    
+    /* Secondary buttons */
+    .stButton button[kind="secondary"] {
+        background: white !important;
+        color: var(--primary-700) !important;
+        border: 2px solid var(--primary-700) !important;
+    }
+    
+    .stButton button[kind="secondary"]:hover {
+        background: var(--primary-50) !important;
+        border-color: var(--primary-900) !important;
+        color: var(--primary-900) !important;
+    }
+    
+    /* Form Fields */
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea,
-    .stSelectbox > div > div > div,
     .stNumberInput > div > div > input {
-        border-radius: 8px !important;
-        border: 2px solid #e1e5e9 !important;
-        transition: border-color 0.3s ease !important;
+        border: 2px solid var(--gray-300) !important;
+        border-radius: var(--radius-md) !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 1rem !important;
+        transition: all 0.2s ease !important;
+        background: white !important;
     }
     
     .stTextInput > div > div > input:focus,
     .stTextArea > div > div > textarea:focus,
-    .stSelectbox > div > div > div:focus-within,
     .stNumberInput > div > div > input:focus {
-        border-color: #1f4e79 !important;
-        box-shadow: 0 0 0 0.2rem rgba(31, 78, 121, 0.25) !important;
+        border-color: var(--primary-500) !important;
+        box-shadow: 0 0 0 3px var(--primary-100) !important;
+        outline: none !important;
     }
     
-    /* Section headers */
-    .form-section-header {
-        color: #1f4e79;
-        font-weight: 600;
-        font-size: 1.2rem;
-        margin: 2rem 0 1rem 0;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #e1e5e9;
+    .stTextArea > div > div > textarea {
+        min-height: 120px !important;
+        resize: vertical !important;
+    }
+    
+    /* Select boxes */
+    .stSelectbox > div > div {
+        border: 2px solid var(--gray-300) !important;
+        border-radius: var(--radius-md) !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stSelectbox > div > div:focus-within {
+        border-color: var(--primary-500) !important;
+        box-shadow: 0 0 0 3px var(--primary-100) !important;
+    }
+    
+    /* Checkboxes */
+    .stCheckbox > label > div {
+        background: white !important;
+        border: 2px solid var(--gray-300) !important;
+        border-radius: var(--radius-sm) !important;
+    }
+    
+    .stCheckbox > label > div[data-checked="true"] {
+        background: var(--primary-500) !important;
+        border-color: var(--primary-500) !important;
+    }
+    
+    /* File uploader */
+    .stFileUploader > div > div {
+        border: 2px dashed var(--gray-300) !important;
+        border-radius: var(--radius-lg) !important;
+        padding: 2rem !important;
+        background: var(--gray-50) !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stFileUploader > div > div:hover {
+        border-color: var(--primary-500) !important;
+        background: var(--primary-50) !important;
+    }
+    
+    /* === SECTION HEADERS === */
+    [data-testid="stMarkdownContainer"] h2 {
+        color: var(--primary-900) !important;
+        font-weight: 600 !important;
+        font-size: 1.5rem !important;
+        margin: 2rem 0 1rem 0 !important;
+        padding-bottom: 0.5rem !important;
+        border-bottom: 2px solid var(--primary-100) !important;
+        position: relative;
+    }
+    
+    [data-testid="stMarkdownContainer"] h3 {
+        color: var(--primary-700) !important;
+        font-weight: 500 !important;
+        font-size: 1.25rem !important;
+        margin: 1.5rem 0 0.75rem 0 !important;
+    }
+    
+    /* === LOT/SLOT CARDS === */
+    .lot-card {
+        background: linear-gradient(135deg, var(--primary-50) 0%, var(--primary-100) 100%) !important;
+        border: 2px solid var(--primary-500) !important;
+        border-radius: var(--radius-lg) !important;
+        padding: 1.5rem !important;
+        margin: 1rem 0 !important;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .lot-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+        background: var(--primary-500);
+    }
+    
+    .lot-card h4 {
+        color: var(--primary-900) !important;
+        margin: 0 0 0.5rem 0 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* === SUCCESS/ERROR MESSAGES === */
+    .stSuccess {
+        background: var(--success-light) !important;
+        border: 1px solid var(--success) !important;
+        border-radius: var(--radius-md) !important;
+        color: var(--success) !important;
+    }
+    
+    .stError {
+        background: var(--error-light) !important;
+        border: 1px solid var(--error) !important;
+        border-radius: var(--radius-md) !important;
+        color: var(--error) !important;
+    }
+    
+    .stWarning {
+        background: var(--warning-light) !important;
+        border: 1px solid var(--warning) !important;
+        border-radius: var(--radius-md) !important;
+        color: var(--warning) !important;
+    }
+    
+    .stInfo {
+        background: var(--info-light) !important;
+        border: 1px solid var(--info) !important;
+        border-radius: var(--radius-md) !important;
+        color: var(--info) !important;
+    }
+    
+    /* === SIDEBAR === */
+    .sidebar .sidebar-content {
+        padding: 1rem !important;
+    }
+    
+    .sidebar-header {
+        background: var(--gray-50) !important;
+        padding: 1rem !important;
+        border-radius: var(--radius-md) !important;
+        margin-bottom: 1rem !important;
+        border-left: 4px solid var(--primary-700) !important;
+    }
+    
+    /* === RESPONSIVE DESIGN === */
+    @media (max-width: 768px) {
+        .form-header {
+            padding: 1.5rem !important;
+        }
+        
+        .form-header h1 {
+            font-size: 1.75rem !important;
+        }
+        
+        .form-content {
+            padding: 1.5rem !important;
+        }
+        
+        .step-breadcrumbs {
+            gap: 0.25rem !important;
+        }
+        
+        .breadcrumb-item {
+            padding: 0.5rem 0.75rem !important;
+            font-size: 0.75rem !important;
+        }
+    }
+    
+    /* === ANIMATIONS === */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .form-content {
+        animation: fadeIn 0.3s ease-out;
+    }
+    
+    /* === ACCESSIBILITY === */
+    @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+    
+    /* === PRINT STYLES === */
+    @media print {
+        .form-header {
+            background: var(--primary-900) !important;
+            -webkit-print-color-adjust: exact !important;
+            color-adjust: exact !important;
+        }
+        
+        .navigation-buttons {
+            display: none !important;
+        }
+        
+        .step-breadcrumbs {
+            display: none !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -219,9 +670,12 @@ def render_step_breadcrumbs():
     """Render step navigation breadcrumbs."""
     from localization import get_step_label
     
+    # Get dynamic form steps for breadcrumbs
+    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    
     breadcrumbs_html = '<div class="step-breadcrumbs">'
     
-    for i, step_keys in enumerate(FORM_STEPS):
+    for i, step_keys in enumerate(dynamic_form_steps):
         step_num = i + 1
         step_label = get_step_label(step_num)
         
@@ -239,6 +693,9 @@ def render_step_breadcrumbs():
 
 def render_navigation_buttons(current_step_keys):
     """Render enhanced navigation buttons."""
+    # Get dynamic form steps for navigation
+    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    
     st.markdown('<div class="navigation-buttons">', unsafe_allow_html=True)
     
     col_nav_left, col_nav_center, col_nav_right = st.columns([1, 2, 1])
@@ -254,7 +711,7 @@ def render_navigation_buttons(current_step_keys):
                 st.rerun()
 
     with col_nav_right:
-        if st.session_state.current_step < len(FORM_STEPS) - 1:
+        if st.session_state.current_step < len(dynamic_form_steps) - 1:
             if st.button(
                 f"{get_text('next_button')} →", 
                 type="primary",
