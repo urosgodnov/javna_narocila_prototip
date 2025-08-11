@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 import template_service
 from config import ADMIN_PASSWORD
-
+import json
 
 def render_admin_header():
     """Render the admin header with status and logout option."""
@@ -28,13 +28,13 @@ def render_login_form():
         # Create a styled container for the login form
         with st.container():
             st.markdown("""
-            <div style="
+            <div style=\"
                 padding: 30px; 
                 border-radius: 10px; 
                 box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
                 background-color: #f8f9fa;
                 margin: 20px 0;
-            ">
+            \">
             """, unsafe_allow_html=True)
             
             st.markdown("### 🔐 Prijava v administracijo")
@@ -88,7 +88,7 @@ def render_template_management_tab():
                 else:
                     st.error(f"❌ {message}")
         
-        st.markdown("---")
+        st.markdown("--- ")
         
         # Templates list section
         st.markdown("### 📋 Seznam obstoječih predlog")
@@ -106,7 +106,7 @@ def render_template_management_tab():
             with col4:
                 st.markdown("**Tip**")
             
-            st.markdown("---")
+            st.markdown("--- ")
             
             for template in templates:
                 metadata = get_template_metadata(template)
@@ -190,7 +190,56 @@ def render_database_management_tab():
         - ➕ Dodajanje novih zbirk
         - 🗑️ Brisanje zbirk
         - 🔄 Sinhronizacija podatkov
-        """)
+        """, unsafe_allow_html=True)
+
+def render_organization_management_tab():
+    """Render the organization management tab content."""
+    
+    # Get the absolute path for organizations.json
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    org_file_path = os.path.join(dir_path, '..', 'organizations.json')
+
+    # Create the file if it doesn't exist
+    if not os.path.exists(org_file_path):
+        with open(org_file_path, 'w') as f:
+            json.dump([], f)
+
+    with st.container():
+        st.markdown("### 🏢 Upravljanje organizacij")
+
+        # Add new organization form
+        with st.form(key='add_organization_form'):
+            new_org_name = st.text_input("Naziv nove organizacije")
+            submitted = st.form_submit_button("Dodaj organizacijo")
+            if submitted and new_org_name:
+                with open(org_file_path, "r+") as f:
+                    organizations = json.load(f)
+                    if new_org_name not in organizations:
+                        organizations.append(new_org_name)
+                        f.seek(0)
+                        json.dump(organizations, f)
+                        st.success(f"Organizacija '{new_org_name}' dodana.")
+                        st.rerun()
+                    else:
+                        st.warning(f"Organizacija '{new_org_name}' že obstaja.")
+
+        st.markdown("---")
+        st.markdown("### 📋 Seznam obstoječih organizacij")
+        with open(org_file_path, "r") as f:
+            organizations = json.load(f)
+            if organizations:
+                for i, org in enumerate(organizations):
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.markdown(f"- {org}")
+                    with col2:
+                        if st.button(f"🗑️ Izbriši", key=f"delete_org_{i}"):
+                            organizations.pop(i)
+                            with open(org_file_path, "w") as f_write:
+                                json.dump(organizations, f_write)
+                            st.rerun()
+            else:
+                st.info("Ni najdenih organizacij.")
 
 
 def render_admin_panel():
@@ -204,7 +253,7 @@ def render_admin_panel():
         render_admin_header()
         
         # Tabbed interface for different admin sections
-        tab1, tab2, tab3 = st.tabs(["📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov"])
+        tab1, tab2, tab3, tab4 = st.tabs(["📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", "🏢 Organizacije"])
         
         with tab1:
             render_template_management_tab()
@@ -214,3 +263,6 @@ def render_admin_panel():
         
         with tab3:
             render_database_management_tab()
+        
+        with tab4:
+            render_organization_management_tab()
