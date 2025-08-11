@@ -171,8 +171,9 @@ def render_form(schema_properties, parent_key="", lot_context=None):
 
         if prop_type == "object":
             if "$ref" in prop_details:
-                # Always show section header for $ref objects - use consistent styling
-                st.subheader(label)
+                # Only show section header if there's an explicit title
+                if "title" in prop_details:
+                    st.subheader(label)
                 
                 ref_path = prop_details["$ref"].split('/')[1:]
                 ref_props = st.session_state['schema']
@@ -180,8 +181,9 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     ref_props = ref_props[part]
                 render_form(ref_props.get("properties", {}), parent_key=full_key, lot_context=lot_context)
             else:
-                # Use consistent simple styling for all sections
-                st.subheader(label)
+                # Only show section header if there's an explicit title
+                if "title" in prop_details:
+                    st.subheader(label)
                 
                 # Keep helpful expandable info for complex sections
                 if help_text:

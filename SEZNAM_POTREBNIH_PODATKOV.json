@@ -559,7 +559,6 @@
             "description": "Pogajanja so mogoča v naslednjih postopkih oddaje javnega naročila in omogočajo prilagoditev ponudb specifičnim potrebam naročnika."
         },
         "participationAndExclusion": {
-            "title": "Pogoji za sodelovanje in razlogi za izključitev",
             "type": "object",
             "properties": {
                 "sectionHeader": {
@@ -689,7 +688,6 @@
             }
         },
         "participationConditions": {
-            "title": "Pogoji za sodelovanje ponudnikov",
             "type": "object",
             "$ref": "#/$defs/participationConditionProperties"
         },
