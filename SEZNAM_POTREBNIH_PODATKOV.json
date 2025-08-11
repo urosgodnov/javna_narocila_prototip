@@ -359,6 +359,26 @@
                     "type": "boolean",
                     "title": "Naročnik že ima pripravljen ponudbeni predračun"
                 },
+                "noOfferBillOfQuantitiesWarning": {
+                    "type": "object",
+                    "title": "Opozorilo",
+                    "render_if": {
+                        "field": "priceInfo.hasOfferBillOfQuantities",
+                        "value": false
+                    },
+                    "properties": {},
+                    "description": "Razpisna dokumentacija bo pripravljena brez upoštevanja terminologije v ponudbenem predračunu naročnika. Za pripravo jasne in celovite dokumentacije ter pravno varnost je ključno, da je terminologija v vseh dokumentih v postopku oddaje javnega naročila medsebojno usklajena. Ko boste imeli pripravljen ponudbeni predračun, vam z veseljem ponujamo pomoč pri končnem pregledu in uskladitvi celotnega kompleta dokumentacije. Na ta način bomo skupaj zagotovili, da bo postopek za vas potekal kar se da tekoče in brez nepotrebnih zapletov."
+                },
+                "noOfferBillOfQuantitiesWarning": {
+                    "type": "object",
+                    "title": "Opozorilo",
+                    "render_if": {
+                        "field": "priceInfo.hasOfferBillOfQuantities",
+                        "value": false
+                    },
+                    "properties": {},
+                    "description": "Razpisna dokumentacija bo pripravljena brez upoštevanja terminologije v ponudbenem predračunu naročnika. Za pripravo jasne in celovite dokumentacije ter pravno varnost je ključno, da je terminologija v vseh dokumentih v postopku oddaje javnega naročila medsebojno usklajena. Ko boste imeli pripravljen ponudbeni predračun, vam z veseljem ponujamo pomoč pri končnem pregledu in uskladitvi celotnega kompleta dokumentacije. Na ta način bomo skupaj zagotovili, da bo postopek za vas potekal kar se da tekoče in brez nepotrebnih zapletov."
+                },
                 "quantitiesType": {
                     "type": "string",
                     "title": "Količine v ponudbenem predračunu",
