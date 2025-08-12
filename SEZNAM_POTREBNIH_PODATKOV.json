@@ -715,26 +715,49 @@
             "$ref": "#/$defs/participationConditionProperties"
         },
         "financialGuarantees": {
-            "title": "Finančna zavarovanja in garancije",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": { "type": "string", "enum": ["FZ za resnost ponudbe", "FZ za dobro izvedbo pogodbenih obveznosti", "FZ za odpravo napak v garancijski dobi"], "title": "Vrsta zavarovanja" },
-                    "selected": { "type": "boolean" },
-                    "instruments": { "type": "array", "items": { "type": "string", "enum": ["menica", "denarni depozit", "bančna garancija", "kavcijsko zavarovanje"] }, "title": "Instrumenti" },
-                    "amount": { "type": "number", "title": "Višina FZ za resnost ponudbe (EUR)", "description": "Višina FZ za resnost ponudbe lahko znaša največ 3% ocenjene vrednosti (brez DDV)." }
-                }
-            }
+            "type": "object",
+            "$ref": "#/$defs/financialGuaranteesProperties"
         },
         "variantOffers": {
-            "title": "Variantne ponudbe in alternativni predlogi",
+            "title": "Variantne ponudbe",
             "type": "object",
             "properties": {
-                "areVariantsAllowed": { "type": "boolean", "title": "Dopuščate predložitev variantnih ponudb" },
-                "minimalRequirements": { "type": "string", "format": "textarea", "title": "Minimalne zahteve za variantno ponudbo" },
-                "specialRequirements": { "type": "string", "format": "textarea", "title": "Posebne zahteve za predložitev variantne ponudbe" },
-                "isVariantAllowedWithBaseOfferOnly": { "type": "boolean", "title": "Ali se lahko variantna ponudba predloži zgolj, če bo predložena tudi ponudba, ki ni variantna?" }
+                "allowVariants": {
+                    "type": "string",
+                    "title": "Ali dopuščate predložitev variantnih ponudb?",
+                    "enum": [
+                        "da",
+                        "ne"
+                    ],
+                    "default": "ne"
+                },
+                "minimalRequirements": {
+                    "type": "string",
+                    "format": "textarea",
+                    "title": "Navedite vaše minimalne zahteve, ki jih mora izpolniti variantna ponudba:",
+                    "render_if": {
+                        "field": "variantOffers.allowVariants",
+                        "value": "da"
+                    }
+                },
+                "specialRequirements": {
+                    "type": "string",
+                    "format": "textarea",
+                    "title": "→ Navedite vse posebne zahteve za predložitev variantne ponudbe:",
+                    "render_if": {
+                        "field": "variantOffers.allowVariants",
+                        "value": "da"
+                    }
+                },
+                "requiresBaseOffer": {
+                    "type": "boolean",
+                    "title": "Variantna ponudba se lahko priloži zgolj, če bo priložena tudi ponudba, ki ni variantna",
+                    "default": false,
+                    "render_if": {
+                        "field": "variantOffers.allowVariants",
+                        "value": "da"
+                    }
+                }
             }
         },
         "selectionCriteria": {
@@ -1138,23 +1161,13 @@
                                 "value": true
                             }
                         },
-                        "turnoverInfoGeneral": {
+                        "turnoverInfoAverageSpecific": {
                             "type": "object",
                             "title": "ℹ️ Informacija o prometu",
                             "properties": {},
-                            "description": "Zahtevani najnižji letni promet ne sme presegati dvakratne ocenjene vrednosti javnega naročila, razen v ustrezno utemeljenih primerih, ki se glede na primer nanašajo na posebna tveganja, povezana z naravo gradenj, storitev ali blaga. Če se ponudniku odda več sklopov, ki se izvajajo sočasno, lahko naročnik določi najnižji letni promet, ki ga morajo imeti gospodarski subjekti za posamezno skupino sklopov. Če se javna naročila na podlagi okvirnega sporazuma oddajo po ponovnem odpiranju konkurence, se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo izvajala sočasno, če to ni znano, pa na podlagi ocenjene vrednosti okvirnega sporazuma. Pri dinamičnih nabavnih sistemih se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo oddala v okviru tega sistema.",
+                            "description": "Če se ponudniku odda več sklopov, ki se izvajajo sočasno, lahko naročnik določi najnižji letni promet, ki ga morajo imeti gospodarski subjekti za posamezno skupino sklopov. Če se javna naročila na podlagi okvirnega sporazuma oddajo po ponovnem odpiranju konkurence, se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo izvajala sočasno, če to ni znano, pa na podlagi ocenjene vrednosti okvirnega sporazuma. Pri dinamičnih nabavnih sistemih se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo oddala v okviru tega sistema.",
                             "render_if": {
-                                "field": "participationConditions.economicFinancialSection.generalTurnover",
-                                "value": true
-                            }
-                        },
-                        "turnoverInfoSpecific": {
-                            "type": "object",
-                            "title": "ℹ️ Informacija o prometu",
-                            "properties": {},
-                            "description": "Zahtevani najnižji letni promet ne sme presegati dvakratne ocenjene vrednosti javnega naročila, razen v ustrezno utemeljenih primerih, ki se glede na primer nanašajo na posebna tveganja, povezana z naravo gradenj, storitev ali blaga. Če se ponudniku odda več sklopov, ki se izvajajo sočasno, lahko naročnik določi najnižji letni promet, ki ga morajo imeti gospodarski subjekti za posamezno skupino sklopov. Če se javna naročila na podlagi okvirnega sporazuma oddajo po ponovnem odpiranju konkurence, se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo izvajala sočasno, če to ni znano, pa na podlagi ocenjene vrednosti okvirnega sporazuma. Pri dinamičnih nabavnih sistemih se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo oddala v okviru tega sistema.",
-                            "render_if": {
-                                "field": "participationConditions.economicFinancialSection.specificTurnover",
+                                "field": "participationConditions.economicFinancialSection.averageSpecificTurnover",
                                 "value": true
                             }
                         },
@@ -1294,6 +1307,264 @@
                             "type": "boolean",
                             "title": "drugo, prosim za predlog AI",
                             "default": false
+                        }
+                    }
+                }
+            }
+        },
+        "financialGuaranteesProperties": {
+            "type": "object",
+            "properties": {
+                "financialGuaranteesHeader": {
+                    "type": "object",
+                    "title": "Finančna zavarovanja",
+                    "properties": {},
+                    "description": "Prosimo označite katera finančna zavarovanja (FZ) želite vključiti v dokumentacijo v zvezi z oddajo javnega naročila."
+                },
+                "requiresFinancialGuarantees": {
+                    "type": "string",
+                    "title": "Ali zahtevate finančna zavarovanja?",
+                    "enum": [
+                        "da, zahtevamo finančna zavarovanja",
+                        "ne, naročnik ne zahteva finančnih zavarovanj"
+                    ],
+                    "default": ""
+                },
+                "fzSeriousness": {
+                    "type": "object",
+                    "render_if": {
+                        "field": "financialGuarantees.requiresFinancialGuarantees",
+                        "value": "da, zahtevamo finančna zavarovanja"
+                    },
+                    "properties": {
+                        "required": {
+                            "type": "boolean",
+                            "title": "Finančno zavarovanje za resnost ponudbe",
+                            "default": false
+                        },
+                        "instrument": {
+                            "type": "string",
+                            "title": "Izberite instrument finančnega zavarovanja, ki ga boste sprejeli:",
+                            "enum": [
+                                "menica",
+                                "denarni depozit",
+                                "kavcijsko zavarovanje zavarovalnice",
+                                "bančna garancija"
+                            ],
+                            "default": "",
+                            "render_if": {
+                                "field": "financialGuarantees.fzSeriousness.required",
+                                "value": true
+                            }
+                        },
+                        "bankGuaranteeInfo": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o bančni garanciji",
+                            "properties": {},
+                            "description": "Za zavarovanje resnosti ponudbe praviloma ni primerno zahtevati bančne garancije.",
+                            "render_if": {
+                                "field": "financialGuarantees.fzSeriousness.instrument",
+                                "value": "bančna garancija"
+                            }
+                        },
+                        "depositDetails": {
+                            "type": "object",
+                            "title": "→ Navedite podatke za denarni depozit:",
+                            "render_if": {
+                                "field": "financialGuarantees.fzSeriousness.instrument",
+                                "value": "denarni depozit"
+                            },
+                            "properties": {
+                                "iban": {
+                                    "type": "string",
+                                    "title": "TRR naročnika (IBAN)",
+                                    "placeholder": "SI56 XXXX XXXX XXXX XXX"
+                                },
+                                "bank": {
+                                    "type": "string",
+                                    "title": "Banka naročnika"
+                                },
+                                "swift": {
+                                    "type": "string",
+                                    "title": "BIC (SWIFT)"
+                                }
+                            }
+                        },
+                        "amount": {
+                            "type": "number",
+                            "title": "→ Navedite v kakšni višini zahtevate finančno zavarovanje za resnost ponudbe (EUR)",
+                            "render_if": {
+                                "field": "financialGuarantees.fzSeriousness.instrument",
+                                "not_in": ["", null]
+                            }
+                        },
+                        "amountInfo": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o višini",
+                            "properties": {},
+                            "description": "Višina finančnega zavarovanja za resnost ponudbe lahko znaša največ 3% ocenjene vrednosti (brez DDV).",
+                            "render_if": {
+                                "field": "financialGuarantees.fzSeriousness.instrument",
+                                "not_in": ["", null]
+                            }
+                        }
+                    }
+                },
+                "fzPerformance": {
+                    "type": "object",
+                    "render_if": {
+                        "field": "financialGuarantees.requiresFinancialGuarantees",
+                        "value": "da, zahtevamo finančna zavarovanja"
+                    },
+                    "properties": {
+                        "required": {
+                            "type": "boolean",
+                            "title": "Finančno zavarovanje za dobro izvedbo pogodbenih obveznosti",
+                            "default": false
+                        },
+                        "instrument": {
+                            "type": "string",
+                            "title": "Izberite instrument finančnega zavarovanja, ki ga boste sprejeli:",
+                            "enum": [
+                                "bančna garancija",
+                                "kavcijsko zavarovanje zavarovalnice",
+                                "denarni depozit",
+                                "menica",
+                                "drugo"
+                            ],
+                            "default": "",
+                            "render_if": {
+                                "field": "financialGuarantees.fzPerformance.required",
+                                "value": true
+                            }
+                        },
+                        "otherDetails": {
+                            "type": "string",
+                            "title": "→ Navedite kaj",
+                            "render_if": {
+                                "field": "financialGuarantees.fzPerformance.instrument",
+                                "value": "drugo"
+                            }
+                        },
+                        "depositDetails": {
+                            "type": "object",
+                            "title": "→ Navedite podatke za denarni depozit:",
+                            "render_if": {
+                                "field": "financialGuarantees.fzPerformance.instrument",
+                                "value": "denarni depozit"
+                            },
+                            "properties": {
+                                "iban": {
+                                    "type": "string",
+                                    "title": "TRR naročnika (IBAN)",
+                                    "placeholder": "SI56 XXXX XXXX XXXX XXX"
+                                },
+                                "bank": {
+                                    "type": "string",
+                                    "title": "Banka naročnika"
+                                },
+                                "swift": {
+                                    "type": "string",
+                                    "title": "BIC (SWIFT)"
+                                }
+                            }
+                        },
+                        "amount": {
+                            "type": "number",
+                            "title": "→ Navedite v kakšni višini zahtevate finančno zavarovanje za dobro izvedbo (EUR)",
+                            "render_if": {
+                                "field": "financialGuarantees.fzPerformance.instrument",
+                                "not_in": ["", null]
+                            }
+                        },
+                        "amountInfo": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o višini",
+                            "properties": {},
+                            "description": "Višina finančnega zavarovanja za dobro izvedbo lahko znaša največ 10% pogodbene vrednosti (brez DDV).",
+                            "render_if": {
+                                "field": "financialGuarantees.fzPerformance.instrument",
+                                "not_in": ["", null]
+                            }
+                        }
+                    }
+                },
+                "fzWarranty": {
+                    "type": "object",
+                    "render_if": {
+                        "field": "financialGuarantees.requiresFinancialGuarantees",
+                        "value": "da, zahtevamo finančna zavarovanja"
+                    },
+                    "properties": {
+                        "required": {
+                            "type": "boolean",
+                            "title": "Finančno zavarovanje za odpravo napak v garancijski dobi",
+                            "default": false
+                        },
+                        "instrument": {
+                            "type": "string",
+                            "title": "Izberite instrument finančnega zavarovanja, ki ga boste sprejeli:",
+                            "enum": [
+                                "bančna garancija",
+                                "kavcijsko zavarovanje zavarovalnice",
+                                "denarni depozit",
+                                "menica",
+                                "drugo"
+                            ],
+                            "default": "",
+                            "render_if": {
+                                "field": "financialGuarantees.fzWarranty.required",
+                                "value": true
+                            }
+                        },
+                        "otherDetails": {
+                            "type": "string",
+                            "title": "→ Navedite kaj",
+                            "render_if": {
+                                "field": "financialGuarantees.fzWarranty.instrument",
+                                "value": "drugo"
+                            }
+                        },
+                        "depositDetails": {
+                            "type": "object",
+                            "title": "→ Navedite podatke za denarni depozit:",
+                            "render_if": {
+                                "field": "financialGuarantees.fzWarranty.instrument",
+                                "value": "denarni depozit"
+                            },
+                            "properties": {
+                                "iban": {
+                                    "type": "string",
+                                    "title": "TRR naročnika (IBAN)",
+                                    "placeholder": "SI56 XXXX XXXX XXXX XXX"
+                                },
+                                "bank": {
+                                    "type": "string",
+                                    "title": "Banka naročnika"
+                                },
+                                "swift": {
+                                    "type": "string",
+                                    "title": "BIC (SWIFT)"
+                                }
+                            }
+                        },
+                        "amount": {
+                            "type": "number",
+                            "title": "→ Navedite v kakšni višini zahtevate finančno zavarovanje za odpravo napak (EUR)",
+                            "render_if": {
+                                "field": "financialGuarantees.fzWarranty.instrument",
+                                "not_in": ["", null]
+                            }
+                        },
+                        "amountInfo": {
+                            "type": "object",
+                            "title": "ℹ️ Informacija o višini",
+                            "properties": {},
+                            "description": "Višina finančnega zavarovanja za odpravo napak v garancijski dobi lahko znaša največ 5% pogodbene vrednosti (brez DDV).",
+                            "render_if": {
+                                "field": "financialGuarantees.fzWarranty.instrument",
+                                "not_in": ["", null]
+                            }
                         }
                     }
                 }

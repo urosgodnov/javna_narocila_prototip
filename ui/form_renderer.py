@@ -54,10 +54,24 @@ def _get_default_value(full_key, prop_details, lot_context=None):
 
 def _should_render(prop_details, parent_key="", lot_context=None, session_key_prefix=""):
     """Check if a field should be rendered based on a conditional flag in the schema."""
+    # Check for render_if_any (OR logic)
+    render_if_any = prop_details.get("render_if_any")
+    if render_if_any:
+        # If any condition is true, render the field
+        for condition in render_if_any:
+            if _check_single_condition(condition, parent_key, lot_context, session_key_prefix):
+                return True
+        return False
+    
+    # Check for regular render_if
     render_if = prop_details.get("render_if")
     if not render_if:
         return True
     
+    return _check_single_condition(render_if, parent_key, lot_context, session_key_prefix)
+
+def _check_single_condition(render_if, parent_key="", lot_context=None, session_key_prefix=""):
+    """Check a single render condition."""
     condition_field = render_if.get("field")
     condition_field_parent = render_if.get("field_parent")
     condition_value = render_if.get("value")
