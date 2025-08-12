@@ -3,20 +3,28 @@
 import streamlit as st
 import database
 from config import get_dynamic_form_steps, SCHEMA_FILE
-from utils.schema_utils import load_json_schema, get_form_data_from_session
+from utils.schema_utils import load_json_schema, get_form_data_from_session, clear_form_data
 from utils.lot_utils import (
     get_current_lot_context, initialize_lot_session_state, 
     migrate_existing_data_to_lot_structure, get_lot_progress_info
 )
 from ui.form_renderer import render_form
 from ui.admin_panel import render_admin_panel
+from ui.dashboard import render_dashboard
 from localization import get_text, format_step_indicator
 
 def main():
     """Main application entry point."""
     st.set_page_config(layout="wide", page_title=get_text("app_title"))
-    st.title(get_text("app_title"))
-
+    
+    # Initialize navigation state
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = 'dashboard'  # Start with dashboard
+    if 'edit_mode' not in st.session_state:
+        st.session_state.edit_mode = False
+    if 'edit_record_id' not in st.session_state:
+        st.session_state.edit_record_id = None
+    
     if 'schema' not in st.session_state:
         try:
             st.session_state['schema'] = load_json_schema(SCHEMA_FILE)
@@ -31,16 +39,12 @@ def main():
     if "current_step" not in st.session_state:
         st.session_state.current_step = 0
 
-    st.sidebar.header(get_text("navigation_header"))
-    page_selection = st.sidebar.radio(
-        get_text("go_to"), 
-        [get_text("form_header"), get_text("admin_header")], 
-        key="page_selection"
-    )
-
-    if page_selection == get_text("form_header"):
+    # Route to appropriate page based on current_page state
+    if st.session_state.current_page == 'dashboard':
+        render_dashboard()
+    elif st.session_state.current_page == 'form':
         render_main_form()
-    else:
+    elif st.session_state.current_page == 'admin':
         render_admin_panel()
 
 def _set_navigation_flags():
@@ -85,6 +89,32 @@ def render_main_form():
 
     # Add custom CSS for better styling
     add_custom_css()
+    
+    # Add back to dashboard button at the top
+    col_back, col_title = st.columns([1, 5])
+    with col_back:
+        if st.button("← Nazaj na pregled", type="secondary"):
+            # Check for unsaved changes
+            if st.session_state.get('unsaved_changes', False):
+                st.warning("⚠️ Imate neshranjene spremembe. Ali res želite zapustiti obrazec?")
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("Da, zapusti"):
+                        st.session_state.current_page = 'dashboard'
+                        st.session_state.unsaved_changes = False
+                        st.rerun()
+                with col_no:
+                    if st.button("Ne, ostani"):
+                        pass
+            else:
+                st.session_state.current_page = 'dashboard'
+                st.rerun()
+    
+    with col_title:
+        if st.session_state.edit_mode:
+            st.title(f"✏️ Urejanje naročila ID: {st.session_state.edit_record_id}")
+        else:
+            st.title("➕ Novo javno naročilo")
 
     col1, col2 = st.columns([3, 1])
 
@@ -758,18 +788,40 @@ def render_navigation_buttons_in_form(current_step_keys):
                     st.session_state.current_step += 1
                     st.rerun()
         else:
+            button_text = "💾 Posodobi naročilo" if st.session_state.edit_mode else f"📄 {get_text('submit_button')}"
             submit_form = st.form_submit_button(
-                f"📄 {get_text('submit_button')}", 
+                button_text, 
                 type="primary",
                 use_container_width=True
             )
             if submit_form:
                 if validate_step(current_step_keys, st.session_state.schema):
                     final_form_data = get_form_data_from_session()
-                    st.markdown("---")
-                    st.subheader(get_text("form_submitted_with_data"))
-                    st.json(final_form_data)
-                    st.success(get_text("documents_prepared"))
+                    
+                    # Save or update based on edit mode
+                    if st.session_state.edit_mode:
+                        # Update existing procurement
+                        if database.update_procurement(st.session_state.edit_record_id, final_form_data):
+                            st.success(f"✅ Naročilo ID {st.session_state.edit_record_id} uspešno posodobljeno!")
+                            # Clear edit mode and return to dashboard
+                            st.session_state.edit_mode = False
+                            st.session_state.edit_record_id = None
+                            st.session_state.current_page = 'dashboard'
+                            clear_form_data()
+                            st.rerun()
+                        else:
+                            st.error("❌ Napaka pri posodabljanju naročila")
+                    else:
+                        # Create new procurement
+                        new_id = database.create_procurement(final_form_data)
+                        if new_id:
+                            st.success(f"✅ Novo naročilo uspešno ustvarjeno z ID: {new_id}")
+                            # Return to dashboard
+                            st.session_state.current_page = 'dashboard'
+                            clear_form_data()
+                            st.rerun()
+                        else:
+                            st.error("❌ Napaka pri ustvarjanju naročila")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -808,17 +860,39 @@ def render_navigation_buttons(current_step_keys):
                     st.session_state.current_step += 1
                     st.rerun()
         else:
+            button_text = "💾 Posodobi naročilo" if st.session_state.edit_mode else f"📄 {get_text('submit_button')}"
             if st.button(
-                f"📄 {get_text('submit_button')}", 
+                button_text, 
                 type="primary",
                 use_container_width=True
             ):
                 if validate_step(current_step_keys, st.session_state.schema):
                     final_form_data = get_form_data_from_session()
-                    st.markdown("---")
-                    st.subheader(get_text("form_submitted_with_data"))
-                    st.json(final_form_data)
-                    st.success(get_text("documents_prepared"))
+                    
+                    # Save or update based on edit mode
+                    if st.session_state.edit_mode:
+                        # Update existing procurement
+                        if database.update_procurement(st.session_state.edit_record_id, final_form_data):
+                            st.success(f"✅ Naročilo ID {st.session_state.edit_record_id} uspešno posodobljeno!")
+                            # Clear edit mode and return to dashboard
+                            st.session_state.edit_mode = False
+                            st.session_state.edit_record_id = None
+                            st.session_state.current_page = 'dashboard'
+                            clear_form_data()
+                            st.rerun()
+                        else:
+                            st.error("❌ Napaka pri posodabljanju naročila")
+                    else:
+                        # Create new procurement
+                        new_id = database.create_procurement(final_form_data)
+                        if new_id:
+                            st.success(f"✅ Novo naročilo uspešno ustvarjeno z ID: {new_id}")
+                            # Return to dashboard
+                            st.session_state.current_page = 'dashboard'
+                            clear_form_data()
+                            st.rerun()
+                        else:
+                            st.error("❌ Napaka pri ustvarjanju naročila")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
