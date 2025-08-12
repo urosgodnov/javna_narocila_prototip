@@ -765,15 +765,101 @@
             "$ref": "#/$defs/selectionCriteriaProperties"
         },
         "contractInfo": {
-            "title": "Pogodba oziroma okvirni sporazum",
+            "title": "Sklepanje pogodbe",
             "type": "object",
             "properties": {
-                "type": { "type": "string", "enum": ["pogodba", "okvirni sporazum"], "title": "Želimo skleniti" },
-                "frameworkAgreementType": { "type": "string", "enum": ["z enim gospodarskim subjektom in brez odpiranja konkurence", "z enim gospodarskim subjektom in z odpiranjem konkurence", "z več gospodarskimi subjekti in brez odpiranja konkurence", "z več gospodarskimi subjekti in z odpiranjem konkurence"], "title": "Vrsta okvirnega sporazuma" },
-                "duration": { "type": "string", "title": "Obdobje veljavnosti (max 4 leta)" },
-                "competitionFrequency": { "type": "string", "title": "Kako pogosto želite odpirati konkurenco" },
-                "canBeExtended": { "type": "boolean", "title": "Naročnik predvideva podaljšanje pogodbe" },
-                "extensionConditions": { "type": "string", "format": "textarea", "title": "V katerih primerih oz. iz katerih razlogov lahko pride do podaljšanja" }
+                "sectionA_title": { "type": "string", "default": "A. IZBIRA NAČINA SKLENITVE", "title": "A. IZBIRA NAČINA SKLENITVE", "readonly": true },
+                "type": { 
+                    "type": "string", 
+                    "enum": ["pogodba", "okvirni sporazum"], 
+                    "title": "Vrsta sklenitve",
+                    "description": "Izberite način sklenitve javnega naročila"
+                },
+                "contractPeriodType": {
+                    "type": "string",
+                    "enum": ["z veljavnostjo", "za obdobje od-do"],
+                    "title": "Način določitve obdobja pogodbe",
+                    "render_if": { "field": "type", "value": "pogodba" }
+                },
+                "contractValidity": {
+                    "type": "string",
+                    "title": "Veljavnost pogodbe",
+                    "description": "Navedite za kakšno obdobje bi želeli skleniti pogodbo",
+                    "render_if": { "field": "contractPeriodType", "value": "z veljavnostjo" }
+                },
+                "contractDateFrom": {
+                    "type": "string",
+                    "format": "date",
+                    "title": "Obdobje od",
+                    "render_if": { "field": "contractPeriodType", "value": "za obdobje od-do" }
+                },
+                "contractDateTo": {
+                    "type": "string",
+                    "format": "date",
+                    "title": "Obdobje do",
+                    "render_if": { "field": "contractPeriodType", "value": "za obdobje od-do" }
+                },
+                "frameworkAgreementType": { 
+                    "type": "string", 
+                    "enum": [
+                        "z enim gospodarskim subjektom in brez odpiranja konkurence",
+                        "z enim gospodarskim subjektom in z odpiranjem konkurence",
+                        "z več gospodarskimi subjekti in brez odpiranja konkurence",
+                        "z več gospodarskimi subjekti in z odpiranjem konkurence",
+                        "z več gospodarskimi subjekti in deloma brez ponovnega odpiranja konkurence in deloma z odpiranjem konkurence"
+                    ],
+                    "title": "Vrsta okvirnega sporazuma",
+                    "render_if": { "field": "type", "value": "okvirni sporazum" }
+                },
+                "frameworkDuration": { 
+                    "type": "string", 
+                    "title": "Obdobje okvirnega sporazuma",
+                    "description": "Navedite za kakšno obdobje bi želeli skleniti okvirni sporazum (max. 4 leta)",
+                    "render_if": { "field": "type", "value": "okvirni sporazum" },
+                    "validation": { "maxYears": 4 }
+                },
+                "competitionFrequency": { 
+                    "type": "string", 
+                    "title": "Pogostost odpiranja konkurence",
+                    "description": "Navedite kako pogosto želite odpirati konkurenco",
+                    "render_if_any": [
+                        { "field": "frameworkAgreementType", "value": "z enim gospodarskim subjektom in z odpiranjem konkurence" },
+                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in z odpiranjem konkurence" },
+                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in deloma brez ponovnega odpiranja konkurence in deloma z odpiranjem konkurence" }
+                    ]
+                },
+                "selectedCriteriaInfo": {
+                    "type": "string",
+                    "format": "info",
+                    "title": "Merila pri odpiranju konkurence",
+                    "description": "Pri odpiranju konkurence bodo uporabljena izbrana merila iz prejšnje točke",
+                    "render_if_any": [
+                        { "field": "frameworkAgreementType", "value": "z enim gospodarskim subjektom in z odpiranjem konkurence" },
+                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in z odpiranjem konkurence" },
+                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in deloma brez ponovnega odpiranja konkurence in deloma z odpiranjem konkurence" }
+                    ]
+                },
+                "sectionB_title": { "type": "string", "default": "B. PODALJŠANJE POGODBE", "title": "B. PODALJŠANJE POGODBE", "readonly": true },
+                "canBeExtended": { 
+                    "type": "string",
+                    "enum": ["ne", "da"],
+                    "title": "Možnost podaljšanja",
+                    "description": "Ali naročnik predvideva možnost podaljšanja pogodbe?",
+                    "default": "ne"
+                },
+                "extensionReasons": { 
+                    "type": "string", 
+                    "format": "textarea",
+                    "title": "Razlogi za podaljšanje",
+                    "description": "Navedite v katerih primerih oz. iz katerih razlogov lahko pride do podaljšanja pogodbe",
+                    "render_if": { "field": "canBeExtended", "value": "da" }
+                },
+                "extensionDuration": {
+                    "type": "string",
+                    "title": "Trajanje podaljšanja",
+                    "description": "Navedite za koliko časa bi v navedenih primerih želeli podaljšati pogodbo",
+                    "render_if": { "field": "canBeExtended", "value": "da" }
+                }
             }
         },
         "otherInfo": {

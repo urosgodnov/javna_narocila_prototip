@@ -343,10 +343,86 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     st.rerun()
 
         elif prop_type == "string":
+            # Handle readonly section headers
+            if prop_details.get("readonly") and prop_name.endswith("_title"):
+                st.markdown(f"### {prop_details.get('title', label)}")
+                return
+            
+            # Handle info fields that display selected criteria
+            if prop_details.get("format") == "info":
+                # Check if we should show the criteria info
+                if "selectedCriteriaInfo" in full_key:
+                    # Get selected criteria from session state
+                    selected_criteria = []
+                    criteria_keys = [
+                        'selectionCriteria.price',
+                        'selectionCriteria.additionalReferences', 
+                        'selectionCriteria.additionalTechnicalRequirements',
+                        'selectionCriteria.shorterDeadline',
+                        'selectionCriteria.longerWarranty',
+                        'selectionCriteria.costEfficiency',
+                        'selectionCriteria.socialCriteria',
+                        'selectionCriteria.otherCriteriaCustom',
+                        'selectionCriteria.otherCriteriaAI'
+                    ]
+                    criteria_labels = {
+                        'selectionCriteria.price': 'Cena',
+                        'selectionCriteria.additionalReferences': 'Dodatne reference imenovanega kadra',
+                        'selectionCriteria.additionalTechnicalRequirements': 'Dodatne tehnične zahteve',
+                        'selectionCriteria.shorterDeadline': 'Krajši rok izvedbe',
+                        'selectionCriteria.longerWarranty': 'Garancija daljša od zahtevane',
+                        'selectionCriteria.costEfficiency': 'Stroškovna učinkovitost',
+                        'selectionCriteria.socialCriteria': 'Socialna merila',
+                        'selectionCriteria.otherCriteriaCustom': 'Drugo (lasten predlog)',
+                        'selectionCriteria.otherCriteriaAI': 'Drugo (AI predlog)'
+                    }
+                    
+                    for key in criteria_keys:
+                        if st.session_state.get(key):
+                            selected_criteria.append(criteria_labels.get(key, key))
+                    
+                    if selected_criteria:
+                        st.info(f"ℹ️ Pri odpiranju konkurence bodo uporabljena naslednja merila: **{', '.join(selected_criteria)}**")
+                    else:
+                        st.warning("⚠️ Niste izbrali nobenih meril v prejšnji točki. Pri odpiranju konkurence morate imeti definirana merila.")
+                return
+            
             # Add required indicator to label
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
             
-            if "enum" in prop_details:
+            # Check if this field should be rendered as radio buttons (for contractInfo type selection)
+            use_radio = False
+            if ("contractInfo.type" in full_key or 
+                "contractInfo.contractPeriodType" in full_key or
+                "contractInfo.canBeExtended" in full_key):
+                use_radio = True
+            
+            if "enum" in prop_details and use_radio:
+                # Radio button rendering for mutually exclusive choices
+                available_options = prop_details["enum"].copy()
+                
+                # Initialize session state if it doesn't exist
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = raw_default if raw_default in available_options else available_options[0] if prop_details.get("default") else ""
+                
+                # Use a separate widget key
+                widget_key = f"widget_{session_key}"
+                
+                # Create radio buttons
+                selected_value = st.radio(
+                    display_label,
+                    options=available_options,
+                    index=available_options.index(st.session_state[session_key]) if st.session_state[session_key] in available_options else 0,
+                    key=widget_key,
+                    help=help_text,
+                    horizontal=True if len(available_options) <= 2 else False
+                )
+                
+                # Sync widget value back to session state
+                if selected_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = selected_value
+                    
+            elif "enum" in prop_details:
                 # Handle dynamic filtering for mixed order component types
                 available_options = prop_details["enum"].copy()
                 
@@ -525,6 +601,30 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 # Sync widget value back to session state
                 if text_value != st.session_state.get(session_key):
                     st.session_state[session_key] = text_value
+                
+                # Validation for framework agreement duration (4 year limit)
+                if "frameworkDuration" in full_key and text_value:
+                    # Try to parse the duration and check if it exceeds 4 years
+                    try:
+                        # Simple check for common patterns
+                        if "let" in text_value.lower():
+                            # Extract number before "let"
+                            import re
+                            numbers = re.findall(r'(\d+)', text_value)
+                            if numbers:
+                                years = int(numbers[0])
+                                if years > 4:
+                                    st.error("⚠️ Okvirni sporazum ne sme presegati 4 let!")
+                        elif "mesec" in text_value.lower():
+                            # Extract number before "mesec"
+                            import re
+                            numbers = re.findall(r'(\d+)', text_value)
+                            if numbers:
+                                months = int(numbers[0])
+                                if months > 48:
+                                    st.error("⚠️ Okvirni sporazum ne sme presegati 4 let (48 mesecev)!")
+                    except:
+                        pass  # If parsing fails, don't show error
 
         elif prop_type == "number":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
