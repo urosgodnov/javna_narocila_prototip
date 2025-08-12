@@ -198,7 +198,7 @@ def render_organization_management_tab():
     
     # Get the absolute path for organizations.json
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    org_file_path = os.path.join(dir_path, '..', 'organizations.json')
+    org_file_path = os.path.join(dir_path, '..', 'json_files', 'organizations.json')
 
     # Create the file if it doesn't exist
     if not os.path.exists(org_file_path):

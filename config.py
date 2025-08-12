@@ -92,4 +92,4 @@ def get_dynamic_form_steps(session_state):
 FORM_STEPS = BASE_STEPS + LOT_SPECIFIC_STEPS + FINAL_STEPS
 
 # Schema file path
-SCHEMA_FILE = "SEZNAM_POTREBNIH_PODATKOV.json"
+SCHEMA_FILE = "json_files/SEZNAM_POTREBNIH_PODATKOV.json"

@@ -426,3 +426,18 @@ web-bundles/
 .pytest_cache/
 .bmad-core/
 .claude/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.mcp.json
+playwright*
+error.txt
+cene.txt
+package-lock.json
+/e2e
+/tests-examples/
+SEZNAM POTREBNIH PODATKOV ZA APLIKACIJO - navezava na dokumentacijo.pdf
+package.json

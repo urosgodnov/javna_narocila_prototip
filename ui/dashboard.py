@@ -10,6 +10,15 @@ from utils.schema_utils import get_form_data_from_session, clear_form_data
 
 def render_dashboard():
     """Render the procurement dashboard with table view."""
+    # Import and use modern dashboard if available
+    try:
+        from ui.modern_dashboard_simple import render_modern_dashboard
+        render_modern_dashboard()
+        return
+    except Exception as e:
+        st.error(f"Error loading modern dashboard: {e}")
+        pass
+    
     st.title("📋 Javna Naročila - Pregled")
     st.markdown(f"**Organizacija:** demo_organizacija")
     st.markdown("---")

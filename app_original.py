@@ -294,7 +294,7 @@ def main():
     st.set_page_config(layout="wide")
     st.title("Generator dokumentacije za javna naročila")
 
-    schema_file = "SEZNAM_POTREBNIH_PODATKOV.json"
+    schema_file = "json_files/SEZNAM_POTREBNIH_PODATKOV.json"
     if st.session_state.get('schema') is None:
         try:
             st.session_state['schema'] = load_json_schema(schema_file)
