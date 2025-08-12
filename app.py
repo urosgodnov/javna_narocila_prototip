@@ -43,6 +43,14 @@ def main():
     else:
         render_admin_panel()
 
+def _set_navigation_flags():
+    """Set navigation flags to prevent auto-selection triggers during navigation."""
+    # Set navigation flag for all form fields that might have auto-selection logic
+    for key in st.session_state.keys():
+        if key.endswith('submissionProcedure.procedure'):
+            navigation_key = f"{key}_navigation_flag"
+            st.session_state[navigation_key] = True
+
 def validate_step(step_keys, schema):
     """Validate the fields for the current step based on 'required' keys in the schema."""
     is_valid = True
@@ -150,12 +158,24 @@ def render_main_form():
                     
                     current_step_properties[key] = prop_copy
         
+        # Uncomment the debug section below if you need to troubleshoot session state issues
+        # if st.checkbox("🐛 Show Debug Info", key="debug_toggle"):
+        #     st.write("**Session State Debug:**")
+        #     procedure_keys = [k for k in st.session_state.keys() if 'procedure' in k.lower()]
+        #     if procedure_keys:
+        #         for key in procedure_keys:
+        #             st.write(f"- `{key}`: {st.session_state[key]}")
+        #     else:
+        #         st.write("No procedure keys found in session state")
+        #     st.write(f"**Current Step:** {st.session_state.current_step}")
+        #     st.write(f"**Step Keys:** {current_step_keys}")
+
         # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)
         render_form(current_step_properties, lot_context=lot_context)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Enhanced Navigation buttons
+        # Enhanced Navigation buttons (outside form to avoid Enter key issues)
         render_navigation_buttons(current_step_keys)
 
     with col2:
@@ -701,8 +721,60 @@ def render_step_breadcrumbs():
     breadcrumbs_html += '</div>'
     st.markdown(breadcrumbs_html, unsafe_allow_html=True)
 
+def render_navigation_buttons_in_form(current_step_keys):
+    """Render navigation buttons inside a Streamlit form."""
+    # Get dynamic form steps for navigation
+    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    
+    st.markdown('<div class="navigation-buttons">', unsafe_allow_html=True)
+    
+    col_nav_left, col_nav_center, col_nav_right = st.columns([1, 2, 1])
+    
+    with col_nav_left:
+        if st.session_state.current_step > 0:
+            go_back = st.form_submit_button(
+                f"← {get_text('back_button')}", 
+                type="secondary",
+                use_container_width=True
+            )
+            if go_back:
+                # Set navigation flag for all form fields to prevent auto-selection triggers
+                _set_navigation_flags()
+                st.session_state.current_step -= 1
+                st.rerun()
+
+    with col_nav_right:
+        if st.session_state.current_step < len(dynamic_form_steps) - 1:
+            go_forward = st.form_submit_button(
+                f"{get_text('next_button')} →", 
+                type="primary",
+                use_container_width=True
+            )
+            if go_forward:
+                # Enhanced validation can be added here
+                if validate_step(current_step_keys, st.session_state.schema):
+                    # Set navigation flag for all form fields to prevent auto-selection triggers
+                    _set_navigation_flags()
+                    st.session_state.current_step += 1
+                    st.rerun()
+        else:
+            submit_form = st.form_submit_button(
+                f"📄 {get_text('submit_button')}", 
+                type="primary",
+                use_container_width=True
+            )
+            if submit_form:
+                if validate_step(current_step_keys, st.session_state.schema):
+                    final_form_data = get_form_data_from_session()
+                    st.markdown("---")
+                    st.subheader(get_text("form_submitted_with_data"))
+                    st.json(final_form_data)
+                    st.success(get_text("documents_prepared"))
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
 def render_navigation_buttons(current_step_keys):
-    """Render enhanced navigation buttons."""
+    """Render enhanced navigation buttons with proper state handling."""
     # Get dynamic form steps for navigation
     dynamic_form_steps = get_dynamic_form_steps(st.session_state)
     
@@ -717,6 +789,8 @@ def render_navigation_buttons(current_step_keys):
                 type="secondary",
                 use_container_width=True
             ):
+                # Set navigation flag for all form fields to prevent auto-selection triggers
+                _set_navigation_flags()
                 st.session_state.current_step -= 1
                 st.rerun()
 
@@ -729,6 +803,8 @@ def render_navigation_buttons(current_step_keys):
             ):
                 # Enhanced validation can be added here
                 if validate_step(current_step_keys, st.session_state.schema):
+                    # Set navigation flag for all form fields to prevent auto-selection triggers
+                    _set_navigation_flags()
                     st.session_state.current_step += 1
                     st.rerun()
         else:

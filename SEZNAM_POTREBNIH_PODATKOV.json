@@ -140,8 +140,7 @@
                         "postopek s pogajanji brez predhodne objave",
                         "postopek naročila male vrednosti",
                         "vseeno"
-                    ],
-                    "default": "odprti postopek"
+                    ]
                 },
                 "justification": {
                     "type": "string",
@@ -504,10 +503,34 @@
             "title": "Informacije o pogajanjih",
             "type": "object",
             "properties": {
+                "negotiationsNotAllowed": {
+                    "type": "object",
+                    "title": "Opozorilo",
+                    "properties": {},
+                    "description": "Pogajanja niso možna za izbrani postopek oddaje javnega naročila.",
+                    "render_if": {
+                        "field": "submissionProcedure.procedure",
+                        "not_in": [
+                            "konkurenčni dialog",
+                            "partnerstvo za inovacije", 
+                            "konkurenčni postopek s pogajanji",
+                            "postopek s pogajanji brez predhodne objave",
+                            "postopek naročila male vrednosti"
+                        ]
+                    }
+                },
                 "hasNegotiations": {
                     "type": "boolean",
-                    "title": "Ali želite vključiti pogajanja (če postopek to omogoča)?",
-                    "default": false
+                    "title": "Ali želite vključiti pogajanja?",
+                    "default": false,
+                    "render_if": {
+                        "field": "submissionProcedure.procedure",
+                        "not_in": [
+                            "odprti postopek",
+                            "omejeni postopek", 
+                            "vseeno"
+                        ]
+                    }
                 },
                 "negotiationSubject": {
                     "type": "string",

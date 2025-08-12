@@ -5,10 +5,11 @@ from datetime import date
 from localization import get_text, get_validation_message
 from utils.lot_utils import get_lot_scoped_key, render_lot_context_step
 
+
 def _get_default_value(full_key, prop_details, lot_context=None):
     """Get appropriate default value for form field."""
     # Apply lot scoping if context is provided, but respect global fields
-    global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo']
+    global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo', 'participationAndExclusion', 'participationConditions', 'financialGuarantees']
     is_global_field = any(full_key.startswith(gf) for gf in global_fields)
     
     if is_global_field:
@@ -20,19 +21,36 @@ def _get_default_value(full_key, prop_details, lot_context=None):
     else:
         scoped_key = full_key
     
+    # Check if this key exists in session state
+    if scoped_key in st.session_state:
+        return st.session_state[scoped_key]
+    
+    # Only use schema defaults for truly new fields (never been set)
+    # For critical fields like procedure, don't override user selections with schema defaults
     default_value = prop_details.get("default")
+    
+    # Special handling for submission procedure to preserve user choices
+    if full_key == "submissionProcedure.procedure":
+        # Check if any procedure has been set previously (even if the exact key doesn't exist)
+        procedure_keys = [k for k in st.session_state.keys() if k.endswith('submissionProcedure.procedure')]
+        if procedure_keys:
+            # Use the first found procedure value instead of schema default
+            return st.session_state.get(procedure_keys[0], default_value)
+        # Only use default if no procedure has ever been set
+        return default_value if default_value is not None else ""
+    
     if prop_details.get("type") == "number":
-        return st.session_state.get(scoped_key, default_value if default_value is not None else 0.0)
+        return default_value if default_value is not None else 0.0
     elif prop_details.get("type") == "integer":
-        return st.session_state.get(scoped_key, default_value if default_value is not None else 0)
+        return default_value if default_value is not None else 0
     elif prop_details.get("format") == "date":
-        return st.session_state.get(scoped_key, default_value if default_value is not None else date.today())
+        return default_value if default_value is not None else date.today()
     elif prop_details.get("type") == "array":
-        return st.session_state.get(scoped_key, default_value if default_value is not None else [])
+        return default_value if default_value is not None else []
     elif prop_details.get("type") == "boolean":
-        return st.session_state.get(scoped_key, default_value if default_value is not None else False)
+        return default_value if default_value is not None else False
     else:
-        return st.session_state.get(scoped_key, default_value if default_value is not None else "")
+        return default_value if default_value is not None else ""
 
 def _should_render(prop_details, parent_key="", lot_context=None, session_key_prefix=""):
     """Check if a field should be rendered based on a conditional flag in the schema."""
@@ -151,7 +169,8 @@ def render_form(schema_properties, parent_key="", lot_context=None):
             
         label = prop_details.get("title", prop_name)
         help_text = prop_details.get("description")
-        current_value = _get_default_value(full_key, prop_details, lot_context)
+        # Get raw default from schema (don't use complex _get_default_value logic)
+        raw_default = prop_details.get("default", "")
         
         # Create the session state key (scoped for lots)
         # Some fields should never be lot-scoped as they control global form behavior
@@ -215,13 +234,18 @@ def render_form(schema_properties, parent_key="", lot_context=None):
             if "enum" in items_schema:
                 if session_key not in st.session_state:
                     st.session_state[session_key] = []
+                widget_key = f"widget_{session_key}"
                 selected_values = st.multiselect(
                     label, 
                     options=items_schema["enum"], 
                     default=st.session_state.get(session_key, []), 
-                    key=session_key, 
+                    key=widget_key, 
                     help=help_text
                 )
+                
+                # Sync widget value back to session state
+                if selected_values != st.session_state.get(session_key):
+                    st.session_state[session_key] = selected_values
             
             # Array of objects
             elif items_schema.get("type") == "object":
@@ -238,7 +262,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                             item_title = items_schema.get('title', 'element')
                             st.markdown(f"**{item_title} {i + 1}**")
                         with col_remove:
-                            if st.button("❌", key=f"remove_{session_key}_{i}", help=f"Odstrani {item_title.lower()} {i + 1}"):
+                            if st.button("❌", key=f"widget_remove_{session_key}_{i}", help=f"Odstrani {item_title.lower()} {i + 1}"):
                                 st.session_state[session_key].pop(i)
                                 st.rerun()
                         
@@ -260,7 +284,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 else:
                     button_text = f"➕ Dodaj {item_title.lower()}"
                 
-                if st.button(button_text, key=f"add_{session_key}"):
+                if st.button(button_text, key=f"widget_add_{session_key}"):
                     st.session_state[session_key].append({})
                     st.rerun()
             
@@ -275,10 +299,11 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     
                     with col_input:
                         current_text = st.session_state[session_key][i]
+                        widget_key = f"widget_{session_key}_item_{i}"
                         new_text = st.text_input(
                             f"{items_schema.get('title', 'Vnos')} {i + 1}",
                             value=current_text,
-                            key=f"{session_key}_item_{i}",
+                            key=widget_key,
                             placeholder="Vnesite naziv zakona/predpisa"
                         )
                         # Update the value if changed
@@ -288,7 +313,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     with col_remove:
                         # Add some vertical spacing to align with input field
                         st.write("")
-                        if st.button("❌", key=f"remove_{session_key}_{i}", help="Odstrani to pravno podlago"):
+                        if st.button("❌", key=f"widget_remove_{session_key}_{i}", help="Odstrani to pravno podlago"):
                             st.session_state[session_key].pop(i)
                             st.rerun()
 
@@ -299,7 +324,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     item_title = items_schema.get('title', 'element').lower()
                     button_text = f"➕ Dodaj {item_title}"
                 
-                if st.button(button_text, key=f"add_{session_key}"):
+                if st.button(button_text, key=f"widget_add_{session_key}"):
                     st.session_state[session_key].append("")
                     st.rerun()
 
@@ -338,55 +363,68 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     available_options = [opt for opt in available_options if opt not in selected_types]
                     
                     # Show info if no options are available (all types selected)
-                    if not available_options and not current_value:
+                    if not available_options:
                         st.info("ℹ️ Vse vrste naročil (blago, storitve, gradnje) so že izbrane v drugih postavkah.")
                         return  # Skip rendering the selectbox
                 
                 # Enhanced selectbox with proper placeholder and filtered options
-                # Show placeholder only if there are available options and no current value
-                if available_options:
-                    enum_options = [""] + available_options if not current_value else available_options
-                else:
-                    # If no options available but there's a current value, keep it
-                    enum_options = [current_value] if current_value else []
-                index = 0
-                if current_value and current_value in available_options:
-                    # Calculate correct index based on whether empty option is present
-                    if current_value in enum_options:
-                        index = enum_options.index(current_value)
-                    else:
-                        index = 0
+                # This section is actually not needed anymore since we handle options differently
+                # Remove this entire legacy logic block
                 
                 # Special handling for "vseeno" auto-selection in procedure field
                                                 # Enhanced selectbox with proper placeholder and filtered options
                 enum_options = available_options
                 
+                # Initialize the session state if it doesn't exist - BUT PRESERVE EXISTING VALUES
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = raw_default if raw_default in enum_options else ""
+                
+                # Calculate index based on current session state value, not current_value
                 index = None
-                if current_value and current_value in enum_options:
-                    index = enum_options.index(current_value)
+                session_value = st.session_state[session_key]
+                if session_value and session_value in enum_options:
+                    index = enum_options.index(session_value)
 
+                # Use a separate widget key to avoid Streamlit cleaning up our session state
+                widget_key = f"widget_{session_key}"
+                
                 # Special handling for "vseeno" auto-selection in procedure field
                 selected_value = st.selectbox(
                     display_label, 
                     options=enum_options, 
                     index=index,
-                    key=full_key, 
+                    key=widget_key,  # Use separate widget key
                     help=help_text,
                     placeholder=get_text("select_option")
                 )
                 
+                # Manually sync the widget value back to our persistent session state
+                if selected_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = selected_value
+                
                 # Auto-selection logic for "vseeno" in procedure field - fixed to handle all cases
+                # Use the persistent session state value, not the widget value
+                persistent_value = st.session_state.get(session_key, "")
+                
                 if (prop_name == "procedure" and 
-                    "submissionProcedure" in full_key and 
-                    selected_value == "vseeno"):
+                    "submissionProcedure" in full_key):
                     
                     # Use session state to track user interaction
                     user_clicked_key = f"{session_key}_user_clicked_vseeno"
                     previous_value_key = f"{session_key}_previous_value"
+                    navigation_key = f"{session_key}_navigation_flag"
                     
-                    # Check if user actively selected "vseeno" (not just default)
+                    # Get previous values
                     previous_value = st.session_state.get(previous_value_key, "")
-                    user_actively_selected = (previous_value != "" and previous_value != "vseeno" and selected_value == "vseeno")
+                    is_navigation = st.session_state.get(navigation_key, False)
+                    
+                    # Check if user actively selected "vseeno" (not during navigation)
+                    user_actively_selected = (
+                        persistent_value == "vseeno" and 
+                        previous_value != "" and 
+                        previous_value != "vseeno" and 
+                        not is_navigation  # Don't trigger during navigation
+                    )
                     
                     # If user actively clicked "vseeno", trigger auto-selection
                     if user_actively_selected and not st.session_state.get(user_clicked_key, False):
@@ -395,27 +433,39 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                         st.info("ℹ️ Ker ste izbrali 'vseeno', smo avtomatsko nastavili 'odprti postopek', ki je najčešji in priporočeni postopek za večino javnih naročil.")
                         st.rerun()
                     
-                    # Store current value for next comparison
-                    st.session_state[previous_value_key] = selected_value
+                    # Store current value for next comparison and clear navigation flag
+                    st.session_state[previous_value_key] = persistent_value
+                    st.session_state[navigation_key] = False  # Clear navigation flag after processing
                 
                 # Reset tracking flags if user manually selects something else
                 if (prop_name == "procedure" and 
                     "submissionProcedure" in full_key and 
-                    selected_value != "vseeno"):
+                    persistent_value not in ["vseeno", ""]):
                     user_clicked_key = f"{session_key}_user_clicked_vseeno"
                     previous_value_key = f"{session_key}_previous_value"
+                    navigation_key = f"{session_key}_navigation_flag"
                     st.session_state[user_clicked_key] = False
-                    st.session_state[previous_value_key] = selected_value
+                    st.session_state[previous_value_key] = persistent_value
+                    st.session_state[navigation_key] = False
             elif prop_details.get("format") == "textarea":
-                # Enhanced textarea
-                st.text_area(
+                # Initialize session state if it doesn't exist
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = raw_default
+                
+                # Enhanced textarea with separate widget key
+                widget_key = f"widget_{session_key}"
+                textarea_value = st.text_area(
                     display_label, 
-                    value=current_value, 
-                    key=session_key, 
+                    value=st.session_state[session_key], 
+                    key=widget_key, 
                     help=help_text,
                     placeholder=get_text("enter_text"),
                     height=100
                 )
+                
+                # Sync widget value back to session state
+                if textarea_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = textarea_value
             elif prop_details.get("format") == "file":
                 # Enhanced file uploader
                 st.file_uploader(
@@ -425,33 +475,65 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     type=['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']
                 )
             elif prop_details.get("format") == "date":
-                # Enhanced date input
-                st.date_input(
+                # Initialize session state if it doesn't exist
+                if session_key not in st.session_state:
+                    default_date = raw_default if raw_default else date.today()
+                    st.session_state[session_key] = default_date
+                
+                # Enhanced date input with separate widget key
+                widget_key = f"widget_{session_key}"
+                date_value = st.date_input(
                     display_label, 
-                    value=current_value, 
-                    key=session_key, 
+                    value=st.session_state[session_key], 
+                    key=widget_key, 
                     help=help_text,
                     format="DD.MM.YYYY"
                 )
+                
+                # Sync widget value back to session state
+                if date_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = date_value
             else:
-                # Enhanced text input
-                st.text_input(
+                # Initialize session state if it doesn't exist
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = raw_default
+                
+                # Enhanced text input with separate widget key
+                widget_key = f"widget_{session_key}"
+                text_value = st.text_input(
                     display_label, 
-                    value=current_value, 
-                    key=session_key, 
+                    value=st.session_state[session_key], 
+                    key=widget_key, 
                     help=help_text,
                     placeholder=get_text("enter_text")
                 )
+                
+                # Sync widget value back to session state
+                if text_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = text_value
 
         elif prop_type == "number":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
             
+            # Initialize session state if it doesn't exist
+            if session_key not in st.session_state:
+                if isinstance(raw_default, (int, float)):
+                    st.session_state[session_key] = float(raw_default)
+                elif isinstance(raw_default, str) and raw_default:
+                    try:
+                        st.session_state[session_key] = float(raw_default)
+                    except ValueError:
+                        st.session_state[session_key] = 0.0
+                else:
+                    st.session_state[session_key] = 0.0
+            
             # Use text input styled as number to remove spinner
-            current_str = str(current_value) if current_value != 0.0 else ""
+            current_str = str(st.session_state[session_key]) if st.session_state[session_key] != 0.0 else ""
+            widget_key = f"widget_{session_key}_text"
             number_text = st.text_input(
                 display_label, 
                 value=current_str, 
-                key=f"{session_key}_text",
+                key=widget_key,
                 help=help_text,
                 placeholder="0.00"
             )
@@ -470,15 +552,28 @@ def render_form(schema_properties, parent_key="", lot_context=None):
         elif prop_type == "integer":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
             
+            # Initialize session state if it doesn't exist
+            if session_key not in st.session_state:
+                if isinstance(raw_default, int):
+                    st.session_state[session_key] = raw_default
+                elif isinstance(raw_default, str) and raw_default:
+                    try:
+                        st.session_state[session_key] = int(raw_default)
+                    except ValueError:
+                        st.session_state[session_key] = 0
+                else:
+                    st.session_state[session_key] = 0
+            
             # Get minimum value constraint if specified
             minimum = prop_details.get("minimum", 1)
             
             # Use text input for integers to avoid spinner
-            current_str = str(current_value) if current_value != 0 else ""
+            current_str = str(st.session_state[session_key]) if st.session_state[session_key] != 0 else ""
+            widget_key = f"widget_{session_key}_text"
             integer_text = st.text_input(
                 display_label, 
                 value=current_str, 
-                key=f"{session_key}_text",
+                key=widget_key,
                 help=help_text,
                 placeholder=f"Vnesite celo število (min. {minimum})"
             )
@@ -500,10 +595,26 @@ def render_form(schema_properties, parent_key="", lot_context=None):
 
         elif prop_type == "boolean":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
-            checkbox_value = st.checkbox(display_label, value=current_value, key=session_key, help=help_text)
+            
+            # Initialize session state if it doesn't exist
+            if session_key not in st.session_state:
+                # Ensure boolean conversion for raw_default
+                if isinstance(raw_default, bool):
+                    st.session_state[session_key] = raw_default
+                elif isinstance(raw_default, str):
+                    st.session_state[session_key] = raw_default.lower() in ('true', '1', 'yes')
+                else:
+                    st.session_state[session_key] = False
+            
+            widget_key = f"widget_{session_key}"
+            checkbox_value = st.checkbox(display_label, value=st.session_state[session_key], key=widget_key, help=help_text)
+            
+            # Sync widget value back to session state
+            if checkbox_value != st.session_state.get(session_key):
+                st.session_state[session_key] = checkbox_value
             
             # Special handling for wantsLogo to provide user feedback
-            if prop_name == "wantsLogo" and checkbox_value != current_value:
+            if prop_name == "wantsLogo" and checkbox_value != raw_default:
                 if checkbox_value:
                     st.success("✅ Polje za nalaganje logotipov je sedaj na voljo spodaj.")
                 else:
