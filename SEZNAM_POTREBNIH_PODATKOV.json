@@ -761,17 +761,8 @@
             }
         },
         "selectionCriteria": {
-            "title": "Merila za izbiro najugodnejše ponudbe",
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "criterion": { "type": "string", "enum": ["cena", "dodatne reference imenovanega kadra", "dodatne tehnične zahteve", "krajši rok izvedbe", "garancija daljša od zahtevane", "stroškovna učinkovitost", "socialna merila", "drugo"] },
-                    "selected": { "type": "boolean" },
-                    "points": { "type": "number", "title": "Točke" },
-                    "description": { "type": "string", "title": "Opis" }
-                }
-            }
+            "type": "object",
+            "$ref": "#/$defs/selectionCriteriaProperties"
         },
         "contractInfo": {
             "title": "Pogodba oziroma okvirni sporazum",
@@ -1566,6 +1557,254 @@
                                 "not_in": ["", null]
                             }
                         }
+                    }
+                }
+            }
+        },
+        "selectionCriteriaProperties": {
+            "type": "object",
+            "properties": {
+                "criteriaHeader": {
+                    "type": "object",
+                    "title": "A. IZBIRA MERIL",
+                    "properties": {},
+                    "description": "Izberite merila za izbiro najugodnejše ponudbe"
+                },
+                "price": {
+                    "type": "boolean",
+                    "title": "Cena",
+                    "default": false
+                },
+                "priceInfo": {
+                    "type": "object",
+                    "title": "ℹ️ Informacija o merilu cene",
+                    "properties": {},
+                    "description": "Cena je najpogostejše merilo pri javnih naročilih. Pri uporabi tega merila se točke običajno izračunavajo po formuli: (najnižja cena / ponujena cena) × maksimalno število točk.",
+                    "render_if": {
+                        "field": "selectionCriteria.price",
+                        "value": true
+                    }
+                },
+                "additionalReferences": {
+                    "type": "boolean",
+                    "title": "Dodatne reference imenovanega kadra",
+                    "default": false
+                },
+                "additionalTechnicalRequirements": {
+                    "type": "boolean",
+                    "title": "Dodatne tehnične zahteve",
+                    "default": false
+                },
+                "technicalRequirementsDescription": {
+                    "type": "string",
+                    "format": "textarea",
+                    "title": "→ Opišite dodatne tehnične zahteve",
+                    "render_if": {
+                        "field": "selectionCriteria.additionalTechnicalRequirements",
+                        "value": true
+                    }
+                },
+                "shorterDeadline": {
+                    "type": "boolean",
+                    "title": "Krajši rok izvedbe",
+                    "default": false
+                },
+                "shorterDeadlineMinimum": {
+                    "type": "string",
+                    "title": "→ Navedite minimalni sprejemljivi rok",
+                    "render_if": {
+                        "field": "selectionCriteria.shorterDeadline",
+                        "value": true
+                    }
+                },
+                "longerWarranty": {
+                    "type": "boolean",
+                    "title": "Garancija daljša od zahtevane",
+                    "default": false
+                },
+                "costEfficiency": {
+                    "type": "boolean",
+                    "title": "Stroškovna učinkovitost",
+                    "default": false
+                },
+                "costEfficiencyDescription": {
+                    "type": "string",
+                    "format": "textarea",
+                    "title": "→ Konkretizacija stroškovne učinkovitosti",
+                    "render_if": {
+                        "field": "selectionCriteria.costEfficiency",
+                        "value": true
+                    }
+                },
+                "socialCriteria": {
+                    "type": "boolean",
+                    "title": "Socialna merila",
+                    "default": false
+                },
+                "socialCriteriaOptions": {
+                    "type": "object",
+                    "title": "→ Izberite socialna merila:",
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteria",
+                        "value": true
+                    },
+                    "properties": {
+                        "youngEmployeesShare": {
+                            "type": "boolean",
+                            "title": "Delež zaposlenih mladih",
+                            "default": false
+                        },
+                        "elderlyEmployeesShare": {
+                            "type": "boolean",
+                            "title": "Delež zaposlenih starejših",
+                            "default": false
+                        },
+                        "registeredStaffEmployed": {
+                            "type": "boolean",
+                            "title": "Priglašeni kader je zaposlen pri ponudniku",
+                            "default": false
+                        },
+                        "averageSalary": {
+                            "type": "boolean",
+                            "title": "Povprečna plača priglašenega kadra",
+                            "default": false
+                        },
+                        "otherSocial": {
+                            "type": "boolean",
+                            "title": "Drugo",
+                            "default": false
+                        },
+                        "otherSocialDescription": {
+                            "type": "string",
+                            "format": "textarea",
+                            "title": "→ Opišite socialno merilo",
+                            "render_if": {
+                                "field": "selectionCriteria.socialCriteriaOptions.otherSocial",
+                                "value": true
+                            }
+                        }
+                    }
+                },
+                "otherCriteriaCustom": {
+                    "type": "boolean",
+                    "title": "Drugo, imamo predlog",
+                    "default": false
+                },
+                "otherCriteriaCustomDescription": {
+                    "type": "string",
+                    "format": "textarea",
+                    "title": "→ Opišite merilo",
+                    "render_if": {
+                        "field": "selectionCriteria.otherCriteriaCustom",
+                        "value": true
+                    }
+                },
+                "otherCriteriaAI": {
+                    "type": "boolean",
+                    "title": "Drugo, prosim za predlog AI",
+                    "default": false
+                },
+                "scoringHeader": {
+                    "type": "object",
+                    "title": "B. RAZMERJA MED MERILI (TOČKOVANJE)",
+                    "properties": {},
+                    "description": "Za vsako izbrano merilo določite število točk"
+                },
+                "pricePoints": {
+                    "type": "number",
+                    "title": "Cena → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.price",
+                        "value": true
+                    }
+                },
+                "additionalReferencesPoints": {
+                    "type": "number",
+                    "title": "Dodatne reference imenovanega kadra → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.additionalReferences",
+                        "value": true
+                    }
+                },
+                "additionalTechnicalRequirementsPoints": {
+                    "type": "number",
+                    "title": "Dodatne tehnične zahteve → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.additionalTechnicalRequirements",
+                        "value": true
+                    }
+                },
+                "shorterDeadlinePoints": {
+                    "type": "number",
+                    "title": "Krajši rok izvedbe → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.shorterDeadline",
+                        "value": true
+                    }
+                },
+                "longerWarrantyPoints": {
+                    "type": "number",
+                    "title": "Garancija daljša od zahtevane → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.longerWarranty",
+                        "value": true
+                    }
+                },
+                "costEfficiencyPoints": {
+                    "type": "number",
+                    "title": "Stroškovna učinkovitost → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.costEfficiency",
+                        "value": true
+                    }
+                },
+                "socialCriteriaPoints": {
+                    "type": "number",
+                    "title": "Socialna merila → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteria",
+                        "value": true
+                    }
+                },
+                "otherCriteriaCustomPoints": {
+                    "type": "number",
+                    "title": "Drugo merilo → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.otherCriteriaCustom",
+                        "value": true
+                    }
+                },
+                "tiebreakerHeader": {
+                    "type": "object",
+                    "title": "C. PRAVILO ZA ENAKO ŠTEVILO TOČK",
+                    "properties": {},
+                    "description": "Določite način odločanja v primeru enakega števila točk"
+                },
+                "tiebreakerRule": {
+                    "type": "string",
+                    "title": "V primeru enakega števila točk:",
+                    "enum": [
+                        "žreb",
+                        "prednost po specifičnem merilu"
+                    ],
+                    "default": "žreb"
+                },
+                "tiebreakerCriterion": {
+                    "type": "string",
+                    "title": "→ Izberite merilo za prednost",
+                    "enum": [
+                        "cena",
+                        "dodatne reference imenovanega kadra",
+                        "dodatne tehnične zahteve",
+                        "krajši rok izvedbe",
+                        "garancija daljša od zahtevane",
+                        "stroškovna učinkovitost",
+                        "socialna merila",
+                        "drugo"
+                    ],
+                    "render_if": {
+                        "field": "selectionCriteria.tiebreakerRule",
+                        "value": "prednost po specifičnem merilu"
                     }
                 }
             }
