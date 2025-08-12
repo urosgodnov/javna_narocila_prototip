@@ -83,6 +83,20 @@ def validate_step(step_keys, schema):
 
 def render_main_form():
     """Render the main multi-step form interface with enhanced UX."""
+    # Try to use modern form renderer if available
+    # DISABLED - Modern form needs more integration work
+    use_modern_form = False
+    
+    # When ready to enable, uncomment:
+    # try:
+    #     from ui.modern_form_renderer import (
+    #         render_modern_form, render_progress_indicator, 
+    #         render_form_step, render_form_actions, show_success_animation
+    #     )
+    #     use_modern_form = True
+    # except ImportError:
+    #     use_modern_form = False
+    
     database.init_db()
     draft_metadata = database.get_all_draft_metadata()
     draft_options = {f"{ts} (ID: {id})": id for id, ts in draft_metadata}
@@ -200,9 +214,64 @@ def render_main_form():
         #     st.write(f"**Current Step:** {st.session_state.current_step}")
         #     st.write(f"**Step Keys:** {current_step_keys}")
 
+        # Render modern progress indicator if available
+        if use_modern_form:
+            form_steps = dynamic_form_steps
+            # Handle form_steps as list of lists, not dictionaries
+            step_names = []
+            for i, step_fields in enumerate(form_steps):
+                # Each step is a list of field names
+                if step_fields and len(step_fields) > 0:
+                    # Use the first field name as step identifier, or default
+                    field_name = step_fields[0] if isinstance(step_fields, list) else str(step_fields)
+                    # Convert field name to readable format
+                    if field_name.startswith("lot_context_"):
+                        step_name = f"Sklop {field_name.split('_')[-1]}"
+                    elif field_name == "clientInfo":
+                        step_name = "Podatki naročnika"
+                    elif field_name == "projectInfo":
+                        step_name = "Podatki projekta"
+                    elif field_name == "legalBasis":
+                        step_name = "Pravna podlaga"
+                    elif field_name == "submissionProcedure":
+                        step_name = "Postopek oddaje"
+                    elif field_name == "lotsInfo":
+                        step_name = "Konfiguracija sklopov"
+                    elif field_name == "orderType":
+                        step_name = "Vrsta naročila"
+                    elif field_name == "technicalSpecifications":
+                        step_name = "Tehnične zahteve"
+                    elif field_name == "executionDeadline":
+                        step_name = "Roki izvajanja"
+                    elif field_name == "priceInfo":
+                        step_name = "Informacije o ceni"
+                    elif field_name == "inspectionInfo":
+                        step_name = "Ogledi in pogajanja"
+                    elif field_name == "participationAndExclusion":
+                        step_name = "Pogoji sodelovanja"
+                    elif field_name == "financialGuarantees":
+                        step_name = "Zavarovanja"
+                    elif field_name == "merila":
+                        step_name = "Merila izbire"
+                    elif field_name == "contractInfo":
+                        step_name = "Pogodba"
+                    elif field_name == "otherInfo":
+                        step_name = "Dodatne informacije"
+                    else:
+                        step_name = f"Korak {i+1}"
+                    step_names.append(step_name)
+                else:
+                    step_names.append(f"Korak {i+1}")
+            render_progress_indicator(st.session_state.current_step, len(form_steps), step_names)
+        
         # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)
-        render_form(current_step_properties, lot_context=lot_context)
+        if use_modern_form:
+            # Use modern form renderer
+            render_modern_form()
+        else:
+            # Fallback to original renderer
+            render_form(current_step_properties, lot_context=lot_context)
         st.markdown('</div>', unsafe_allow_html=True)
 
         # Enhanced Navigation buttons (outside form to avoid Enter key issues)
