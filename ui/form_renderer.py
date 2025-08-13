@@ -2,9 +2,20 @@
 """Enhanced form rendering components with localization and improved UX."""
 import streamlit as st
 from datetime import date
+from typing import List, Dict
 from localization import get_text, get_validation_message
 from utils.lot_utils import get_lot_scoped_key, render_lot_context_step
 from ui.components.cpv_selector import render_cpv_selector
+from utils.criteria_validation import (
+    validate_criteria_selection, 
+    check_cpv_requires_additional_criteria,
+    get_validation_summary
+)
+from utils.criteria_suggestions import (
+    get_suggested_criteria_for_cpv,
+    get_criteria_help_text,
+    get_criteria_display_names
+)
 
 
 def _get_default_value(full_key, prop_details, lot_context=None):
@@ -236,6 +247,10 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                         # Continue processing other fields in this section
                         
                 render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context)
+                
+                # Add validation after rendering selectionCriteria section
+                if full_key == "selectionCriteria":
+                    render_criteria_validation(full_key, lot_context)
         
         elif prop_type == "array":
             # Use smaller header for conditional arrays to reduce visual clutter
@@ -751,3 +766,164 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                     st.success("✅ Polje za nalaganje logotipov je sedaj na voljo spodaj.")
                 else:
                     st.info("ℹ️ Polje za nalaganje logotipov je skrito, ker niste izbrali te možnosti.")
+            
+            # Special handling for criteria checkboxes - add help text
+            if parent_key == "selectionCriteria" and prop_name in get_criteria_help_text():
+                help_texts = get_criteria_help_text()
+                if prop_name in help_texts:
+                    with st.expander(f"ℹ️ O merilu: {label}", expanded=False):
+                        st.caption(help_texts[prop_name])
+
+
+def render_criteria_validation(parent_key: str, lot_context: dict = None):
+    """
+    Render validation messages for criteria selection based on CPV codes.
+    Story 21.2: Real-time validation UI
+    Story 22.3: Respect validation toggles
+    """
+    # Check if validation should run (Story 22.3)
+    from utils.validation_control import should_validate
+    current_step = st.session_state.get('current_step', 0)
+    
+    if not should_validate(current_step):
+        # Show subtle indicator that validation is off
+        with st.expander("ℹ️ Validacija meril izklopljena", expanded=False):
+            st.caption("Validacija meril je trenutno izklopljena za ta korak")
+        return
+    
+    # Get current CPV codes from session state
+    cpv_key = get_lot_scoped_key("orderDescription.cpvCodes", lot_context) if lot_context else "orderDescription.cpvCodes"
+    cpv_codes = st.session_state.get(cpv_key, [])
+    
+    if not cpv_codes:
+        return  # No validation needed without CPV codes
+    
+    # Get current criteria selection
+    criteria_prefix = get_lot_scoped_key("selectionCriteria", lot_context) if lot_context else "selectionCriteria"
+    selected_criteria = {
+        'price': st.session_state.get(f"{criteria_prefix}.price", False),
+        'additionalReferences': st.session_state.get(f"{criteria_prefix}.additionalReferences", False),
+        'additionalTechnicalRequirements': st.session_state.get(f"{criteria_prefix}.additionalTechnicalRequirements", False),
+        'shorterDeadline': st.session_state.get(f"{criteria_prefix}.shorterDeadline", False),
+        'longerWarranty': st.session_state.get(f"{criteria_prefix}.longerWarranty", False),
+        'environmentalCriteria': st.session_state.get(f"{criteria_prefix}.environmentalCriteria", False),
+        'socialCriteria': st.session_state.get(f"{criteria_prefix}.socialCriteria", False),
+    }
+    
+    # Validate
+    validation_result = validate_criteria_selection(cpv_codes, selected_criteria)
+    
+    # Store validation state
+    validation_key = f"{criteria_prefix}_validation" if lot_context else "selectionCriteria_validation"
+    st.session_state[validation_key] = validation_result.is_valid
+    
+    # Check if we have restricted CPV codes
+    restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
+    
+    # Story 21.3: Enhanced guidance
+    if restricted_cpv:
+        st.markdown("---")
+        
+        # Educational info box
+        with st.expander("ℹ️ **Zakaj so potrebna dodatna merila?**", expanded=False):
+            st.markdown("""
+            **Pravna podlaga:** Zakon o javnem naročanju (ZJN-3) določa, da pri nekaterih 
+            vrstah storitev cena ne sme biti edino merilo za izbor. To velja predvsem za:
+            
+            • **Intelektualne storitve** (arhitektura, inženiring, svetovanje) - kjer je kakovost ključna
+            • **Socialne storitve** - kjer štejejo družbeni vidiki in izkušnje
+            • **Inovativne rešitve** - kjer je pomembna dodana vrednost in kreativnost
+            • **Kompleksne tehnične storitve** - kjer so reference in strokovnost bistvenega pomena
+            
+            Vaše izbrane CPV kode spadajo v kategorije, kjer je zahtevana 
+            celovitejša ocena ponudb za zagotovitev najboljšega razmerja med ceno in kakovostjo.
+            """)
+        
+        # Get and show suggestions
+        suggestions = get_suggested_criteria_for_cpv(cpv_codes)
+        
+        if suggestions['recommended']:
+            st.info(f"💡 **Priporočilo:** {suggestions['explanation']}")
+            
+            # Auto-selection option
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown("**Priporočena dodatna merila za vaše CPV kode:**")
+                criteria_names = get_criteria_display_names()
+                
+                for criteria in suggestions['recommended']:
+                    if criteria in criteria_names:
+                        st.markdown(f"- {criteria_names[criteria]}")
+                
+                if suggestions['commonly_used']:
+                    st.markdown("**Pogosto uporabljena merila:**")
+                    for criteria in suggestions['commonly_used']:
+                        if criteria in criteria_names:
+                            st.markdown(f"- {criteria_names[criteria]}")
+            
+            with col2:
+                if st.button("✨ Samodejno izberi", key=f"{parent_key}_auto_select", type="primary"):
+                    # Auto-select suggested criteria
+                    for criteria in suggestions['recommended']:
+                        key = f"{criteria_prefix}.{criteria}"
+                        st.session_state[key] = True
+                    st.success("✅ Priporočena merila so bila izbrana!")
+                    st.rerun()
+    
+    # Display validation messages if invalid
+    if not validation_result.is_valid:
+        st.error("⚠️ **Zahtevana dodatna merila**")
+        
+        # Show which CPV codes have restrictions
+        if validation_result.restricted_cpv_codes:
+            with st.container():
+                st.warning("**Naslednje CPV kode zahtevajo dodatna merila poleg cene:**")
+                for cpv in validation_result.restricted_cpv_codes:
+                    st.markdown(f"• **{cpv['code']}** - {cpv['description']}")
+                    st.caption(f"  ↳ {cpv['restriction']}")
+        
+        # Show what needs to be done
+        if validation_result.messages:
+            for message in validation_result.messages:
+                st.info(f"ℹ️ {message}")
+        
+        # Add override option for advanced users
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            override_key = f"{validation_key}_override"
+            if st.checkbox("Prezri opozorilo", key=override_key, help="Nadaljuj na lastno odgovornost"):
+                st.session_state[validation_key] = True
+                st.caption("⚠️ Nadaljevanje na lastno odgovornost")
+    
+    # Story 21.3: Validation summary
+    render_validation_summary(cpv_codes, restricted_cpv, lot_context)
+
+
+def render_validation_summary(cpv_codes: List, restricted_cpv: Dict, lot_context: dict = None):
+    """
+    Show summary of all active validation rules.
+    Story 21.3: Enhanced guidance
+    """
+    if cpv_codes and restricted_cpv:
+        with st.container():
+            st.markdown("---")
+            st.markdown("📊 **Povzetek pravil za izbrane CPV kode:**")
+            
+            summary = get_validation_summary(cpv_codes)
+            
+            if summary['has_restrictions']:
+                st.markdown(f"- ✓ Dodatna merila poleg cene so obvezna ({summary['restricted_count']} kod)")
+                
+                # Get current validation state
+                criteria_prefix = get_lot_scoped_key("selectionCriteria", lot_context) if lot_context else "selectionCriteria"
+                validation_key = f"{criteria_prefix}_validation" if lot_context else "selectionCriteria_validation"
+                is_valid = st.session_state.get(validation_key, True)
+                
+                if is_valid:
+                    st.success("✅ Vaša izbira meril je ustrezna")
+                else:
+                    override_key = f"{validation_key}_override"
+                    if st.session_state.get(override_key, False):
+                        st.warning("⚠️ Opozorilo prezrto - nadaljevanje na lastno odgovornost")
+                    else:
+                        st.error("❌ Izberite dodatna merila za nadaljevanje")
