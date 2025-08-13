@@ -4,6 +4,7 @@ import streamlit as st
 from datetime import date
 from localization import get_text, get_validation_message
 from utils.lot_utils import get_lot_scoped_key, render_lot_context_step
+from ui.components.cpv_selector import render_cpv_selector
 
 
 def _get_default_value(full_key, prop_details, lot_context=None):
@@ -556,6 +557,23 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 # Sync widget value back to session state
                 if textarea_value != st.session_state.get(session_key):
                     st.session_state[session_key] = textarea_value
+            elif prop_details.get("format") == "cpv" or "cpv" in prop_name.lower():
+                # CPV code selector component
+                # Initialize session state if it doesn't exist
+                if session_key not in st.session_state:
+                    st.session_state[session_key] = raw_default
+                
+                # Render CPV selector
+                cpv_value = render_cpv_selector(
+                    field_key=f"widget_{session_key}",
+                    field_schema=prop_details,
+                    current_value=st.session_state[session_key],
+                    disabled=False
+                )
+                
+                # Sync value back to session state
+                if cpv_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = cpv_value
             elif prop_details.get("format") == "file":
                 # Enhanced file uploader
                 st.file_uploader(

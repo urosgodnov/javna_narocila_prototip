@@ -12,6 +12,21 @@ from ui.form_renderer import render_form
 from ui.admin_panel import render_admin_panel
 from ui.dashboard import render_dashboard
 from localization import get_text, format_step_indicator
+from init_database import initialize_cpv_data, check_cpv_data_status
+
+# Initialize CPV data on startup (outside of Streamlit context)
+def init_app_data():
+    """Initialize application data on startup."""
+    status = check_cpv_data_status()
+    if not status['initialized']:
+        result = initialize_cpv_data()
+        if result['success']:
+            print(f"CPV data initialized: {result['imported']} codes from {result['source']}")
+        else:
+            print(f"Warning: CPV initialization failed: {result['message']}")
+
+# Run initialization before Streamlit
+init_app_data()
 
 def main():
     """Main application entry point."""
@@ -83,19 +98,32 @@ def validate_step(step_keys, schema):
 
 def render_main_form():
     """Render the main multi-step form interface with enhanced UX."""
-    # Try to use modern form renderer if available
-    # DISABLED - Modern form needs more integration work
-    use_modern_form = False
+    # Modern form renderer configuration
+    # Set to True to enable modern UI, False to use standard form
+    # Can be controlled via environment variable or config
+    import os
+    USE_MODERN_FORM = os.environ.get('USE_MODERN_FORM', 'true').lower() == 'true'
     
-    # When ready to enable, uncomment:
-    # try:
-    #     from ui.modern_form_renderer import (
-    #         render_modern_form, render_progress_indicator, 
-    #         render_form_step, render_form_actions, show_success_animation
-    #     )
-    #     use_modern_form = True
-    # except ImportError:
-    #     use_modern_form = False
+    # Try to use modern form renderer if enabled and available
+    use_modern_form = False
+    if USE_MODERN_FORM:
+        try:
+            # Use the FIXED modern form renderer
+            from ui.modern_form_renderer_fixed import (
+                render_modern_form_fixed as render_modern_form,
+                inject_modern_styles_once,
+                render_progress_indicator
+            )
+            use_modern_form = True
+            # Log that modern form is enabled
+            if 'modern_form_status' not in st.session_state:
+                st.session_state['modern_form_status'] = 'enabled'
+                print("✅ Modern form renderer enabled")
+        except ImportError as e:
+            use_modern_form = False
+            if 'modern_form_status' not in st.session_state:
+                st.session_state['modern_form_status'] = 'import_error'
+                print(f"⚠️ Modern form renderer not available: {e}")
     
     database.init_db()
     draft_metadata = database.get_all_draft_metadata()
@@ -262,7 +290,14 @@ def render_main_form():
                     step_names.append(step_name)
                 else:
                     step_names.append(f"Korak {i+1}")
-            render_progress_indicator(st.session_state.current_step, len(form_steps), step_names)
+            # Render progress indicator
+            if use_modern_form:
+                render_progress_indicator(st.session_state.current_step, len(form_steps), step_names)
+            else:
+                # Fallback progress indicator when modern form is not available
+                progress = (st.session_state.current_step + 1) / len(form_steps)
+                st.progress(progress)
+                st.write(f"Korak {st.session_state.current_step + 1} od {len(form_steps)}: {step_names[st.session_state.current_step] if st.session_state.current_step < len(step_names) else 'Korak'}")
         
         # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)

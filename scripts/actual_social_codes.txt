@@ -1,0 +1,82 @@
+50700000-2 - Storitve popravila in vzdrževanja inštalacij pri gradnjah
+50710000-5 - Storitve popravila in vzdrževanja električnih in strojnih inštalacij pri gradnjah
+50711000-2 - Storitve popravila in vzdrževanja električnih inštalacij pri gradnjah
+50712000-9 - Storitve popravila in vzdrževanja strojnih inštalacij pri gradnjah
+50720000-8 - Storitve popravila in vzdrževanja centralnega ogrevanja
+50721000-5 - Obratovanje ogrevalnih naprav
+50730000-1 - Storitve popravila in vzdrževanja hladilnih skupin
+50740000-4 - Storitve popravila in vzdrževanja premičnih stopnic
+50750000-7 - Storitve vzdrževanja dvigal
+50760000-0 - Popravilo in vzdrževanje javnih stranišč
+55300000-3 - Storitve restavracij in postrežbe
+55310000-6 - Storitve strežbe v restavracijah
+55311000-3 - Storitve strežbe v restavracijah zaprtega tipa
+55312000-0 - Storitve strežbe v javnih restavracijah
+55320000-9 - Storitve serviranja obrokov
+55321000-6 - Storitve priprave obrokov
+55322000-3 - Storitve kuhanja obrokov
+55330000-2 - Storitve samopostrežnih restavracij v tovarnah, šolah itd.
+55400000-4 - Storitve postrežbe pijač
+55410000-7 - Storitve točilnic
+55500000-5 - Storitve menz ter storitve priprave in dostave hrane
+55510000-8 - Storitve menz
+55511000-5 - Storitve menz in drugih samopostrežnih restavracij zaprtega tipa
+55512000-2 - Storitve upravljanja menz
+55520000-1 - Storitve priprave in dostave hrane
+55521000-8 - Storitve priprave in dostave hrane za zasebna gospodinjstva
+55521100-9 - Storitve redne dostave hrane na dom
+55521200-0 - Storitev dostave obrokov
+55522000-5 - Storitve priprave in dostave hrane za prevozna podjetja
+55523000-2 - Storitve priprave in dostave hrane za druga podjetja ali ustanove
+55523100-3 - Storitve dobave šolskih obrokov
+55524000-9 - Storitve priprave in dostave hrane za šole
+60100000-9 - Storitve cestnega prevoza
+60112000-6 - Storitve javnega cestnega prevoza
+60120000-5 - Taksi storitve
+60130000-8 - Storitve cestnega potniškega prevoza za posebne namene
+60140000-1 - Izredni potniški prevoz
+60150000-4 - Prevoz potnikov z vprežnimi vozili
+60160000-7 - Prevoz pošte po cesti
+60161000-4 - Storitve prevoza paketov
+60170000-0 - Dajanje vozil za prevoz potnikov v najem, skupaj z voznikom
+60171000-7 - Dajanje osebnih avtomobilov z voznikom v najem
+60172000-4 - Dajanje avtobusov in potovalnih avtobusov z voznikom v najem
+60180000-3 - Dajanje vozil za prevoz blaga v najem, skupaj z voznikom
+60181000-0 - Dajanje tovornjakov z voznikom v najem
+60182000-7 - Dajanje industrijskih vozil z voznikom v najem
+60183000-4 - Dajanje kombijev z voznikom v najem
+70330000-3 - Storitve upravljanja nepremičnin za plačilo ali po pogodbi
+79713000-5 - Storitve varovanja z varnostniki
+90600000-3 - Storitve čiščenja in sanitarne storitve v urbanih ali podeželskih območjih in pripadajoče storitve
+90610000-6 - Storitve čiščenja in pometanja cest
+90611000-3 - Storitve čiščenja cest
+90612000-0 - Storitve pometanja cest
+90620000-9 - Storitve odstranjevanja snega
+90630000-2 - Storitve odstranjevanja ledu
+90640000-5 - Storitve čiščenja in izpraznjevanja odvodnih cestnih kanalov
+90641000-2 - Storitve čiščenja odvodnih cestnih kanalov
+90642000-9 - Storitve izpraznjevanja odvodnih cestnih kanalov
+90650000-8 - Storitve odstranjevanja azbesta
+90660000-1 - Storitve odstranjevanja svinca
+90670000-4 - Storitve dezinfekcije in zatiranja škodljivcev v urbanih ali podeželskih območjih
+90680000-7 - Storitve čiščenja obale
+90690000-0 - Storitve odstranjevanja grafitov
+90900000-6 - Storitve čiščenja in sanitarne storitve
+90910000-9 - Storitve čiščenja
+90911000-6 - Storitve čiščenja stanovanj, zgradb in oken
+90911100-7 - Storitve čiščenja nastanitev
+90911200-8 - Storitve čiščenja stavb
+90911300-9 - Storitve čiščenja oken
+90912000-3 - Storitve čiščenja cevastih konstrukcij s peskanjem
+90913000-0 - Storitve čiščenja cistern in rezervoarjev
+90913100-1 - Storitve čiščenja cistern
+90913200-2 - Storitve čiščenja rezervoarjev
+90914000-7 - Storitve čiščenja parkirnih prostorov
+90915000-4 - Storitve čiščenja peči in dimnikov
+90916000-1 - Storitve čiščenja telefonske opreme
+90917000-8 - Storitve čiščenja prevoznih sredstev
+90918000-5 - Storitve čiščenja posod za odpadke
+90919000-2 - Storitve čiščenja pisarn, šol in pisarniške opreme
+90919100-3 - Storitve čiščenja pisarniške opreme
+90919200-4 - Storitve čiščenja pisarn
+90919300-5 - Storitve čiščenja šol

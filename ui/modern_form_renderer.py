@@ -25,15 +25,39 @@ def render_modern_form():
     
     lot_context = get_current_lot_context(current_step_keys)
     
-    if current_step < len(form_steps):
-        current_step_properties = form_steps[current_step]
-    else:
-        current_step_properties = {}
+    # Build current_step_properties dictionary from schema
+    current_step_properties = {}
+    if current_step < len(form_steps) and st.session_state.get('schema'):
+        for key in current_step_keys:
+            if key.startswith('lot_context_'):
+                # Lot context steps don't need schema properties
+                current_step_properties[key] = {"type": "lot_context"}
+            elif key.startswith('lot_'):
+                # Map lot-specific keys back to original schema properties
+                original_key = key.split('_', 2)[2]  # lot_0_orderType -> orderType
+                if original_key in st.session_state.schema["properties"]:
+                    # Copy the schema property but remove render_if conditions for lot-specific fields
+                    prop_copy = st.session_state.schema["properties"][original_key].copy()
+                    if "render_if" in prop_copy:
+                        del prop_copy["render_if"]  # Lot logic handles visibility
+                    current_step_properties[key] = prop_copy
+            else:
+                # Regular properties
+                if key in st.session_state.schema["properties"]:
+                    prop_copy = st.session_state.schema["properties"][key].copy()
+                    
+                    # For orderType in general mode, remove render_if condition
+                    if key == "orderType" and lot_context and lot_context['mode'] == 'general':
+                        if "render_if" in prop_copy:
+                            del prop_copy["render_if"]
+                    
+                    current_step_properties[key] = prop_copy
     
-    # Inject modern CSS styling
-    inject_modern_styles()
+    # Don't inject CSS here - it should be injected once at the page level
+    # The CSS is being injected multiple times causing visual chaos
     
-    # Render the form using existing renderer with enhanced styling
+    # For now, use the existing renderer with lot context
+    # The modern components need proper integration with the schema system
     render_form(current_step_properties, lot_context=lot_context)
 
 def inject_modern_styles():

@@ -6,6 +6,12 @@ import template_service
 from config import ADMIN_PASSWORD
 import json
 import uuid
+import pandas as pd
+from typing import List
+from utils.cpv_manager import (
+    get_all_cpv_codes, get_cpv_by_id, create_cpv_code, 
+    update_cpv_code, delete_cpv_code, get_cpv_count
+)
 
 def render_admin_header():
     """Render the admin header with status and logout option."""
@@ -278,6 +284,473 @@ def render_organization_management_tab():
             st.info("Ni najdenih organizacij.")
 
 
+def render_cpv_management_tab():
+    """Render the CPV codes management tab content."""
+    with st.container():
+        st.markdown("### 🔢 Upravljanje CPV kod")
+        
+        # Statistics
+        total_cpv = get_cpv_count()
+        st.info(f"📊 Skupno CPV kod v bazi: **{total_cpv}**")
+        
+        # Add new CPV code
+        st.markdown("#### ➕ Dodaj novo CPV kodo")
+        with st.form(key='add_cpv_form'):
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                new_code = st.text_input("CPV koda", placeholder="npr. 30192000-1")
+            with col2:
+                new_desc = st.text_input("Opis", placeholder="npr. Pisarniški material")
+            
+            submitted = st.form_submit_button("Dodaj CPV kodo")
+            if submitted and new_code and new_desc:
+                cpv_id = create_cpv_code(new_code, new_desc)
+                if cpv_id:
+                    st.success(f"✅ CPV koda {new_code} uspešno dodana")
+                    st.rerun()
+                else:
+                    st.error(f"❌ CPV koda {new_code} že obstaja")
+        
+        st.markdown("---")
+        
+        # Search and list CPV codes
+        st.markdown("#### 🔍 Iskanje in upravljanje CPV kod")
+        
+        # Search
+        search_term = st.text_input("🔍 Išči po kodi ali opisu", key="cpv_search")
+        
+        # Pagination
+        if 'cpv_page' not in st.session_state:
+            st.session_state.cpv_page = 1
+        
+        # Get CPV codes
+        cpv_codes, total_count = get_all_cpv_codes(
+            search_term=search_term,
+            page=st.session_state.cpv_page,
+            per_page=50
+        )
+        
+        if cpv_codes:
+            # Pagination controls
+            total_pages = (total_count + 49) // 50
+            col1, col2, col3 = st.columns([1, 2, 1])
+            
+            with col1:
+                if st.button("⬅️ Prejšnja", disabled=st.session_state.cpv_page <= 1):
+                    st.session_state.cpv_page -= 1
+                    st.rerun()
+            
+            with col2:
+                st.markdown(f"Stran {st.session_state.cpv_page} od {total_pages}")
+            
+            with col3:
+                if st.button("Naslednja ➡️", disabled=st.session_state.cpv_page >= total_pages):
+                    st.session_state.cpv_page += 1
+                    st.rerun()
+            
+            # Display CPV codes
+            for cpv in cpv_codes:
+                with st.expander(f"{cpv['code']} - {cpv['description'][:50]}..."):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        # Edit form
+                        with st.form(key=f"edit_cpv_{cpv['id']}"):
+                            edited_code = st.text_input("Koda", value=cpv['code'])
+                            edited_desc = st.text_area("Opis", value=cpv['description'], height=100)
+                            
+                            col_save, col_delete = st.columns(2)
+                            with col_save:
+                                if st.form_submit_button("💾 Shrani spremembe"):
+                                    if update_cpv_code(cpv['id'], edited_code, edited_desc):
+                                        st.success("✅ Uspešno posodobljeno")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Napaka pri posodabljanju")
+                            
+                            with col_delete:
+                                if st.form_submit_button("🗑️ Izbriši", type="secondary"):
+                                    if delete_cpv_code(cpv['id']):
+                                        st.success("✅ Uspešno izbrisano")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ Napaka pri brisanju")
+                    
+                    with col2:
+                        st.markdown(f"**ID:** {cpv['id']}")
+                        st.markdown(f"**Ustvarjeno:** {cpv['created_at'][:10]}")
+                        if cpv['updated_at']:
+                            st.markdown(f"**Posodobljeno:** {cpv['updated_at'][:10]}")
+        else:
+            if search_term:
+                st.info(f"Ni najdenih CPV kod za iskalni niz '{search_term}'")
+            else:
+                st.info("Ni CPV kod v bazi. Uvozite jih zgoraj.")
+
+
+def expand_cpv_range(start_code: str, end_code: str) -> List[str]:
+    """
+    Expand a CPV code range into individual codes.
+    
+    Args:
+        start_code: Starting CPV code (e.g., "71000000-8")
+        end_code: Ending CPV code (e.g., "72000000-5")
+    
+    Returns:
+        List of CPV codes in the range
+    """
+    codes = []
+    
+    # Extract the numeric part before the dash
+    start_base = int(start_code.split('-')[0])
+    end_base = int(end_code.split('-')[0])
+    
+    # Generate codes in range
+    for code_num in range(start_base, end_base + 1, 10000):
+        # Calculate check digit (simplified - normally follows specific algorithm)
+        check_digit = code_num % 10
+        if check_digit == 0:
+            check_digit = 1
+        codes.append(f"{code_num:08d}-{check_digit}")
+    
+    return codes
+
+
+def load_criteria_settings():
+    """Load saved criteria settings from database (kept for compatibility during migration)."""
+    from utils import criteria_manager
+    
+    # Get criteria types
+    types = criteria_manager.get_criteria_types()
+    
+    settings = {
+        "price_criteria": [],
+        "social_criteria": []
+    }
+    
+    for criteria_type in types:
+        cpv_codes = criteria_manager.get_cpv_for_criteria(criteria_type['id'])
+        if criteria_type['name'] == "Merila - cena":
+            settings["price_criteria"] = cpv_codes
+        elif criteria_type['name'] == "Merila - socialna merila":
+            settings["social_criteria"] = cpv_codes
+    
+    return settings
+
+
+def save_criteria_settings(settings: dict):
+    """Save criteria settings to database (kept for compatibility during migration)."""
+    from utils import criteria_manager
+    
+    # Get criteria types
+    price_type = criteria_manager.get_criteria_type_by_name("Merila - cena")
+    social_type = criteria_manager.get_criteria_type_by_name("Merila - socialna merila")
+    
+    # Save price criteria
+    if price_type:
+        criteria_manager.save_cpv_criteria(price_type['id'], settings.get('price_criteria', []))
+    
+    # Save social criteria
+    if social_type:
+        criteria_manager.save_cpv_criteria(social_type['id'], settings.get('social_criteria', []))
+
+
+def get_default_price_criteria_codes() -> List[str]:
+    """Get the default CPV codes for price criteria."""
+    codes = []
+    
+    # Range 71000000-8 to 72000000-5
+    codes.extend(expand_cpv_range("71000000-8", "72000000-5"))
+    
+    # Additional specific code
+    codes.append("79530000-8")
+    
+    # Additional specific codes list
+    additional_codes = [
+        "66122000-1", "66170000-2", "66171000-9", "66519310-7", "66523000-2",
+        "71210000-3", "71241000-9", "71310000-4", "71311000-1", "71311200-3",
+        "71311210-6", "71311300-4", "71312000-8", "71313000-5", "71313100-6",
+        "71313200-7", "71314300-5", "71315100-0", "71315200-1", "71315210-4",
+        "71316000-6", "71317000-3", "71317100-4", "71317210-8", "71318000-0",
+        "71321300-7", "71321400-8", "71351200-5", "71351210-8", "71351220-1",
+        "71530000-2", "71600000-4", "71621000-7", "71800000-6", "72000000-5",
+        "72100000-6", "72110000-9", "72120000-2", "72130000-5", "72140000-8",
+        "72150000-1", "72200000-7", "72220000-3", "72221000-0", "72224000-1",
+        "72226000-5", "72227000-2", "72228000-9", "72246000-1", "72266000-7",
+        "72413000-8", "72415000-2", "72600000-6", "73000000-2", "73200000-4",
+        "73210000-7", "73220000-0", "79000000-4", "79110000-8", "79111000-5",
+        "79120000-1", "79121000-8", "79121100-9", "79140000-7", "79221000-9",
+        "79341100-7", "79400000-8", "79410000-1", "79411000-8", "79411100-9",
+        "79412000-5", "79413000-2", "79414000-9", "79415000-6", "79415200-8",
+        "79416200-5", "79417000-0", "79418000-7", "79419000-4", "85141220-7",
+        "85312300-2", "85312320-8", "90490000-8", "90492000-2", "90713000-8",
+        "90713100-9", "90732400-1", "90742400-4", "98200000-5"
+    ]
+    codes.extend(additional_codes)
+    
+    # Remove duplicates and sort
+    return sorted(list(set(codes)))
+
+
+def get_default_social_criteria_codes() -> List[str]:
+    """Get the default CPV codes for social criteria - returns actual codes from DB."""
+    # These are the actual CPV codes that exist in the database
+    # within the specified ranges
+    codes = [
+        # Range 50700000-2 to 50760000-0
+        "50700000-2", "50710000-5", "50711000-2", "50712000-9", "50720000-8",
+        "50721000-5", "50730000-1", "50740000-4", "50750000-7", "50760000-0",
+        # Range 55300000-3 to 55400000-4
+        "55300000-3", "55310000-6", "55311000-3", "55312000-0", "55320000-9",
+        "55321000-6", "55322000-3", "55330000-2", "55400000-4",
+        # Range 55410000-7 to 55512000-2
+        "55410000-7", "55500000-5", "55510000-8", "55511000-5", "55512000-2",
+        # Range 55520000-1 to 55524000-9
+        "55520000-1", "55521000-8", "55521100-9", "55521200-0", "55522000-5",
+        "55523000-2", "55523100-3", "55524000-9",
+        # Range 60100000-9 to 60183000-4
+        "60100000-9", "60112000-6", "60120000-5", "60130000-8", "60140000-1",
+        "60150000-4", "60160000-7", "60161000-4", "60170000-0", "60171000-7",
+        "60172000-4", "60180000-3", "60181000-0", "60182000-7", "60183000-4",
+        # Range 90600000-3 to 90690000-0
+        "90600000-3", "90610000-6", "90611000-3", "90612000-0", "90620000-9",
+        "90630000-2", "90640000-5", "90641000-2", "90642000-9", "90650000-8",
+        "90660000-1", "90670000-4", "90680000-7", "90690000-0",
+        # Range 90900000-6 to 90919300-5
+        "90900000-6", "90910000-9", "90911000-6", "90911100-7", "90911200-8",
+        "90911300-9", "90913000-0", "90913100-1", "90913200-2", "90914000-7",
+        "90915000-4", "90916000-1", "90917000-8", "90918000-5", "90919000-2",
+        "90919100-3", "90919200-4", "90919300-5",
+        # Individual codes
+        "70330000-3", "79713000-5"
+    ]
+    
+    return codes
+
+
+def render_criteria_management_tab():
+    """Render the criteria management tab content."""
+    with st.container():
+        st.markdown("### ⚖️ Upravljanje meril za CPV kode")
+        st.info("Določite CPV kode, kjer veljajo posebna merila za ocenjevanje ponudb.")
+        
+        # Ensure CPV data is initialized (should already be done at app startup)
+        from init_database import ensure_cpv_data_initialized
+        if not ensure_cpv_data_initialized():
+            st.error("CPV podatki niso na voljo. Prosimo, preverite namestitev.")
+            return
+        
+        # Check if migration from JSON is needed
+        from utils import criteria_manager
+        import os
+        json_path = os.path.join('json_files', 'cpv_criteria_settings.json')
+        
+        # Initialize criteria types (creates defaults if not exist)
+        criteria_manager.init_criteria_types()
+        
+        # Check if we need to migrate from JSON
+        if os.path.exists(json_path):
+            with st.spinner("Migriram obstoječe nastavitve v bazo podatkov..."):
+                migration_result = criteria_manager.migrate_from_json()
+                if migration_result['success']:
+                    st.success(f"✅ Uspešno migrirano: {migration_result['migrated_price']} cenovnih meril, {migration_result['migrated_social']} socialnih meril")
+                elif migration_result['error'] and migration_result['error'] != 'No JSON file to migrate':
+                    st.warning(f"⚠️ Migracija delno uspešna: {migration_result['error']}")
+        
+        # Load current settings from database
+        settings = load_criteria_settings()
+        
+        # Get all available CPV codes with descriptions
+        from utils.cpv_manager import get_all_cpv_codes, get_cpv_count
+        
+        # Check if we have CPV data
+        cpv_count = get_cpv_count()
+        if cpv_count == 0:
+            st.warning("⚠️ Ni CPV kod v bazi. Prosimo, uvozite CPV kode preko CPV upravljanja.")
+            return
+        
+        all_cpv_codes, _ = get_all_cpv_codes(page=1, per_page=15000)  # Get all codes
+        
+        # Create a mapping of code to description
+        cpv_map = {cpv['code']: cpv['description'] for cpv in all_cpv_codes}
+        
+        # Filter to only include codes that exist in database
+        available_codes = list(cpv_map.keys())
+        
+        # Initialize with defaults if empty, but filter to only existing codes
+        if not settings["price_criteria"]:
+            default_price = get_default_price_criteria_codes()
+            # Filter to only codes that exist in database
+            settings["price_criteria"] = [code for code in default_price if code in cpv_map]
+            # Save defaults to database
+            save_criteria_settings(settings)
+        
+        if not settings["social_criteria"]:
+            default_social = get_default_social_criteria_codes()
+            # Filter to only codes that exist in database
+            settings["social_criteria"] = [code for code in default_social if code in cpv_map]
+            # Save defaults to database
+            save_criteria_settings(settings)
+        
+        # Create tabs for better organization
+        tab1, tab2, tab3 = st.tabs(["💰 Cenovna merila", "👥 Socialna merila", "📊 Pregled"])
+        
+        with tab1:
+            st.markdown("#### Merila - cena")
+            st.markdown("*CPV kode, kjer cena ne sme biti edino merilo za izbor*")
+            
+            # Show current selection count
+            st.info(f"Trenutno izbranih: **{len(settings['price_criteria'])}** CPV kod")
+            
+            # Prepare options for price criteria
+            price_options = []
+            price_defaults = []
+            
+            for code in available_codes:
+                display = f"{code} - {cpv_map[code]}"
+                price_options.append(display)
+                if code in settings["price_criteria"]:
+                    price_defaults.append(display)
+            
+            # Price criteria multiselect
+            selected_price = st.multiselect(
+                "Izberite CPV kode za cenovna merila",
+                options=price_options,
+                default=price_defaults,
+                key="price_criteria_select",
+                help="Začnite tipkati kodo ali opis za iskanje"
+            )
+            
+            # Extract codes from selected display values
+            selected_price_codes = []
+            for display in selected_price:
+                if ' - ' in display:
+                    code = display.split(' - ')[0]
+                    selected_price_codes.append(code)
+            
+            # Show selected codes in an expander
+            if selected_price_codes:
+                with st.expander(f"📋 Seznam izbranih kod ({len(selected_price_codes)})", expanded=False):
+                    for code in sorted(selected_price_codes):
+                        st.write(f"• **{code}** - {cpv_map[code]}")
+        
+        with tab2:
+            st.markdown("#### Merila - socialna merila")
+            st.markdown("*CPV kode, kjer veljajo socialna merila*")
+            
+            # Show current selection count
+            st.info(f"Trenutno izbranih: **{len(settings['social_criteria'])}** CPV kod")
+            
+            # Prepare options for social criteria
+            social_options = []
+            social_defaults = []
+            
+            for code in available_codes:
+                display = f"{code} - {cpv_map[code]}"
+                social_options.append(display)
+                if code in settings["social_criteria"]:
+                    social_defaults.append(display)
+            
+            # Social criteria multiselect
+            selected_social = st.multiselect(
+                "Izberite CPV kode za socialna merila",
+                options=social_options,
+                default=social_defaults,
+                key="social_criteria_select",
+                help="Začnite tipkati kodo ali opis za iskanje"
+            )
+            
+            # Extract codes from selected display values
+            selected_social_codes = []
+            for display in selected_social:
+                if ' - ' in display:
+                    code = display.split(' - ')[0]
+                    selected_social_codes.append(code)
+            
+            # Show selected codes in an expander
+            if selected_social_codes:
+                with st.expander(f"📋 Seznam izbranih kod ({len(selected_social_codes)})", expanded=False):
+                    for code in sorted(selected_social_codes):
+                        st.write(f"• **{code}** - {cpv_map[code]}")
+        
+        with tab3:
+            st.markdown("#### 📊 Pregled trenutnih nastavitev")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("##### 💰 Cenovna merila")
+                st.metric("Število kod", len(settings['price_criteria']))
+                
+                if settings['price_criteria']:
+                    st.markdown("**Izbrane kode:**")
+                    # Show first 10 with scroll for more
+                    container = st.container(height=300)
+                    with container:
+                        for code in sorted(settings['price_criteria']):
+                            st.markdown(f"• `{code}` - {cpv_map.get(code, 'Opis ni na voljo')}")
+                else:
+                    st.info("Ni izbranih kod")
+            
+            with col2:
+                st.markdown("##### 👥 Socialna merila")
+                st.metric("Število kod", len(settings['social_criteria']))
+                
+                if settings['social_criteria']:
+                    st.markdown("**Izbrane kode:**")
+                    # Show first 10 with scroll for more
+                    container = st.container(height=300)
+                    with container:
+                        for code in sorted(settings['social_criteria']):
+                            st.markdown(f"• `{code}` - {cpv_map.get(code, 'Opis ni na voljo')}")
+                else:
+                    st.info("Ni izbranih kod")
+            
+            # Check for overlaps
+            overlap = set(settings['price_criteria']) & set(settings['social_criteria'])
+            if overlap:
+                st.warning(f"⚠️ **Opozorilo:** {len(overlap)} kod je izbranih v obeh kategorijah!")
+                with st.expander("Prikaži prekrivanje"):
+                    for code in sorted(overlap):
+                        st.write(f"• {code} - {cpv_map.get(code, 'Opis ni na voljo')}")
+        
+        st.markdown("---")
+        
+        # Save buttons - available from all tabs
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            if st.button("💾 Shrani nastavitve", type="primary", use_container_width=True):
+                # Get the selected codes based on which tab was active
+                if 'selected_price_codes' not in locals():
+                    selected_price_codes = settings['price_criteria']
+                if 'selected_social_codes' not in locals():
+                    selected_social_codes = settings['social_criteria']
+                
+                # Save the settings
+                new_settings = {
+                    "price_criteria": selected_price_codes,
+                    "social_criteria": selected_social_codes
+                }
+                save_criteria_settings(new_settings)
+                st.success("✅ Nastavitve uspešno shranjene!")
+                st.rerun()
+        
+        with col2:
+            if st.button("🔄 Ponastavi na privzeto", type="secondary", use_container_width=True):
+                # Reset to defaults (filtered to existing codes)
+                default_price = get_default_price_criteria_codes()
+                default_social = get_default_social_criteria_codes()
+                
+                default_settings = {
+                    "price_criteria": [code for code in default_price if code in cpv_map],
+                    "social_criteria": [code for code in default_social if code in cpv_map]
+                }
+                save_criteria_settings(default_settings)
+                st.success("✅ Nastavitve ponastavljene na privzete vrednosti!")
+                st.rerun()
+
+
 def render_admin_panel():
     """Render the complete admin panel with modern interface."""
     if "logged_in" not in st.session_state:
@@ -289,7 +762,10 @@ def render_admin_panel():
         render_admin_header()
         
         # Tabbed interface for different admin sections
-        tab1, tab2, tab3, tab4 = st.tabs(["📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", "🏢 Organizacije"])
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+            "📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", 
+            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila"
+        ])
         
         with tab1:
             render_template_management_tab()
@@ -302,3 +778,9 @@ def render_admin_panel():
         
         with tab4:
             render_organization_management_tab()
+        
+        with tab5:
+            render_cpv_management_tab()
+        
+        with tab6:
+            render_criteria_management_tab()

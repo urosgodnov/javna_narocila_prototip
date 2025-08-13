@@ -97,7 +97,9 @@
                 },
                 "cpvCodes": {
                     "type": "string",
-                    "title": "Vpišite vse CPV kode"
+                    "format": "cpv",
+                    "title": "Vpišite vse CPV kode",
+                    "description": "Začnite tipkati kodo ali opis za iskanje CPV kod"
                 }
             }
         },

@@ -376,7 +376,7 @@ def render_modern_dashboard():
     </div>
     """, unsafe_allow_html=True)
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         if st.button("📋 Nov razpis", use_container_width=True, type="primary"):
@@ -389,20 +389,10 @@ def render_modern_dashboard():
             st.rerun()
     
     with col2:
-        if st.button("📝 Ustvari osnutek", use_container_width=True):
-            st.session_state.current_page = 'form'
-            st.session_state.edit_mode = False
-            st.session_state.edit_record_id = None
-            st.session_state.current_step = 0
-            from utils.schema_utils import clear_form_data
-            clear_form_data()
-            st.rerun()
-    
-    with col3:
         if st.button("📊 Izvozi poročilo", use_container_width=True):
             st.info("Funkcija izvoza bo kmalu na voljo")
     
-    with col4:
+    with col3:
         if st.button("⚙️ Nastavitve", use_container_width=True):
             st.session_state.current_page = 'admin'
             st.rerun()

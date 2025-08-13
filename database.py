@@ -39,6 +39,63 @@ def init_db():
             ON javna_narocila(organizacija)
         ''')
         
+        # Create CPV codes table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cpv_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code VARCHAR(20) UNIQUE NOT NULL,
+                description TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create indexes for CPV table
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_cpv_code 
+            ON cpv_codes(code)
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_cpv_description 
+            ON cpv_codes(description)
+        ''')
+        
+        # Create criteria types table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS criteria_types (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(100) UNIQUE NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create CPV criteria junction table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS cpv_criteria (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cpv_code VARCHAR(20) NOT NULL,
+                criteria_type_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (cpv_code) REFERENCES cpv_codes(code) ON DELETE CASCADE,
+                FOREIGN KEY (criteria_type_id) REFERENCES criteria_types(id) ON DELETE CASCADE,
+                UNIQUE(cpv_code, criteria_type_id)
+            )
+        ''')
+        
+        # Create indexes for criteria tables
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_cpv_criteria_code 
+            ON cpv_criteria(cpv_code)
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_cpv_criteria_type 
+            ON cpv_criteria(criteria_type_id)
+        ''')
+        
         conn.commit()
 
 def save_draft(form_data):

@@ -1,1 +1,10 @@
-["demo_organizacija"]
+[
+    {
+        "id": "f5c85417-2e8a-4aee-945c-b7bc39b77571",
+        "name": "demo_organizacije"
+    },
+    {
+        "id": "6882c9bc-6269-4a42-84a1-ecddf2d8301c",
+        "name": "Nova organizacija"
+    }
+]
