@@ -8,6 +8,10 @@ from utils.lot_utils import (
     get_current_lot_context, initialize_lot_session_state, 
     migrate_existing_data_to_lot_structure, get_lot_progress_info
 )
+from utils.validation_control import (
+    should_validate, render_master_validation_toggle, 
+    render_step_validation_toggle, get_validation_status_message
+)
 from ui.form_renderer import render_form
 from ui.admin_panel import render_admin_panel
 from ui.dashboard import render_dashboard
@@ -72,6 +76,13 @@ def _set_navigation_flags():
 
 def validate_step(step_keys, schema):
     """Validate the fields for the current step based on 'required' keys in the schema."""
+    # Story 22.3: Check if validation should run for current step
+    current_step = st.session_state.get('current_step', 0)
+    if not should_validate(current_step):
+        # Skip validation but show indicator
+        st.info("ℹ️ Validacija preskočena za ta korak")
+        return True  # Allow progression
+    
     is_valid = True
     for key in step_keys:
         original_key = key
@@ -299,6 +310,10 @@ def render_main_form():
                 st.progress(progress)
                 st.write(f"Korak {st.session_state.current_step + 1} od {len(form_steps)}: {step_names[st.session_state.current_step] if st.session_state.current_step < len(step_names) else 'Korak'}")
         
+        # Story 22.1: Add master validation toggle on first step
+        if st.session_state.current_step == 0:
+            render_master_validation_toggle()
+        
         # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)
         if use_modern_form:
@@ -308,6 +323,9 @@ def render_main_form():
             # Fallback to original renderer
             render_form(current_step_properties, lot_context=lot_context)
         st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Story 22.2: Add per-step validation toggle
+        render_step_validation_toggle(st.session_state.current_step)
 
         # Enhanced Navigation buttons (outside form to avoid Enter key issues)
         render_navigation_buttons(current_step_keys)
@@ -899,7 +917,24 @@ def render_navigation_buttons_in_form(current_step_keys):
                 use_container_width=True
             )
             if submit_form:
-                if validate_step(current_step_keys, st.session_state.schema):
+                # Story 22.3: Check if any steps had validation skipped
+                validation_skipped = False
+                for step_num in range(len(dynamic_form_steps)):
+                    if not should_validate(step_num):
+                        validation_skipped = True
+                        break
+                
+                # Show warning if validation was skipped
+                if validation_skipped:
+                    st.warning("⚠️ **Opozorilo**: Nekateri koraki niso bili validirani. Ali ste prepričani, da želite nadaljevati?")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        confirm_submit = st.checkbox("Da, razumem in želim nadaljevati", key="confirm_skip_validation")
+                    if not confirm_submit:
+                        st.error("Potrdite, da želite nadaljevati brez validacije")
+                        return
+                
+                if validate_step(current_step_keys, st.session_state.schema) or validation_skipped:
                     final_form_data = get_form_data_from_session()
                     
                     # Save or update based on edit mode
