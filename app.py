@@ -2,6 +2,7 @@
 """Main Streamlit application for public procurement document generation."""
 import streamlit as st
 import database
+import logging
 from config import get_dynamic_form_steps, SCHEMA_FILE
 from utils.schema_utils import load_json_schema, get_form_data_from_session, clear_form_data
 from utils.lot_utils import (
@@ -17,17 +18,22 @@ from ui.admin_panel import render_admin_panel
 from ui.dashboard import render_dashboard
 from localization import get_text, format_step_indicator
 from init_database import initialize_cpv_data, check_cpv_data_status
+from utils.optimized_database_logger import configure_optimized_logging as configure_database_logging
 
 # Initialize CPV data on startup (outside of Streamlit context)
 def init_app_data():
     """Initialize application data on startup."""
+    # Configure logging
+    configure_database_logging(level=logging.INFO)
+    
+    # Initialize CPV data
     status = check_cpv_data_status()
     if not status['initialized']:
         result = initialize_cpv_data()
         if result['success']:
-            print(f"CPV data initialized: {result['imported']} codes from {result['source']}")
+            logging.info(f"CPV data initialized: {result['imported']} codes from {result['source']}")
         else:
-            print(f"Warning: CPV initialization failed: {result['message']}")
+            logging.warning(f"CPV initialization failed: {result['message']}")
 
 # Run initialization before Streamlit
 init_app_data()

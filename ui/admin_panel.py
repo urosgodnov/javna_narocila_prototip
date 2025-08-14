@@ -1,13 +1,17 @@
 """Administration panel UI components."""
 import streamlit as st
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import template_service
 from config import ADMIN_PASSWORD
 import json
 import uuid
 import pandas as pd
 from typing import List
+import sqlite3
+import database
+import csv
+from io import StringIO
 from utils.cpv_manager import (
     get_all_cpv_codes, get_cpv_by_id, create_cpv_code, 
     update_cpv_code, delete_cpv_code, get_cpv_count
@@ -751,6 +755,337 @@ def render_criteria_management_tab():
                 st.rerun()
 
 
+def render_logging_management_tab():
+    """Render the logging management tab with viewing, filtering, and export capabilities."""
+    st.subheader("📋 Upravljanje dnevniških zapisov")
+    
+    # Initialize session state for filters
+    if 'log_filters' not in st.session_state:
+        st.session_state.log_filters = {
+            'log_levels': [],
+            'organization_id': None,
+            'date_from': None,
+            'date_to': None,
+            'search_query': '',
+            'log_type': None
+        }
+    
+    # Sidebar filters
+    with st.sidebar:
+        st.markdown("### 🔍 Filtri")
+        
+        # Log level filter
+        log_levels = st.multiselect(
+            "Nivo zapisov",
+            options=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+            default=st.session_state.log_filters.get('log_levels', ['ERROR', 'WARNING']),
+            key='filter_log_levels'
+        )
+        
+        # Date range filter
+        col1, col2 = st.columns(2)
+        with col1:
+            date_from = st.date_input(
+                "Od datuma",
+                value=datetime.now().date() - timedelta(days=7),
+                key='filter_date_from'
+            )
+        with col2:
+            date_to = st.date_input(
+                "Do datuma",
+                value=datetime.now().date(),
+                key='filter_date_to'
+            )
+        
+        # Search filter
+        search_query = st.text_input(
+            "Iskanje v sporočilih",
+            value=st.session_state.log_filters.get('search_query', ''),
+            key='filter_search'
+        )
+        
+        # Organization filter
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT organization_name FROM application_logs WHERE organization_name IS NOT NULL")
+            orgs = [row[0] for row in cursor.fetchall()]
+        
+        if orgs:
+            org_filter = st.selectbox(
+                "Organizacija",
+                options=['Vse'] + orgs,
+                key='filter_org'
+            )
+            organization_name = None if org_filter == 'Vse' else org_filter
+        else:
+            organization_name = None
+        
+        # Apply filters button
+        if st.button("🔄 Uporabi filtre", type="primary", use_container_width=True):
+            st.session_state.log_filters = {
+                'log_levels': log_levels,
+                'organization_name': organization_name,
+                'date_from': date_from,
+                'date_to': date_to,
+                'search_query': search_query
+            }
+            st.rerun()
+    
+    # Main content area
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        st.markdown("### 📊 Pregled zapisov")
+    
+    with col2:
+        # Auto-refresh toggle
+        auto_refresh = st.checkbox("🔄 Samodejno osveževanje", value=False)
+        if auto_refresh:
+            st.rerun()
+    
+    with col3:
+        # Export button
+        if st.button("📥 Izvozi CSV", use_container_width=True):
+            export_logs_to_csv()
+    
+    # Fetch and display logs
+    logs_df = fetch_logs_with_filters(st.session_state.log_filters)
+    
+    if not logs_df.empty:
+        # Statistics
+        st.markdown("#### 📈 Statistika")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Skupaj zapisov", len(logs_df))
+        
+        with col2:
+            error_count = len(logs_df[logs_df['log_level'].isin(['ERROR', 'CRITICAL'])])
+            st.metric("Napake", error_count, delta_color="inverse")
+        
+        with col3:
+            warning_count = len(logs_df[logs_df['log_level'] == 'WARNING'])
+            st.metric("Opozorila", warning_count)
+        
+        with col4:
+            # Calculate average logs per hour
+            if len(logs_df) > 0:
+                time_span = (logs_df['timestamp'].max() - logs_df['timestamp'].min()).total_seconds() / 3600
+                avg_per_hour = len(logs_df) / max(time_span, 1)
+                st.metric("Zapisov/uro", f"{avg_per_hour:.1f}")
+        
+        # Display logs table
+        st.markdown("#### 📜 Dnevniški zapisi")
+        
+        # Configure display columns
+        display_columns = ['timestamp', 'log_level', 'module', 'message', 'organization_name']
+        
+        # Color code by log level
+        def highlight_log_level(row):
+            colors = {
+                'DEBUG': 'background-color: #f0f0f0',
+                'INFO': 'background-color: #d4edda',
+                'WARNING': 'background-color: #fff3cd',
+                'ERROR': 'background-color: #f8d7da',
+                'CRITICAL': 'background-color: #d1a3a4; font-weight: bold'
+            }
+            return [colors.get(row['log_level'], '') for _ in row]
+        
+        # Display with pagination
+        logs_per_page = 50
+        total_pages = (len(logs_df) - 1) // logs_per_page + 1
+        
+        page = st.number_input(
+            f"Stran (od {total_pages})",
+            min_value=1,
+            max_value=total_pages,
+            value=1,
+            key='log_page'
+        )
+        
+        start_idx = (page - 1) * logs_per_page
+        end_idx = min(start_idx + logs_per_page, len(logs_df))
+        
+        page_df = logs_df.iloc[start_idx:end_idx][display_columns]
+        
+        # Style and display
+        styled_df = page_df.style.apply(highlight_log_level, axis=1)
+        st.dataframe(styled_df, use_container_width=True, height=400)
+        
+        # Log details expander
+        with st.expander("🔍 Podrobnosti izbranega zapisa"):
+            selected_idx = st.number_input(
+                "ID zapisa",
+                min_value=0,
+                max_value=len(logs_df)-1,
+                value=0,
+                key='selected_log'
+            )
+            
+            if selected_idx < len(logs_df):
+                selected_log = logs_df.iloc[selected_idx]
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Čas:** {selected_log['timestamp']}")
+                    st.write(f"**Nivo:** {selected_log['log_level']}")
+                    st.write(f"**Modul:** {selected_log['module']}")
+                    st.write(f"**Funkcija:** {selected_log.get('function_name', 'N/A')}")
+                
+                with col2:
+                    st.write(f"**Organizacija:** {selected_log.get('organization_name', 'N/A')}")
+                    st.write(f"**Retencija:** {selected_log.get('retention_hours', 'N/A')} ur")
+                    st.write(f"**Tip:** {selected_log.get('log_type', 'N/A')}")
+                    st.write(f"**Vrstica:** {selected_log.get('line_number', 'N/A')}")
+                
+                st.write(f"**Sporočilo:**")
+                st.code(selected_log['message'])
+                
+                if selected_log.get('additional_context'):
+                    st.write(f"**Dodatni kontekst:**")
+                    st.json(selected_log['additional_context'])
+    else:
+        st.info("📭 Ni zapisov, ki bi ustrezali filtrom.")
+    
+    # Cleanup section
+    st.markdown("---")
+    st.markdown("### 🧹 Čiščenje zapisov")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🗑️ Počisti potekle zapise", use_container_width=True):
+            deleted = database.cleanup_expired_logs()
+            st.success(f"Izbrisanih {deleted} poteklih zapisov.")
+    
+    with col2:
+        if st.button("🧹 Počisti DEBUG zapise", use_container_width=True):
+            with sqlite3.connect(database.DATABASE_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM application_logs WHERE log_level = 'DEBUG'")
+                deleted = cursor.rowcount
+                conn.commit()
+            st.success(f"Izbrisanih {deleted} DEBUG zapisov.")
+    
+    with col3:
+        if st.button("⚠️ Počisti vse zapise", type="secondary", use_container_width=True):
+            if st.checkbox("Potrdi brisanje vseh zapisov"):
+                with sqlite3.connect(database.DATABASE_FILE) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("DELETE FROM application_logs")
+                    deleted = cursor.rowcount
+                    conn.commit()
+                st.success(f"Izbrisanih {deleted} zapisov.")
+    
+    # Storage statistics
+    st.markdown("---")
+    st.markdown("### 💾 Statistika shranjevanja")
+    
+    with sqlite3.connect(database.DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # Get retention summary
+        cursor.execute("""
+            SELECT log_level, retention_hours, COUNT(*) as count
+            FROM application_logs
+            GROUP BY log_level, retention_hours
+            ORDER BY log_level, retention_hours
+        """)
+        
+        retention_data = cursor.fetchall()
+        
+        if retention_data:
+            retention_df = pd.DataFrame(retention_data, columns=['Nivo', 'Retencija (ur)', 'Število'])
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.dataframe(retention_df, use_container_width=True)
+            
+            with col2:
+                # Get storage size estimate
+                cursor.execute("""
+                    SELECT 
+                        COUNT(*) as total_logs,
+                        SUM(LENGTH(message) + LENGTH(COALESCE(additional_context, ''))) as total_size
+                    FROM application_logs
+                """)
+                
+                total_logs, total_size = cursor.fetchone()
+                
+                if total_size:
+                    st.metric("Skupno zapisov", total_logs)
+                    st.metric("Ocenjena velikost", f"{total_size / 1024 / 1024:.2f} MB")
+                    st.metric("Povprečna velikost zapisa", f"{total_size / max(total_logs, 1):.0f} B")
+
+
+def fetch_logs_with_filters(filters):
+    """Fetch logs from database with applied filters."""
+    query = "SELECT * FROM application_logs WHERE 1=1"
+    params = []
+    
+    # Apply log level filter
+    if filters.get('log_levels'):
+        placeholders = ','.join(['?' for _ in filters['log_levels']])
+        query += f" AND log_level IN ({placeholders})"
+        params.extend(filters['log_levels'])
+    
+    # Apply date range filter
+    if filters.get('date_from'):
+        query += " AND DATE(timestamp) >= ?"
+        params.append(filters['date_from'])
+    
+    if filters.get('date_to'):
+        query += " AND DATE(timestamp) <= ?"
+        params.append(filters['date_to'])
+    
+    # Apply search filter
+    if filters.get('search_query'):
+        query += " AND message LIKE ?"
+        params.append(f"%{filters['search_query']}%")
+    
+    # Apply organization filter
+    if filters.get('organization_name'):
+        query += " AND organization_name = ?"
+        params.append(filters['organization_name'])
+    
+    # Order by timestamp descending
+    query += " ORDER BY timestamp DESC"
+    
+    # Execute query
+    with sqlite3.connect(database.DATABASE_FILE) as conn:
+        df = pd.read_sql_query(query, conn, params=params)
+        
+        # Convert timestamp to datetime
+        if not df.empty:
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+        
+        return df
+    
+    return pd.DataFrame()
+
+
+def export_logs_to_csv():
+    """Export filtered logs to CSV file."""
+    logs_df = fetch_logs_with_filters(st.session_state.log_filters)
+    
+    if not logs_df.empty:
+        # Convert to CSV
+        csv_buffer = StringIO()
+        logs_df.to_csv(csv_buffer, index=False)
+        csv_data = csv_buffer.getvalue()
+        
+        # Download button
+        st.download_button(
+            label="💾 Prenesi CSV",
+            data=csv_data,
+            file_name=f"logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    else:
+        st.warning("Ni podatkov za izvoz.")
+
+
 def render_admin_panel():
     """Render the complete admin panel with modern interface."""
     if "logged_in" not in st.session_state:
@@ -762,9 +1097,9 @@ def render_admin_panel():
         render_admin_header()
         
         # Tabbed interface for different admin sections
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", 
-            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila"
+            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila", "📋 Dnevnik"
         ])
         
         with tab1:
@@ -784,3 +1119,6 @@ def render_admin_panel():
         
         with tab6:
             render_criteria_management_tab()
+        
+        with tab7:
+            render_logging_management_tab()

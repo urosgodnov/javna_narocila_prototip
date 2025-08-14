@@ -1,6 +1,7 @@
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+import os
 
 DATABASE_FILE = 'drafts.db'
 
@@ -95,6 +96,9 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_cpv_criteria_type 
             ON cpv_criteria(criteria_type_id)
         ''')
+        
+        # Execute logs table migration
+        create_logs_table()
         
         conn.commit()
 
@@ -239,3 +243,134 @@ def update_procurement_status(procurement_id, new_status):
         """, (new_status, zadnja_sprememba, procurement_id))
         conn.commit()
         return cursor.rowcount > 0
+
+# ============ LOGGING TABLE OPERATIONS ============
+
+def create_logs_table():
+    """Create the application_logs table and related objects."""
+    migration_file = os.path.join('migrations', '001_create_logs_table.sql')
+    
+    if not os.path.exists(migration_file):
+        # If migration file doesn't exist, create table directly
+        with sqlite3.connect(DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            
+            # Create organizacija table if it doesn't exist
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS organizacija (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    naziv TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Create application_logs table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS application_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    organization_id INTEGER,
+                    organization_name TEXT,
+                    session_id TEXT,
+                    log_level TEXT NOT NULL CHECK (log_level IN ('DEBUG','INFO','WARNING','ERROR','CRITICAL')),
+                    module TEXT,
+                    function_name TEXT,
+                    line_number INTEGER,
+                    message TEXT,
+                    retention_hours INTEGER NOT NULL DEFAULT 24,
+                    expires_at DATETIME,
+                    additional_context TEXT,
+                    log_type TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (organization_id) REFERENCES organizacija(id) ON DELETE CASCADE
+                )
+            ''')
+            
+            # Create indexes
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_expires ON application_logs(expires_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON application_logs(timestamp DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_org_level ON application_logs(organization_id, log_level)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_level ON application_logs(log_level)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_type ON application_logs(log_type) WHERE log_type IS NOT NULL')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_message ON application_logs(message)')
+            
+            # Create views
+            cursor.execute('''
+                CREATE VIEW IF NOT EXISTS log_statistics AS
+                SELECT 
+                    log_level,
+                    COUNT(*) as count,
+                    DATE(timestamp) as date,
+                    organization_name,
+                    AVG(retention_hours) as avg_retention_hours,
+                    MIN(timestamp) as oldest_entry,
+                    MAX(timestamp) as newest_entry
+                FROM application_logs
+                GROUP BY log_level, DATE(timestamp), organization_name
+            ''')
+            
+            cursor.execute('''
+                CREATE VIEW IF NOT EXISTS retention_summary AS
+                SELECT 
+                    log_level,
+                    retention_hours,
+                    COUNT(*) as count,
+                    SUM(LENGTH(message) + LENGTH(COALESCE(additional_context, ''))) as total_size
+                FROM application_logs
+                GROUP BY log_level, retention_hours
+                ORDER BY log_level, retention_hours
+            ''')
+            
+            conn.commit()
+    else:
+        # Execute migration from file
+        with open(migration_file, 'r') as f:
+            migration_sql = f.read()
+        
+        with sqlite3.connect(DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            # Split by semicolon and execute each statement
+            for statement in migration_sql.split(';'):
+                if statement.strip():
+                    cursor.execute(statement)
+            conn.commit()
+
+def verify_logs_table_exists():
+    """Verify that the application_logs table exists."""
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name='application_logs'
+        """)
+        return cursor.fetchone() is not None
+
+def cleanup_expired_logs():
+    """Delete expired log entries based on expires_at timestamp."""
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # Delete expired logs
+        cursor.execute("""
+            DELETE FROM application_logs 
+            WHERE expires_at < datetime('now')
+        """)
+        deleted_count = cursor.rowcount
+        
+        # Log the cleanup action
+        if deleted_count > 0:
+            cursor.execute("""
+                INSERT INTO application_logs 
+                (log_level, module, function_name, message, retention_hours, log_type)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, ('INFO', 'database', 'cleanup_expired_logs', 
+                  f'Cleaned up {deleted_count} expired log entries', 24, 'system_maintenance'))
+        
+        conn.commit()
+        return deleted_count
+
+def calculate_expires_at(timestamp, retention_hours):
+    """Calculate the expiration timestamp based on retention hours."""
+    if isinstance(timestamp, str):
+        timestamp = datetime.fromisoformat(timestamp)
+    return timestamp + timedelta(hours=retention_hours)

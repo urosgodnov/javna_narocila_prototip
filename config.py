@@ -93,3 +93,23 @@ FORM_STEPS = BASE_STEPS + LOT_SPECIFIC_STEPS + FINAL_STEPS
 
 # Schema file path
 SCHEMA_FILE = "json_files/SEZNAM_POTREBNIH_PODATKOV.json"
+
+# ============ LOGGING CONFIGURATION ============
+
+# Log retention hours by level
+LOG_RETENTION_HOURS = {
+    'CRITICAL': 720,  # 30 days
+    'ERROR': 168,     # 7 days
+    'WARNING': 72,    # 3 days
+    'INFO': 24,       # 1 day
+    'DEBUG': 6        # 6 hours
+}
+
+# Special log types with custom retention
+SPECIAL_LOG_RETENTION = {
+    'form_submission': 720,      # 30 days for audit trail
+    'validation_error': 72,       # 3 days for pattern analysis
+    'admin_action': 720,          # 30 days for security audit
+    'login_event': 168,           # 7 days for security review
+    'system_maintenance': 24      # 1 day for maintenance logs
+}
