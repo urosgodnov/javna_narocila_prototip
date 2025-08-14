@@ -397,8 +397,9 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                         
                 render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context)
                 
-                # Add validation and ratio totals after rendering selectionCriteria section
-                if "selectionCriteria" in full_key or full_key == "selectionCriteria":
+                # Add validation and ratio totals ONLY for the main selectionCriteria section
+                # Not for nested objects like socialCriteriaOptions or ratiosHeader
+                if full_key == "selectionCriteria" or full_key.endswith(".selectionCriteria"):
                     render_criteria_validation(full_key, lot_context)
                     # Display ratio totals after all ratio fields
                     display_criteria_ratios_total(full_key, lot_context)

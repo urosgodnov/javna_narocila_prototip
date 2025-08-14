@@ -81,172 +81,62 @@ def _set_navigation_flags():
             st.session_state[navigation_key] = True
 
 def validate_step(step_keys, schema):
-    """Validate the fields for the current step based on 'required' keys in the schema."""
-    # Story 22.3: Check if validation should run for current step
-    current_step = st.session_state.get('current_step', 0)
-    
+    """Validate the fields for the current step using centralized validation."""
+    # Story 27.3: Refactored to use ValidationManager
+    from utils.validations import ValidationManager
     import logging
+    
+    current_step = st.session_state.get('current_step', 0)
     logging.info(f"validate_step called for step {current_step} with keys: {step_keys}")
     
+    # Check if validation should run for current step
     if not should_validate(current_step):
         # Skip validation but show indicator
         st.info("ℹ️ Validacija preskočena za ta korak")
         logging.info(f"Validation skipped for step {current_step}")
         return True  # Allow progression
     
-    is_valid = True
+    # Initialize centralized validator
+    validator = ValidationManager(schema, st.session_state)
     
-    # Check for selectionCriteria validation (CPV criteria requirements)
+    # Run general validation
+    is_valid, errors = validator.validate_step(step_keys, current_step)
+    
+    # Display general validation errors
+    for error in errors:
+        st.error(f"⚠️ {error}")
+    
+    # Special handling for Merila section
+    # Find the actual selectionCriteria key (might be prefixed)
+    selection_key = None
     for key in step_keys:
-        logging.info(f"Checking key: {key}")
         if 'selectionCriteria' in key:
-            # Re-run validation to ensure we have the latest state
-            from utils.criteria_validation import validate_criteria_selection, check_cpv_requires_social_criteria
-            
-            logging.info(f"Found selectionCriteria in key: {key}")
-            
-            # Get CPV codes from session state - try multiple locations
-            cpv_codes_raw = ''
-            
-            # Try different possible locations for CPV codes
-            possible_cpv_keys = [
-                'projectInfo.cpvCodes',  # Found in debug output!
-                'orderType.cpvCodes',
-                'general.orderType.cpvCodes',
-                'cpvCodes',
-                'orderType.cpvCode',
-                'cpvCode'
-            ]
-            
-            for cpv_key in possible_cpv_keys:
-                value = st.session_state.get(cpv_key)
-                if value:
-                    cpv_codes_raw = value
-                    logging.info(f"Found CPV codes at '{cpv_key}': {cpv_codes_raw}")
-                    break
-            
-            logging.info(f"CPV codes raw: {cpv_codes_raw}")
-            
-            if cpv_codes_raw:
-                # Parse CPV codes
-                cpv_codes = []
-                if isinstance(cpv_codes_raw, str):
-                    for code in cpv_codes_raw.split(','):
-                        code = code.strip()
-                        if ' - ' in code:
-                            code = code.split(' - ')[0].strip()
-                        if code:
-                            cpv_codes.append(code)
-                
-                logging.info(f"Parsed CPV codes: {cpv_codes}")
-                
-                # Get selected criteria - handle both regular and general prefixed keys
-                # Based on debug output, keys are like: general.selectionCriteria.price
-                selected_criteria = {
-                    'price': st.session_state.get(f"general.{key}.price", st.session_state.get(f"{key}.price", False)),
-                    'additionalReferences': st.session_state.get(f"general.{key}.additionalReferences", st.session_state.get(f"{key}.additionalReferences", False)),
-                    'additionalTechnicalRequirements': st.session_state.get(f"general.{key}.additionalTechnicalRequirements", st.session_state.get(f"{key}.additionalTechnicalRequirements", False)),
-                    'shorterDeadline': st.session_state.get(f"general.{key}.shorterDeadline", st.session_state.get(f"{key}.shorterDeadline", False)),
-                    'longerWarranty': st.session_state.get(f"general.{key}.longerWarranty", st.session_state.get(f"{key}.longerWarranty", False)),
-                    'environmentalCriteria': st.session_state.get(f"general.{key}.environmentalCriteria", st.session_state.get(f"{key}.environmentalCriteria", False)),
-                    'socialCriteria': st.session_state.get(f"general.{key}.socialCriteria", st.session_state.get(f"{key}.socialCriteria", False)),
-                }
-                logging.info(f"Selected criteria: price={selected_criteria['price']}, socialCriteria={selected_criteria['socialCriteria']}")
-                
-                # Validate
-                validation_result = validate_criteria_selection(cpv_codes, selected_criteria)
-                logging.info(f"Validation result: is_valid={validation_result.is_valid}")
-                
-                # Update validation state
-                validation_key = f"{key}_validation"
-                st.session_state[validation_key] = validation_result.is_valid
-                
-                # Check if override is enabled
-                override_key = f"{validation_key}_override"
-                is_overridden = st.session_state.get(override_key, False)
-                logging.info(f"Override enabled: {is_overridden}")
-                
-                if not validation_result.is_valid and not is_overridden:
-                    logging.info("Validation failed - blocking navigation")
-                    # Store validation failure in session state
-                    st.session_state['cpv_validation_failed'] = True
-                    st.session_state['cpv_validation_messages'] = validation_result.messages
-                    
-                    # Show only the main validation message (not duplicates)
-                    # The validation_result.messages already contains the message about CPV requiring social criteria
-                    if validation_result.messages:
-                        # Show just the first/main message as it's already comprehensive
-                        st.error(validation_result.messages[0])
-                    
-                    is_valid = False
-                else:
-                    # Clear validation failure if it passes
-                    if 'cpv_validation_failed' in st.session_state:
-                        del st.session_state['cpv_validation_failed']
-                    if 'cpv_validation_messages' in st.session_state:
-                        del st.session_state['cpv_validation_messages']
+            selection_key = key
+            break
     
-    # Check required fields
-    for key in step_keys:
-        original_key = key
-        if key.startswith('lot_'):
-            try:
-                original_key = key.split('_', 2)[2]
-            except IndexError:
-                continue  # Skip malformed keys
-
-        prop_details = schema["properties"].get(original_key, {})
-        if "required" in prop_details:
-            for required_field in prop_details["required"]:
-                # The full key in session_state includes the lot-specific prefix
-                full_key = f"{key}.{required_field}"
-                if not st.session_state.get(full_key):
-                    try:
-                        field_title = prop_details['properties'][required_field]['title']
-                        st.warning(get_text("fill_required_field", field_name=field_title))
-                        is_valid = False
-                    except KeyError:
-                        # Failsafe if schema is structured unexpectedly
-                        pass
+    if selection_key:
+        merila_valid, merila_errors = validator.validate_merila(selection_key)
+        
+        # Display Merila-specific errors
+        for error in merila_errors:
+            st.error(f"⚠️ {error}")
+        
+        # Display warnings if any
+        for warning in validator.get_warnings():
+            st.warning(f"ℹ️ {warning}")
+        
+        is_valid = is_valid and merila_valid
     
-    # Validate contract info fields (Story 24.1 and 24.3)
-    for key in step_keys:
-        if 'contractInfo' in key:
-            # Validate framework agreement period (max 4 years)
-            framework_type = st.session_state.get('contractInfo.type', '')
-            if framework_type == 'okvirni sporazum':
-                framework_duration = st.session_state.get('contractInfo.frameworkDuration', '')
-                if framework_duration:
-                    # Parse the duration string to check if it exceeds 4 years
-                    import re
-                    # Look for patterns like "4 leta", "5 let", "48 mesecev", etc.
-                    years_match = re.search(r'(\d+)\s*let', framework_duration.lower())
-                    months_match = re.search(r'(\d+)\s*mesec', framework_duration.lower())
-                    
-                    if years_match:
-                        years = int(years_match.group(1))
-                        if years > 4:
-                            st.error("⚠️ Obdobje okvirnega sporazuma ne sme presegati 4 let")
-                            is_valid = False
-                    elif months_match:
-                        months = int(months_match.group(1))
-                        if months > 48:
-                            st.error("⚠️ Obdobje okvirnega sporazuma ne sme presegati 48 mesecev (4 leta)")
-                            is_valid = False
-            
-            # Validate extension fields (Story 24.3)
-            can_be_extended = st.session_state.get('contractInfo.canBeExtended', 'ne')
-            if can_be_extended == 'da':
-                extension_reasons = st.session_state.get('contractInfo.extensionReasons', '').strip()
-                extension_duration = st.session_state.get('contractInfo.extensionDuration', '').strip()
-                
-                if not extension_reasons:
-                    st.error("⚠️ Prosimo, navedite razloge za možnost podaljšanja pogodbe")
-                    is_valid = False
-                
-                if not extension_duration:
-                    st.error("⚠️ Prosimo, navedite trajanje podaljšanja pogodbe")
-                    is_valid = False
+    
+    # The centralized ValidationManager now handles:
+    # - Required fields validation
+    # - Dropdown validation
+    # - Multiple entries validation (multiple clients, lots)
+    # - Conditional requirements
+    # - Contract extension validation
+    # - Framework agreement validation
+    # - CPV code requirements
+    # - Merila validation (points, social criteria, etc.)
     
     logging.info(f"validate_step returning: {is_valid}")
     return is_valid
