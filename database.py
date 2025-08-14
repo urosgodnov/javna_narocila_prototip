@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta
 import os
 
-DATABASE_FILE = 'drafts.db'
+DATABASE_FILE = 'mainDB.db'
 
 def init_db():
     with sqlite3.connect(DATABASE_FILE) as conn:

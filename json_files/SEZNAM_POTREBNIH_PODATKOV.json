@@ -781,53 +781,62 @@
                     "type": "string",
                     "enum": ["z veljavnostjo", "za obdobje od-do"],
                     "title": "Način določitve obdobja pogodbe",
-                    "render_if": { "field": "type", "value": "pogodba" }
+                    "render_if": { "field": "contractInfo.type", "value": "pogodba" }
                 },
                 "contractValidity": {
                     "type": "string",
                     "title": "Veljavnost pogodbe",
                     "description": "Navedite za kakšno obdobje bi želeli skleniti pogodbo",
-                    "render_if": { "field": "contractPeriodType", "value": "z veljavnostjo" }
+                    "render_if": { "field": "contractInfo.contractPeriodType", "value": "z veljavnostjo" }
                 },
                 "contractDateFrom": {
                     "type": "string",
                     "format": "date",
                     "title": "Obdobje od",
-                    "render_if": { "field": "contractPeriodType", "value": "za obdobje od-do" }
+                    "render_if": { "field": "contractInfo.contractPeriodType", "value": "za obdobje od-do" }
                 },
                 "contractDateTo": {
                     "type": "string",
                     "format": "date",
                     "title": "Obdobje do",
-                    "render_if": { "field": "contractPeriodType", "value": "za obdobje od-do" }
+                    "render_if": { "field": "contractInfo.contractPeriodType", "value": "za obdobje od-do" }
                 },
                 "frameworkAgreementType": { 
                     "type": "string", 
                     "enum": [
-                        "z enim gospodarskim subjektom in brez odpiranja konkurence",
-                        "z enim gospodarskim subjektom in z odpiranjem konkurence",
-                        "z več gospodarskimi subjekti in brez odpiranja konkurence",
-                        "z več gospodarskimi subjekti in z odpiranjem konkurence",
-                        "z več gospodarskimi subjekti in deloma brez ponovnega odpiranja konkurence in deloma z odpiranjem konkurence"
+                        "en_brez_konkurence",
+                        "en_z_konkurenco",
+                        "vec_brez_konkurence",
+                        "vec_z_konkurenco",
+                        "vec_deloma"
                     ],
+                    "enumLabels": {
+                        "en_brez_konkurence": "Z enim gospodarskim subjektom in brez odpiranja konkurence",
+                        "en_z_konkurenco": "Z enim gospodarskim subjektom in z odpiranjem konkurence",
+                        "vec_brez_konkurence": "Z več gospodarskimi subjekti in brez odpiranja konkurence",
+                        "vec_z_konkurenco": "Z več gospodarskimi subjekti in z odpiranjem konkurence",
+                        "vec_deloma": "Z več gospodarskimi subjekti in deloma brez/deloma z odpiranjem konkurence"
+                    },
+                    "format": "radio",
                     "title": "Vrsta okvirnega sporazuma",
-                    "render_if": { "field": "type", "value": "okvirni sporazum" }
+                    "render_if": { "field": "contractInfo.type", "value": "okvirni sporazum" }
                 },
                 "frameworkDuration": { 
                     "type": "string", 
                     "title": "Obdobje okvirnega sporazuma",
                     "description": "Navedite za kakšno obdobje bi želeli skleniti okvirni sporazum (max. 4 leta)",
-                    "render_if": { "field": "type", "value": "okvirni sporazum" },
+                    "render_if": { "field": "contractInfo.type", "value": "okvirni sporazum" },
                     "validation": { "maxYears": 4 }
                 },
                 "competitionFrequency": { 
                     "type": "string", 
+                    "format": "textarea",
                     "title": "Pogostost odpiranja konkurence",
                     "description": "Navedite kako pogosto želite odpirati konkurenco",
                     "render_if_any": [
-                        { "field": "frameworkAgreementType", "value": "z enim gospodarskim subjektom in z odpiranjem konkurence" },
-                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in z odpiranjem konkurence" },
-                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in deloma brez ponovnega odpiranja konkurence in deloma z odpiranjem konkurence" }
+                        { "field": "contractInfo.frameworkAgreementType", "value": "en_z_konkurenco" },
+                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_z_konkurenco" },
+                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_deloma" }
                     ]
                 },
                 "selectedCriteriaInfo": {
@@ -836,16 +845,17 @@
                     "title": "Merila pri odpiranju konkurence",
                     "description": "Pri odpiranju konkurence bodo uporabljena izbrana merila iz prejšnje točke",
                     "render_if_any": [
-                        { "field": "frameworkAgreementType", "value": "z enim gospodarskim subjektom in z odpiranjem konkurence" },
-                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in z odpiranjem konkurence" },
-                        { "field": "frameworkAgreementType", "value": "z več gospodarskimi subjekti in deloma brez ponovnega odpiranja konkurence in deloma z odpiranjem konkurence" }
+                        { "field": "contractInfo.frameworkAgreementType", "value": "en_z_konkurenco" },
+                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_z_konkurenco" },
+                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_deloma" }
                     ]
                 },
                 "sectionB_title": { "type": "string", "default": "B. PODALJŠANJE POGODBE", "title": "B. PODALJŠANJE POGODBE", "readonly": true },
                 "canBeExtended": { 
                     "type": "string",
                     "enum": ["ne", "da"],
-                    "title": "Možnost podaljšanja",
+                    "format": "radio",
+                    "title": "Ali je možno podaljšanje pogodbe?",
                     "description": "Ali naročnik predvideva možnost podaljšanja pogodbe?",
                     "default": "ne"
                 },
@@ -854,13 +864,15 @@
                     "format": "textarea",
                     "title": "Razlogi za podaljšanje",
                     "description": "Navedite v katerih primerih oz. iz katerih razlogov lahko pride do podaljšanja pogodbe",
-                    "render_if": { "field": "canBeExtended", "value": "da" }
+                    "render_if": { "field": "contractInfo.canBeExtended", "value": "da" },
+                    "required_if": { "field": "contractInfo.canBeExtended", "value": "da" }
                 },
                 "extensionDuration": {
                     "type": "string",
                     "title": "Trajanje podaljšanja",
                     "description": "Navedite za koliko časa bi v navedenih primerih želeli podaljšati pogodbo",
-                    "render_if": { "field": "canBeExtended", "value": "da" }
+                    "render_if": { "field": "contractInfo.canBeExtended", "value": "da" },
+                    "required_if": { "field": "contractInfo.canBeExtended", "value": "da" }
                 }
             }
         },
@@ -1663,16 +1675,6 @@
                     "title": "Cena",
                     "default": false
                 },
-                "priceInfo": {
-                    "type": "object",
-                    "title": "ℹ️ Informacija o merilu cene",
-                    "properties": {},
-                    "description": "Cena je najpogostejše merilo pri javnih naročilih. Pri uporabi tega merila se točke običajno izračunavajo po formuli: (najnižja cena / ponujena cena) × maksimalno število točk.",
-                    "render_if": {
-                        "field": "selectionCriteria.price",
-                        "value": true
-                    }
-                },
                 "additionalReferences": {
                     "type": "boolean",
                     "title": "Dodatne reference imenovanega kadra",
@@ -1792,9 +1794,123 @@
                     "title": "Drugo, prosim za predlog AI",
                     "default": false
                 },
+                "ratiosHeader": {
+                    "type": "object",
+                    "title": "B. RAZMERJA MED IZBRANIMI MERILI",
+                    "properties": {},
+                    "description": "Navedite razmerja (točke) med izbranimi merili"
+                },
+                "priceRatio": {
+                    "type": "number",
+                    "title": "Cena (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.price",
+                        "value": true
+                    }
+                },
+                "additionalReferencesRatio": {
+                    "type": "number",
+                    "title": "Dodatne reference imenovanega kadra (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.additionalReferences",
+                        "value": true
+                    }
+                },
+                "additionalTechnicalRequirementsRatio": {
+                    "type": "number",
+                    "title": "Dodatne tehnične zahteve (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.additionalTechnicalRequirements",
+                        "value": true
+                    }
+                },
+                "shorterDeadlineRatio": {
+                    "type": "number",
+                    "title": "Krajši rok izvedbe (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.shorterDeadline",
+                        "value": true
+                    }
+                },
+                "longerWarrantyRatio": {
+                    "type": "number",
+                    "title": "Garancija daljša od zahtevane (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.longerWarranty",
+                        "value": true
+                    }
+                },
+                "costEfficiencyRatio": {
+                    "type": "number",
+                    "title": "Stroškovna učinkovitost (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.costEfficiency",
+                        "value": true
+                    }
+                },
+                "socialCriteriaYoungRatio": {
+                    "type": "number",
+                    "title": "Socialna merila - Delež zaposlenih mladih (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.youngEmployeesShare",
+                        "value": true
+                    }
+                },
+                "socialCriteriaElderlyRatio": {
+                    "type": "number",
+                    "title": "Socialna merila - Delež zaposlenih starejših (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.elderlyEmployeesShare",
+                        "value": true
+                    }
+                },
+                "socialCriteriaStaffRatio": {
+                    "type": "number",
+                    "title": "Socialna merila - Priglašeni kader je zaposlen pri ponudniku (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.registeredStaffEmployed",
+                        "value": true
+                    }
+                },
+                "socialCriteriaSalaryRatio": {
+                    "type": "number",
+                    "title": "Socialna merila - Povprečna plača priglašenega kadra (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.averageSalary",
+                        "value": true
+                    }
+                },
+                "socialCriteriaOtherRatio": {
+                    "type": "number",
+                    "title": "Socialna merila - Drugo (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.otherSocial",
+                        "value": true
+                    }
+                },
+                "otherCriteriaCustomRatio": {
+                    "type": "number",
+                    "title": "Drugo merilo (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.otherCriteriaCustom",
+                        "value": true
+                    }
+                },
                 "scoringHeader": {
                     "type": "object",
-                    "title": "B. RAZMERJA MED MERILI (TOČKOVANJE)",
+                    "title": "NAVEDITE ŠTEVILO TOČK",
                     "properties": {},
                     "description": "Za vsako izbrano merilo določite število točk"
                 },
@@ -1846,11 +1962,43 @@
                         "value": true
                     }
                 },
-                "socialCriteriaPoints": {
+                "socialCriteriaYoungPoints": {
                     "type": "number",
-                    "title": "Socialna merila → točk",
+                    "title": "Socialna merila - Delež zaposlenih mladih → točk",
                     "render_if": {
-                        "field": "selectionCriteria.socialCriteria",
+                        "field": "selectionCriteria.socialCriteriaOptions.youngEmployeesShare",
+                        "value": true
+                    }
+                },
+                "socialCriteriaElderlyPoints": {
+                    "type": "number",
+                    "title": "Socialna merila - Delež zaposlenih starejših → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.elderlyEmployeesShare",
+                        "value": true
+                    }
+                },
+                "socialCriteriaStaffPoints": {
+                    "type": "number",
+                    "title": "Socialna merila - Priglašeni kader je zaposlen pri ponudniku → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.registeredStaffEmployed",
+                        "value": true
+                    }
+                },
+                "socialCriteriaSalaryPoints": {
+                    "type": "number",
+                    "title": "Socialna merila - Povprečna plača priglašenega kadra → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.averageSalary",
+                        "value": true
+                    }
+                },
+                "socialCriteriaOtherPoints": {
+                    "type": "number",
+                    "title": "Socialna merila - Drugo → točk",
+                    "render_if": {
+                        "field": "selectionCriteria.socialCriteriaOptions.otherSocial",
                         "value": true
                     }
                 },
@@ -1866,33 +2014,25 @@
                     "type": "object",
                     "title": "C. PRAVILO ZA ENAKO ŠTEVILO TOČK",
                     "properties": {},
-                    "description": "Določite način odločanja v primeru enakega števila točk"
+                    "description": "Označite eno od možnosti"
                 },
                 "tiebreakerRule": {
                     "type": "string",
-                    "title": "V primeru enakega števila točk:",
+                    "title": "Način odločanja pri enakih točkah",
                     "enum": [
                         "žreb",
-                        "prednost po specifičnem merilu"
+                        "prednost po merilu"
                     ],
+                    "format": "radio",
                     "default": "žreb"
                 },
                 "tiebreakerCriterion": {
                     "type": "string",
-                    "title": "→ Izberite merilo za prednost",
-                    "enum": [
-                        "cena",
-                        "dodatne reference imenovanega kadra",
-                        "dodatne tehnične zahteve",
-                        "krajši rok izvedbe",
-                        "garancija daljša od zahtevane",
-                        "stroškovna učinkovitost",
-                        "socialna merila",
-                        "drugo"
-                    ],
+                    "title": "Navedite na katero merilo se nanaša prejšnja izjava:",
+                    "enum": [],
                     "render_if": {
                         "field": "selectionCriteria.tiebreakerRule",
-                        "value": "prednost po specifičnem merilu"
+                        "value": "prednost po merilu"
                     }
                 }
             }

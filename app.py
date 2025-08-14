@@ -209,6 +209,45 @@ def validate_step(step_keys, schema):
                         # Failsafe if schema is structured unexpectedly
                         pass
     
+    # Validate contract info fields (Story 24.1 and 24.3)
+    for key in step_keys:
+        if 'contractInfo' in key:
+            # Validate framework agreement period (max 4 years)
+            framework_type = st.session_state.get('contractInfo.type', '')
+            if framework_type == 'okvirni sporazum':
+                framework_duration = st.session_state.get('contractInfo.frameworkDuration', '')
+                if framework_duration:
+                    # Parse the duration string to check if it exceeds 4 years
+                    import re
+                    # Look for patterns like "4 leta", "5 let", "48 mesecev", etc.
+                    years_match = re.search(r'(\d+)\s*let', framework_duration.lower())
+                    months_match = re.search(r'(\d+)\s*mesec', framework_duration.lower())
+                    
+                    if years_match:
+                        years = int(years_match.group(1))
+                        if years > 4:
+                            st.error("⚠️ Obdobje okvirnega sporazuma ne sme presegati 4 let")
+                            is_valid = False
+                    elif months_match:
+                        months = int(months_match.group(1))
+                        if months > 48:
+                            st.error("⚠️ Obdobje okvirnega sporazuma ne sme presegati 48 mesecev (4 leta)")
+                            is_valid = False
+            
+            # Validate extension fields (Story 24.3)
+            can_be_extended = st.session_state.get('contractInfo.canBeExtended', 'ne')
+            if can_be_extended == 'da':
+                extension_reasons = st.session_state.get('contractInfo.extensionReasons', '').strip()
+                extension_duration = st.session_state.get('contractInfo.extensionDuration', '').strip()
+                
+                if not extension_reasons:
+                    st.error("⚠️ Prosimo, navedite razloge za možnost podaljšanja pogodbe")
+                    is_valid = False
+                
+                if not extension_duration:
+                    st.error("⚠️ Prosimo, navedite trajanje podaljšanja pogodbe")
+                    is_valid = False
+    
     logging.info(f"validate_step returning: {is_valid}")
     return is_valid
 
@@ -346,17 +385,35 @@ def render_main_form():
                     
                     current_step_properties[key] = prop_copy
         
-        # Uncomment the debug section below if you need to troubleshoot session state issues
-        # if st.checkbox("🐛 Show Debug Info", key="debug_toggle"):
-        #     st.write("**Session State Debug:**")
-        #     procedure_keys = [k for k in st.session_state.keys() if 'procedure' in k.lower()]
-        #     if procedure_keys:
-        #         for key in procedure_keys:
-        #             st.write(f"- `{key}`: {st.session_state[key]}")
-        #     else:
-        #         st.write("No procedure keys found in session state")
-        #     st.write(f"**Current Step:** {st.session_state.current_step}")
-        #     st.write(f"**Step Keys:** {current_step_keys}")
+        # Debug section to troubleshoot contractInfo visibility
+        if st.checkbox("🐛 Show Debug Info", key="debug_toggle"):
+            st.write("**Debug Information:**")
+            st.write(f"**Current Step:** {st.session_state.current_step + 1} of {len(dynamic_form_steps)}")
+            st.write(f"**Step Keys:** {current_step_keys}")
+            st.write(f"**Current Step Properties Keys:** {list(current_step_properties.keys())}")
+            
+            # Check if we're on contractInfo step
+            if 'contractInfo' in current_step_keys:
+                st.success("✓ This is the contractInfo step")
+                if 'contractInfo' in current_step_properties:
+                    contract_props = current_step_properties['contractInfo'].get('properties', {})
+                    st.write(f"✓ contractInfo loaded with {len(contract_props)} properties")
+                    
+                    # Show what properties are in contractInfo
+                    st.write("**contractInfo properties:**")
+                    for prop_name in list(contract_props.keys())[:5]:
+                        st.write(f"  - {prop_name}")
+                    if len(contract_props) > 5:
+                        st.write(f"  ... and {len(contract_props) - 5} more")
+                else:
+                    st.error("✗ contractInfo NOT in current_step_properties!")
+            
+            # Show what's in session state for contractInfo
+            contract_keys = [k for k in st.session_state.keys() if 'contract' in k.lower()]
+            if contract_keys:
+                st.write("**Contract-related session state keys:**")
+                for key in contract_keys:
+                    st.write(f"- `{key}`: {st.session_state[key]}")
 
         # Render modern progress indicator if available
         if use_modern_form:
@@ -398,7 +455,7 @@ def render_main_form():
                     elif field_name == "merila":
                         step_name = "Merila izbire"
                     elif field_name == "contractInfo":
-                        step_name = "Pogodba"
+                        step_name = "Pogodba in zaključek"
                     elif field_name == "otherInfo":
                         step_name = "Dodatne informacije"
                     else:
@@ -446,6 +503,24 @@ def render_main_form():
 
         # Enhanced Navigation buttons (outside form to avoid Enter key issues)
         render_navigation_buttons(current_step_keys)
+        
+        # Story 25.1: Cancel confirmation dialog
+        if st.session_state.get('show_cancel_dialog', False):
+            st.warning("⚠️ **Opozorilo**")
+            st.write("Ali res želite opustiti? Vsi podatki bodo izgubljeni.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Ne, nadaljuj", key="cancel_no", use_container_width=True):
+                    st.session_state.show_cancel_dialog = False
+                    st.rerun()
+            
+            with col2:
+                if st.button("Da, opusti", type="secondary", key="cancel_yes", use_container_width=True):
+                    clear_form_data()
+                    st.session_state.show_cancel_dialog = False
+                    st.session_state.current_page = 'dashboard'
+                    st.rerun()
 
     with col2:
         render_drafts_sidebar(draft_options)
@@ -1127,39 +1202,58 @@ def render_navigation_buttons(current_step_keys):
                     st.session_state['navigation_blocked'] = True
                     st.session_state['navigation_blocked_step'] = st.session_state.current_step
         else:
-            button_text = "💾 Posodobi naročilo" if st.session_state.edit_mode else f"📄 {get_text('submit_button')}"
-            if st.button(
-                button_text, 
-                type="primary",
-                use_container_width=True
-            ):
-                if validate_step(current_step_keys, st.session_state.schema):
-                    final_form_data = get_form_data_from_session()
-                    
-                    # Save or update based on edit mode
-                    if st.session_state.edit_mode:
-                        # Update existing procurement
-                        if database.update_procurement(st.session_state.edit_record_id, final_form_data):
-                            st.success(f"✅ Naročilo ID {st.session_state.edit_record_id} uspešno posodobljeno!")
-                            # Clear edit mode and return to dashboard
-                            st.session_state.edit_mode = False
-                            st.session_state.edit_record_id = None
-                            st.session_state.current_page = 'dashboard'
-                            clear_form_data()
-                            st.rerun()
+            # Story 25.1: Replace single submit button with Cancel/Confirm buttons on last step
+            col_cancel, col_confirm = st.columns(2)
+            
+            with col_cancel:
+                if st.button(
+                    "🚫 Opusti", 
+                    type="secondary",
+                    use_container_width=True,
+                    key="cancel_form"
+                ):
+                    st.session_state.show_cancel_dialog = True
+                    st.rerun()
+            
+            with col_confirm:
+                button_text = "✅ Potrdi" 
+                if st.button(
+                    button_text, 
+                    type="primary",
+                    use_container_width=True,
+                    key="confirm_form"
+                ):
+                    if validate_step(current_step_keys, st.session_state.schema):
+                        final_form_data = get_form_data_from_session()
+                        
+                        # Save or update based on edit mode
+                        if st.session_state.edit_mode:
+                            # Update existing procurement
+                            if database.update_procurement(st.session_state.edit_record_id, final_form_data):
+                                st.success(f"✅ Naročilo ID {st.session_state.edit_record_id} uspešno posodobljeno!")
+                                # Clear edit mode and return to dashboard
+                                import time
+                                time.sleep(1)  # Show success message
+                                st.session_state.edit_mode = False
+                                st.session_state.edit_record_id = None
+                                st.session_state.current_page = 'dashboard'
+                                clear_form_data()
+                                st.rerun()
+                            else:
+                                st.error("❌ Napaka pri posodabljanju naročila")
                         else:
-                            st.error("❌ Napaka pri posodabljanju naročila")
-                    else:
-                        # Create new procurement
-                        new_id = database.create_procurement(final_form_data)
-                        if new_id:
-                            st.success(f"✅ Novo naročilo uspešno ustvarjeno z ID: {new_id}")
-                            # Return to dashboard
-                            st.session_state.current_page = 'dashboard'
-                            clear_form_data()
-                            st.rerun()
-                        else:
-                            st.error("❌ Napaka pri ustvarjanju naročila")
+                            # Create new procurement
+                            new_id = database.create_procurement(final_form_data)
+                            if new_id:
+                                st.success(f"✅ Osnutek uspešno shranjen! ID: {new_id}")
+                                # Return to dashboard
+                                import time
+                                time.sleep(1)  # Show success message
+                                st.session_state.current_page = 'dashboard'
+                                clear_form_data()
+                                st.rerun()
+                            else:
+                                st.error("❌ Napaka pri ustvarjanju naročila")
     
     st.markdown('</div>', unsafe_allow_html=True)
 

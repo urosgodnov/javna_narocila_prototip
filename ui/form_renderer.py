@@ -19,6 +19,141 @@ from utils.criteria_suggestions import (
 )
 
 
+def get_social_criteria_specific_labels(criteria_prefix="selectionCriteria"):
+    """Get specific labels for selected social criteria sub-options."""
+    social_options = {
+        'youngEmployeesShare': 'Delež zaposlenih mladih',
+        'elderlyEmployeesShare': 'Delež zaposlenih starejših',
+        'registeredStaffEmployed': 'Priglašeni kader je zaposlen pri ponudniku',
+        'averageSalary': 'Povprečna plača priglašenega kadra',
+        'otherSocial': 'Drugo socialno merilo'
+    }
+    
+    selected = []
+    for key, label in social_options.items():
+        if st.session_state.get(f"{criteria_prefix}.socialCriteriaOptions.{key}", False):
+            selected.append(f"Socialna merila - {label}")
+    
+    return selected
+
+
+def get_selected_criteria_labels(parent_key="", lot_context=None):
+    """Get labels of currently selected criteria for the tiebreaker dropdown."""
+    criteria_mapping = {
+        'price': 'Cena',
+        'additionalReferences': 'Dodatne reference imenovanega kadra',
+        'additionalTechnicalRequirements': 'Dodatne tehnične zahteve',
+        'shorterDeadline': 'Krajši rok izvedbe',
+        'longerWarranty': 'Garancija daljša od zahtevane',
+        'costEfficiency': 'Stroškovna učinkovitost',
+        'otherCriteriaCustom': 'Drugo merilo'
+    }
+    
+    selected_labels = []
+    
+    # Determine the correct prefix for the criteria
+    if lot_context and lot_context['mode'] == 'lots' and lot_context['lot_index'] is not None:
+        criteria_prefix = get_lot_scoped_key("selectionCriteria", lot_context['lot_index'])
+    elif lot_context and lot_context['mode'] == 'general':
+        criteria_prefix = get_lot_scoped_key("selectionCriteria", None)
+    else:
+        criteria_prefix = "selectionCriteria"
+    
+    # Check each criterion
+    for criterion_key, label in criteria_mapping.items():
+        session_key = f"{criteria_prefix}.{criterion_key}"
+        if st.session_state.get(session_key, False):
+            selected_labels.append(label)
+    
+    # Add specific social criteria labels instead of generic one
+    if st.session_state.get(f"{criteria_prefix}.socialCriteria", False):
+        social_labels = get_social_criteria_specific_labels(criteria_prefix)
+        if social_labels:
+            selected_labels.extend(social_labels)
+        else:
+            # If no specific social criteria selected, still show generic
+            selected_labels.append('Socialna merila')
+    
+    return selected_labels
+
+
+def render_competition_criteria_info(parent_key="contractInfo", lot_context=None):
+    """Display selected criteria for framework agreements with competition reopening."""
+    framework_type = st.session_state.get(f"{parent_key}.frameworkAgreementType", "")
+    
+    # Check if competition reopening is selected
+    competition_types = ["en_z_konkurenco", "vec_z_konkurenco", "vec_deloma"]
+    
+    if framework_type in competition_types:
+        # Get selected criteria using existing function
+        selected_criteria = get_selected_criteria_labels(lot_context=lot_context)
+        
+        if selected_criteria:
+            criteria_text = ", ".join(selected_criteria)
+            st.info(f"ℹ️ **Pri odpiranju konkurence bodo uporabljena naslednja merila:**\n{criteria_text}")
+        else:
+            st.warning("⚠️ Niste izbrali nobenih meril. Pri odpiranju konkurence morate imeti definirana merila.")
+
+
+def display_criteria_ratios_total(parent_key="", lot_context=None):
+    """Display running total of criteria ratio points."""
+    total = 0
+    
+    # Determine the correct prefix
+    if lot_context and lot_context['mode'] == 'lots' and lot_context['lot_index'] is not None:
+        criteria_prefix = get_lot_scoped_key("selectionCriteria", lot_context['lot_index'])
+    elif lot_context and lot_context['mode'] == 'general':
+        criteria_prefix = get_lot_scoped_key("selectionCriteria", None)
+    else:
+        criteria_prefix = "selectionCriteria"
+    
+    # Mapping of criteria to their ratio fields
+    criteria_mapping = {
+        'price': 'priceRatio',
+        'additionalReferences': 'additionalReferencesRatio',
+        'additionalTechnicalRequirements': 'additionalTechnicalRequirementsRatio',
+        'shorterDeadline': 'shorterDeadlineRatio',
+        'longerWarranty': 'longerWarrantyRatio',
+        'costEfficiency': 'costEfficiencyRatio',
+        'otherCriteriaCustom': 'otherCriteriaCustomRatio'
+    }
+    
+    # Social criteria specific mapping
+    social_mapping = {
+        'socialCriteriaOptions.youngEmployeesShare': 'socialCriteriaYoungRatio',
+        'socialCriteriaOptions.elderlyEmployeesShare': 'socialCriteriaElderlyRatio',
+        'socialCriteriaOptions.registeredStaffEmployed': 'socialCriteriaStaffRatio',
+        'socialCriteriaOptions.averageSalary': 'socialCriteriaSalaryRatio',
+        'socialCriteriaOptions.otherSocial': 'socialCriteriaOtherRatio'
+    }
+    
+    # Sum up the ratio points for selected criteria
+    for criterion, ratio_field in criteria_mapping.items():
+        criterion_key = f"{criteria_prefix}.{criterion}"
+        ratio_key = f"{criteria_prefix}.{ratio_field}"
+        
+        if st.session_state.get(criterion_key, False):
+            points = st.session_state.get(ratio_key, 0)
+            if points:
+                total += points
+    
+    # Sum up the social criteria ratio points
+    for social_criterion, ratio_field in social_mapping.items():
+        criterion_key = f"{criteria_prefix}.{social_criterion}"
+        ratio_key = f"{criteria_prefix}.{ratio_field}"
+        
+        if st.session_state.get(criterion_key, False):
+            points = st.session_state.get(ratio_key, 0)
+            if points:
+                total += points
+    
+    # Display total if greater than 0
+    if total > 0:
+        st.info(f"📊 **Skupaj točk razmerij:** {total}")
+    
+    return total
+
+
 def _get_default_value(full_key, prop_details, lot_context=None):
     """Get appropriate default value for form field."""
     # Apply lot scoping if context is provided, but respect global fields
@@ -182,6 +317,19 @@ def render_form(schema_properties, parent_key="", lot_context=None):
         parent_key: Parent key for nested fields
         lot_context: Lot context information (from get_current_lot_context)
     """
+    # Debug: Show what we're rendering when contractInfo is involved
+    if parent_key == '' and 'contractInfo' in schema_properties:
+        with st.expander("🔍 Debug: render_form input", expanded=False):
+            st.write(f"**Parent key:** '{parent_key}'")
+            st.write(f"**Schema properties keys:** {list(schema_properties.keys())}")
+            if 'contractInfo' in schema_properties:
+                contract_info = schema_properties['contractInfo']
+                st.write(f"**contractInfo type:** {contract_info.get('type', 'N/A')}")
+                if 'properties' in contract_info:
+                    st.write(f"**contractInfo has properties:** {len(contract_info['properties'])}")
+                else:
+                    st.write("**contractInfo has NO properties key!**")
+    
     for prop_name, prop_details in schema_properties.items():
         if not _should_render(prop_details, parent_key, lot_context):
             continue
@@ -249,9 +397,11 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                         
                 render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context)
                 
-                # Add validation after rendering selectionCriteria section
+                # Add validation and ratio totals after rendering selectionCriteria section
                 if "selectionCriteria" in full_key or full_key == "selectionCriteria":
                     render_criteria_validation(full_key, lot_context)
+                    # Display ratio totals after all ratio fields
+                    display_criteria_ratios_total(full_key, lot_context)
         
         elif prop_type == "array":
             # Use smaller header for conditional arrays to reduce visual clutter
@@ -363,60 +513,43 @@ def render_form(schema_properties, parent_key="", lot_context=None):
             # Handle readonly section headers
             if prop_details.get("readonly") and prop_name.endswith("_title"):
                 st.markdown(f"### {prop_details.get('title', label)}")
-                return
+                continue
             
             # Handle info fields that display selected criteria
             if prop_details.get("format") == "info":
                 # Check if we should show the criteria info
                 if "selectedCriteriaInfo" in full_key:
-                    # Get selected criteria from session state
-                    selected_criteria = []
-                    criteria_keys = [
-                        'selectionCriteria.price',
-                        'selectionCriteria.additionalReferences', 
-                        'selectionCriteria.additionalTechnicalRequirements',
-                        'selectionCriteria.shorterDeadline',
-                        'selectionCriteria.longerWarranty',
-                        'selectionCriteria.costEfficiency',
-                        'selectionCriteria.socialCriteria',
-                        'selectionCriteria.otherCriteriaCustom',
-                        'selectionCriteria.otherCriteriaAI'
-                    ]
-                    criteria_labels = {
-                        'selectionCriteria.price': 'Cena',
-                        'selectionCriteria.additionalReferences': 'Dodatne reference imenovanega kadra',
-                        'selectionCriteria.additionalTechnicalRequirements': 'Dodatne tehnične zahteve',
-                        'selectionCriteria.shorterDeadline': 'Krajši rok izvedbe',
-                        'selectionCriteria.longerWarranty': 'Garancija daljša od zahtevane',
-                        'selectionCriteria.costEfficiency': 'Stroškovna učinkovitost',
-                        'selectionCriteria.socialCriteria': 'Socialna merila',
-                        'selectionCriteria.otherCriteriaCustom': 'Drugo (lasten predlog)',
-                        'selectionCriteria.otherCriteriaAI': 'Drugo (AI predlog)'
-                    }
-                    
-                    for key in criteria_keys:
-                        if st.session_state.get(key):
-                            selected_criteria.append(criteria_labels.get(key, key))
-                    
-                    if selected_criteria:
-                        st.info(f"ℹ️ Pri odpiranju konkurence bodo uporabljena naslednja merila: **{', '.join(selected_criteria)}**")
-                    else:
-                        st.warning("⚠️ Niste izbrali nobenih meril v prejšnji točki. Pri odpiranju konkurence morate imeti definirana merila.")
-                return
+                    # Call the dynamic criteria display function
+                    render_competition_criteria_info(parent_key, lot_context)
+                continue
             
             # Add required indicator to label
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
             
-            # Check if this field should be rendered as radio buttons (for contractInfo type selection)
+            # Check if this field should be rendered as radio buttons
             use_radio = False
             if ("contractInfo.type" in full_key or 
                 "contractInfo.contractPeriodType" in full_key or
-                "contractInfo.canBeExtended" in full_key):
+                "contractInfo.canBeExtended" in full_key or
+                "selectionCriteria.tiebreakerRule" in full_key or
+                prop_details.get("format") == "radio"):
                 use_radio = True
             
             if "enum" in prop_details and use_radio:
                 # Radio button rendering for mutually exclusive choices
                 available_options = prop_details["enum"].copy()
+                
+                # Special labels for tiebreaker rule
+                if "tiebreakerRule" in full_key:
+                    display_options = {
+                        "žreb": "V primeru, da imata dve popolni in samostojni ponudbi enako končno skupno ponudbeno vrednost, bo naročnik med njima izbral ponudbo izbranega ponudnika z žrebom.",
+                        "prednost po merilu": "V primeru, da imata dve popolni in samostojni ponudbi enako končno skupno ponudbeno vrednost, bo naročnik med njima izbral ponudbo izbranega ponudnika, ki je pri merilu prejela višje število točk."
+                    }
+                elif "enumLabels" in prop_details:
+                    # Use enumLabels from schema if provided
+                    display_options = prop_details["enumLabels"]
+                else:
+                    display_options = {opt: opt for opt in available_options}
                 
                 # Initialize session state if it doesn't exist
                 if session_key not in st.session_state:
@@ -426,22 +559,43 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 widget_key = f"widget_{session_key}"
                 
                 # Create radio buttons
-                selected_value = st.radio(
-                    display_label,
-                    options=available_options,
-                    index=available_options.index(st.session_state[session_key]) if st.session_state[session_key] in available_options else 0,
-                    key=widget_key,
-                    help=help_text,
-                    horizontal=True if len(available_options) <= 2 else False
-                )
+                if "tiebreakerRule" in full_key or "enumLabels" in prop_details:
+                    # Use special display for fields with custom labels
+                    selected_value = st.radio(
+                        display_label,
+                        options=available_options,
+                        format_func=lambda x: display_options.get(x, x),
+                        index=available_options.index(st.session_state[session_key]) if st.session_state[session_key] in available_options else 0,
+                        key=widget_key,
+                        help=help_text,
+                        horizontal=False  # Always vertical for long text
+                    )
+                else:
+                    selected_value = st.radio(
+                        display_label,
+                        options=available_options,
+                        index=available_options.index(st.session_state[session_key]) if st.session_state[session_key] in available_options else 0,
+                        key=widget_key,
+                        help=help_text,
+                        horizontal=True if len(available_options) <= 2 else False
+                    )
                 
                 # Sync widget value back to session state
                 if selected_value != st.session_state.get(session_key):
                     st.session_state[session_key] = selected_value
                     
             elif "enum" in prop_details:
-                # Handle dynamic filtering for mixed order component types
-                available_options = prop_details["enum"].copy()
+                # Handle dynamic population for tiebreaker criterion
+                if "tiebreakerCriterion" in full_key:
+                    # Get selected criteria labels dynamically
+                    available_options = get_selected_criteria_labels(parent_key, lot_context)
+                    
+                    if not available_options:
+                        st.info("ℹ️ Najprej izberite merila v točki A, da boste lahko določili merilo za prednost.")
+                        return
+                else:
+                    # Handle dynamic filtering for mixed order component types
+                    available_options = prop_details["enum"].copy()
                 
                 # Filter out already selected types in mixed order components
                 if (prop_name == "type" and 
@@ -768,12 +922,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 else:
                     st.info("ℹ️ Polje za nalaganje logotipov je skrito, ker niste izbrali te možnosti.")
             
-            # Special handling for criteria checkboxes - add help text
-            if parent_key == "selectionCriteria" and prop_name in get_criteria_help_text():
-                help_texts = get_criteria_help_text()
-                if prop_name in help_texts:
-                    with st.expander(f"ℹ️ O merilu: {label}", expanded=False):
-                        st.caption(help_texts[prop_name])
+            # Removed help text expanders for criteria per Story 23.2 requirements
 
 
 def render_criteria_validation(parent_key: str, lot_context: dict = None):

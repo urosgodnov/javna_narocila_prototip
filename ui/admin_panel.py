@@ -770,68 +770,91 @@ def render_logging_management_tab():
             'log_type': None
         }
     
-    # Sidebar filters
-    with st.sidebar:
-        st.markdown("### 🔍 Filtri")
+    # Filters section in main content area
+    with st.expander("🔍 Filtri", expanded=True):
+        # First row of filters
+        col1, col2, col3, col4 = st.columns(4)
         
-        # Log level filter
-        log_levels = st.multiselect(
-            "Nivo zapisov",
-            options=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-            default=st.session_state.log_filters.get('log_levels', ['ERROR', 'WARNING']),
-            key='filter_log_levels'
-        )
-        
-        # Date range filter
-        col1, col2 = st.columns(2)
         with col1:
+            # Log level filter
+            log_levels = st.multiselect(
+                "Nivo zapisov",
+                options=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                default=st.session_state.log_filters.get('log_levels', ['ERROR', 'WARNING']),
+                key='filter_log_levels'
+            )
+        
+        with col2:
+            # Date from filter
             date_from = st.date_input(
                 "Od datuma",
                 value=datetime.now().date() - timedelta(days=7),
                 key='filter_date_from'
             )
-        with col2:
+        
+        with col3:
+            # Date to filter
             date_to = st.date_input(
                 "Do datuma",
                 value=datetime.now().date(),
                 key='filter_date_to'
             )
         
-        # Search filter
-        search_query = st.text_input(
-            "Iskanje v sporočilih",
-            value=st.session_state.log_filters.get('search_query', ''),
-            key='filter_search'
-        )
+        with col4:
+            # Organization filter
+            with sqlite3.connect(database.DATABASE_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT DISTINCT organization_name FROM application_logs WHERE organization_name IS NOT NULL")
+                orgs = [row[0] for row in cursor.fetchall()]
+            
+            if orgs:
+                org_filter = st.selectbox(
+                    "Organizacija",
+                    options=['Vse'] + orgs,
+                    key='filter_org'
+                )
+                organization_name = None if org_filter == 'Vse' else org_filter
+            else:
+                organization_name = None
+                st.selectbox("Organizacija", options=['Vse'], key='filter_org')
         
-        # Organization filter
-        with sqlite3.connect(database.DATABASE_FILE) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT organization_name FROM application_logs WHERE organization_name IS NOT NULL")
-            orgs = [row[0] for row in cursor.fetchall()]
+        # Second row with search and apply button
+        col1, col2, col3 = st.columns([3, 1, 1])
         
-        if orgs:
-            org_filter = st.selectbox(
-                "Organizacija",
-                options=['Vse'] + orgs,
-                key='filter_org'
+        with col1:
+            # Search filter
+            search_query = st.text_input(
+                "Iskanje v sporočilih",
+                value=st.session_state.log_filters.get('search_query', ''),
+                key='filter_search',
+                placeholder="Vnesite iskalni niz..."
             )
-            organization_name = None if org_filter == 'Vse' else org_filter
-        else:
-            organization_name = None
         
-        # Apply filters button
-        if st.button("🔄 Uporabi filtre", type="primary", use_container_width=True):
-            st.session_state.log_filters = {
-                'log_levels': log_levels,
-                'organization_name': organization_name,
-                'date_from': date_from,
-                'date_to': date_to,
-                'search_query': search_query
-            }
-            st.rerun()
+        with col2:
+            # Apply filters button
+            if st.button("🔄 Uporabi filtre", type="primary", use_container_width=True):
+                st.session_state.log_filters = {
+                    'log_levels': log_levels,
+                    'organization_name': organization_name,
+                    'date_from': date_from,
+                    'date_to': date_to,
+                    'search_query': search_query
+                }
+                st.rerun()
+        
+        with col3:
+            # Clear filters button
+            if st.button("🗑️ Počisti filtre", use_container_width=True):
+                st.session_state.log_filters = {
+                    'log_levels': [],
+                    'organization_name': None,
+                    'date_from': datetime.now().date() - timedelta(days=7),
+                    'date_to': datetime.now().date(),
+                    'search_query': ''
+                }
+                st.rerun()
     
-    # Main content area
+    # Main content area header
     col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:

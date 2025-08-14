@@ -152,7 +152,7 @@ def display_procurements_table(procurements):
         )
         selected_id = procurement_options[selected_proc_label]
         
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             if st.button("✏️ Uredi", use_container_width=True):
@@ -195,7 +195,20 @@ def display_procurements_table(procurements):
                         del st.session_state[f"confirm_delete_{selected_id}"]
                         st.rerun()
         
+        # Second row of buttons
+        col4, col5, col6 = st.columns(3)
+        
         with col4:
+            # Story 25.2: DUMMY AI Generation button
+            if st.button("🤖 Generiraj vsebino z AI", use_container_width=True, key=f"ai_gen_{selected_id}"):
+                st.info("ℹ️ Funkcija generiranja z AI bo kmalu na voljo")
+        
+        with col5:
+            # Story 25.3: DUMMY Form Preparation button
+            if st.button("📄 Pripravi obrazce", use_container_width=True, key=f"prep_forms_{selected_id}"):
+                st.info("ℹ️ Funkcija priprave obrazcev bo kmalu na voljo")
+        
+        with col6:
             # Status change dropdown
             selected_proc = next(p for p in procurements if p['id'] == selected_id)
             current_status = selected_proc['status']

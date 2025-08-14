@@ -515,7 +515,7 @@ def render_documents_table(procurements):
             format_func=lambda x: f"#{x:04d} - {next(p['naziv'] or 'Neimenovano' for p in procurements if p['id'] == x)}"
         )
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             if st.button("✏️ Uredi", use_container_width=True):
                 st.session_state.current_page = 'form'
@@ -539,6 +539,16 @@ def render_documents_table(procurements):
                 if database.delete_procurement(selected_id):
                     st.success("Dokument izbrisan")
                     st.rerun()
+        
+        with col4:
+            # Story 25.2: DUMMY AI Generation button
+            if st.button("🤖 Generiraj vsebino z AI", use_container_width=True, key=f"ai_gen_{selected_id}"):
+                st.info("ℹ️ Funkcija generiranja z AI bo kmalu na voljo")
+        
+        with col5:
+            # Story 25.3: DUMMY Form Preparation button
+            if st.button("📄 Pripravi obrazce", use_container_width=True, key=f"prep_forms_{selected_id}"):
+                st.info("ℹ️ Funkcija priprave obrazcev bo kmalu na voljo")
 
 def get_status_badge(status):
     """Generate HTML for status badge."""
