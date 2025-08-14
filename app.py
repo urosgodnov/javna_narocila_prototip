@@ -78,12 +78,109 @@ def validate_step(step_keys, schema):
     """Validate the fields for the current step based on 'required' keys in the schema."""
     # Story 22.3: Check if validation should run for current step
     current_step = st.session_state.get('current_step', 0)
+    
+    import logging
+    logging.info(f"validate_step called for step {current_step} with keys: {step_keys}")
+    
     if not should_validate(current_step):
         # Skip validation but show indicator
         st.info("ℹ️ Validacija preskočena za ta korak")
+        logging.info(f"Validation skipped for step {current_step}")
         return True  # Allow progression
     
     is_valid = True
+    
+    # Check for selectionCriteria validation (CPV criteria requirements)
+    for key in step_keys:
+        logging.info(f"Checking key: {key}")
+        if 'selectionCriteria' in key:
+            # Re-run validation to ensure we have the latest state
+            from utils.criteria_validation import validate_criteria_selection, check_cpv_requires_social_criteria
+            
+            logging.info(f"Found selectionCriteria in key: {key}")
+            
+            # Get CPV codes from session state - try multiple locations
+            cpv_codes_raw = ''
+            
+            # Try different possible locations for CPV codes
+            possible_cpv_keys = [
+                'projectInfo.cpvCodes',  # Found in debug output!
+                'orderType.cpvCodes',
+                'general.orderType.cpvCodes',
+                'cpvCodes',
+                'orderType.cpvCode',
+                'cpvCode'
+            ]
+            
+            for cpv_key in possible_cpv_keys:
+                value = st.session_state.get(cpv_key)
+                if value:
+                    cpv_codes_raw = value
+                    logging.info(f"Found CPV codes at '{cpv_key}': {cpv_codes_raw}")
+                    break
+            
+            logging.info(f"CPV codes raw: {cpv_codes_raw}")
+            
+            if cpv_codes_raw:
+                # Parse CPV codes
+                cpv_codes = []
+                if isinstance(cpv_codes_raw, str):
+                    for code in cpv_codes_raw.split(','):
+                        code = code.strip()
+                        if ' - ' in code:
+                            code = code.split(' - ')[0].strip()
+                        if code:
+                            cpv_codes.append(code)
+                
+                logging.info(f"Parsed CPV codes: {cpv_codes}")
+                
+                # Get selected criteria - handle both regular and general prefixed keys
+                # Based on debug output, keys are like: general.selectionCriteria.price
+                selected_criteria = {
+                    'price': st.session_state.get(f"general.{key}.price", st.session_state.get(f"{key}.price", False)),
+                    'additionalReferences': st.session_state.get(f"general.{key}.additionalReferences", st.session_state.get(f"{key}.additionalReferences", False)),
+                    'additionalTechnicalRequirements': st.session_state.get(f"general.{key}.additionalTechnicalRequirements", st.session_state.get(f"{key}.additionalTechnicalRequirements", False)),
+                    'shorterDeadline': st.session_state.get(f"general.{key}.shorterDeadline", st.session_state.get(f"{key}.shorterDeadline", False)),
+                    'longerWarranty': st.session_state.get(f"general.{key}.longerWarranty", st.session_state.get(f"{key}.longerWarranty", False)),
+                    'environmentalCriteria': st.session_state.get(f"general.{key}.environmentalCriteria", st.session_state.get(f"{key}.environmentalCriteria", False)),
+                    'socialCriteria': st.session_state.get(f"general.{key}.socialCriteria", st.session_state.get(f"{key}.socialCriteria", False)),
+                }
+                logging.info(f"Selected criteria: price={selected_criteria['price']}, socialCriteria={selected_criteria['socialCriteria']}")
+                
+                # Validate
+                validation_result = validate_criteria_selection(cpv_codes, selected_criteria)
+                logging.info(f"Validation result: is_valid={validation_result.is_valid}")
+                
+                # Update validation state
+                validation_key = f"{key}_validation"
+                st.session_state[validation_key] = validation_result.is_valid
+                
+                # Check if override is enabled
+                override_key = f"{validation_key}_override"
+                is_overridden = st.session_state.get(override_key, False)
+                logging.info(f"Override enabled: {is_overridden}")
+                
+                if not validation_result.is_valid and not is_overridden:
+                    logging.info("Validation failed - blocking navigation")
+                    # Store validation failure in session state
+                    st.session_state['cpv_validation_failed'] = True
+                    st.session_state['cpv_validation_messages'] = validation_result.messages
+                    
+                    # Show only the main validation message (not duplicates)
+                    # The validation_result.messages already contains the message about CPV requiring social criteria
+                    if validation_result.messages:
+                        # Show just the first/main message as it's already comprehensive
+                        st.error(validation_result.messages[0])
+                    
+                    is_valid = False
+                else:
+                    # Clear validation failure if it passes
+                    if 'cpv_validation_failed' in st.session_state:
+                        del st.session_state['cpv_validation_failed']
+                    if 'cpv_validation_messages' in st.session_state:
+                        del st.session_state['cpv_validation_messages']
+    
+    # Check required fields
     for key in step_keys:
         original_key = key
         if key.startswith('lot_'):
@@ -105,6 +202,8 @@ def validate_step(step_keys, schema):
                     except KeyError:
                         # Failsafe if schema is structured unexpectedly
                         pass
+    
+    logging.info(f"validate_step returning: {is_valid}")
     return is_valid
 
 def render_main_form():
@@ -326,6 +425,18 @@ def render_main_form():
         
         # Story 22.2: Add per-step validation toggle
         render_step_validation_toggle(st.session_state.current_step)
+        
+        # Show persistent navigation error if validation failed
+        if st.session_state.get('navigation_blocked', False):
+            if st.session_state.get('navigation_blocked_step') == st.session_state.current_step:
+                st.error("❌ Navigacija blokirana zaradi neuspešne validacije. Prosimo, popravite napake zgoraj.")
+                # Show specific CPV validation errors if they exist
+                if st.session_state.get('cpv_validation_failed', False):
+                    messages = st.session_state.get('cpv_validation_messages', [])
+                    for msg in messages:
+                        st.error(f"• {msg}")
+                # Clear the flag after showing it once
+                st.session_state['navigation_blocked'] = False
 
         # Enhanced Navigation buttons (outside form to avoid Enter key issues)
         render_navigation_buttons(current_step_keys)
@@ -992,12 +1103,23 @@ def render_navigation_buttons(current_step_keys):
                 type="primary",
                 use_container_width=True
             ):
+                import logging
+                logging.info(f"Next button clicked at step {st.session_state.current_step}")
                 # Enhanced validation can be added here
-                if validate_step(current_step_keys, st.session_state.schema):
+                validation_passed = validate_step(current_step_keys, st.session_state.schema)
+                logging.info(f"Validation result: {validation_passed}")
+                
+                if validation_passed:
+                    logging.info("Navigation allowed - moving to next step")
                     # Set navigation flag for all form fields to prevent auto-selection triggers
                     _set_navigation_flags()
                     st.session_state.current_step += 1
                     st.rerun()
+                else:
+                    logging.info("Navigation blocked by validation")
+                    # Store validation error in session state to persist it
+                    st.session_state['navigation_blocked'] = True
+                    st.session_state['navigation_blocked_step'] = st.session_state.current_step
         else:
             button_text = "💾 Posodobi naročilo" if st.session_state.edit_mode else f"📄 {get_text('submit_button')}"
             if st.button(

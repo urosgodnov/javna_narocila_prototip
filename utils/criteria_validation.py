@@ -75,6 +75,43 @@ def check_cpv_requires_additional_criteria(cpv_codes: List[str]) -> Dict[str, Di
     return result
 
 
+def check_cpv_requires_social_criteria(cpv_codes: List[str]) -> Dict[str, Dict]:
+    """
+    Check which CPV codes have 'Merila - socialna merila' requirements.
+    
+    Args:
+        cpv_codes: List of CPV codes to check
+        
+    Returns:
+        Dictionary with CPV codes that require social criteria
+        Format: {cpv_code: {'code': str, 'description': str, 'restriction': str}}
+    """
+    if not cpv_codes:
+        return {}
+    
+    # Get the 'Merila - socialna merila' criteria type
+    social_criteria_type = criteria_manager.get_criteria_type_by_name("Merila - socialna merila")
+    if not social_criteria_type:
+        return {}
+    
+    # Get all CPV codes with social criteria requirements
+    social_codes = criteria_manager.get_cpv_for_criteria(social_criteria_type['id'])
+    
+    # Find intersection with provided CPV codes
+    result = {}
+    for code in cpv_codes:
+        if code in social_codes:
+            cpv_info = get_cpv_info(code)
+            if cpv_info:
+                result[code] = {
+                    'code': code,
+                    'description': cpv_info['description'],
+                    'restriction': 'Socialna merila so obvezna'
+                }
+    
+    return result
+
+
 def validate_criteria_selection(cpv_codes: List[str], selected_criteria: Dict) -> ValidationResult:
     """
     Validate if selected criteria meet requirements for given CPV codes.
@@ -92,10 +129,16 @@ def validate_criteria_selection(cpv_codes: List[str], selected_criteria: Dict) -
         # No CPV codes selected, any criteria selection is valid
         return result
     
-    # Check which CPV codes have restrictions
+    # Check which CPV codes have price restrictions
     restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
     
-    if not restricted_cpv:
+    # Check which CPV codes require social criteria
+    social_cpv = check_cpv_requires_social_criteria(cpv_codes)
+    
+    # Combine all restrictions
+    all_restricted = {**restricted_cpv, **social_cpv}
+    
+    if not all_restricted:
         # No restrictions for selected CPV codes
         return result
     
@@ -118,8 +161,11 @@ def validate_criteria_selection(cpv_codes: List[str], selected_criteria: Dict) -
         for criterion in non_price_criteria
     )
     
-    # Validation fails if price is selected and no other criteria
-    if price_selected and not has_other_criteria:
+    # Check if social criteria is selected
+    social_selected = selected_criteria.get('socialCriteria', False)
+    
+    # Validation for price restrictions
+    if restricted_cpv and price_selected and not has_other_criteria:
         result.is_valid = False
         result.restricted_cpv_codes = list(restricted_cpv.values())
         
@@ -136,8 +182,31 @@ def validate_criteria_selection(cpv_codes: List[str], selected_criteria: Dict) -
         )
         result.required_criteria = ['Vsaj eno dodatno merilo mora biti izbrano']
     
+    # Validation for social criteria requirement
+    if social_cpv and not social_selected:
+        result.is_valid = False
+        if not result.restricted_cpv_codes:
+            result.restricted_cpv_codes = []
+        result.restricted_cpv_codes.extend(list(social_cpv.values()))
+        
+        # Create user-friendly message
+        cpv_list = [f"{code}" for code in social_cpv.keys()]
+        if len(cpv_list) > 3:
+            cpv_display = ", ".join(cpv_list[:3]) + f" in še {len(cpv_list) - 3} drugih"
+        else:
+            cpv_display = ", ".join(cpv_list)
+        
+        result.messages.append(
+            f"Izbrane CPV kode ({cpv_display}) zahtevajo vključitev socialnih meril. "
+            f"Prosimo, označite 'Socialna merila'."
+        )
+        if 'Socialna merila morajo biti vključena' not in (result.required_criteria or []):
+            if not result.required_criteria:
+                result.required_criteria = []
+            result.required_criteria.append('Socialna merila morajo biti vključena')
+    
     # Also check if no criteria at all are selected when we have restricted CPV codes
-    elif not price_selected and not has_other_criteria and restricted_cpv:
+    elif not price_selected and not has_other_criteria and all_restricted:
         # Warning: CPV codes with restrictions but no criteria selected
         result.messages.append(
             "Opozorilo: Izbrane CPV kode imajo posebne zahteve glede meril. "
@@ -167,12 +236,20 @@ def get_validation_summary(cpv_codes: List[str]) -> Dict:
         return summary
     
     restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
+    social_cpv = check_cpv_requires_social_criteria(cpv_codes)
     
     if restricted_cpv:
         summary['has_restrictions'] = True
-        summary['restricted_count'] = len(restricted_cpv)
+        summary['restricted_count'] += len(restricted_cpv)
         summary['rules'].append(
             f"Dodatna merila poleg cene obvezna ({len(restricted_cpv)} kod)"
+        )
+    
+    if social_cpv:
+        summary['has_restrictions'] = True
+        summary['restricted_count'] += len(social_cpv)
+        summary['rules'].append(
+            f"Socialna merila obvezna ({len(social_cpv)} kod)"
         )
     
     return summary

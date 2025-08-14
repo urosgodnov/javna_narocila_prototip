@@ -9,6 +9,7 @@ from ui.components.cpv_selector import render_cpv_selector
 from utils.criteria_validation import (
     validate_criteria_selection, 
     check_cpv_requires_additional_criteria,
+    check_cpv_requires_social_criteria,
     get_validation_summary
 )
 from utils.criteria_suggestions import (
@@ -249,7 +250,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context)
                 
                 # Add validation after rendering selectionCriteria section
-                if full_key == "selectionCriteria":
+                if "selectionCriteria" in full_key or full_key == "selectionCriteria":
                     render_criteria_validation(full_key, lot_context)
         
         elif prop_type == "array":
@@ -793,7 +794,22 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
     
     # Get current CPV codes from session state
     cpv_key = get_lot_scoped_key("orderDescription.cpvCodes", lot_context) if lot_context else "orderDescription.cpvCodes"
-    cpv_codes = st.session_state.get(cpv_key, [])
+    cpv_codes_raw = st.session_state.get(cpv_key, [])
+    
+    # Convert string to list if needed
+    if isinstance(cpv_codes_raw, str):
+        # Parse comma-separated CPV codes
+        cpv_codes = []
+        for code in cpv_codes_raw.split(','):
+            code = code.strip()
+            # Remove any description if present (format: "50700000-2 - Description")
+            if ' - ' in code:
+                code = code.split(' - ')[0].strip()
+            if code:
+                cpv_codes.append(code)
+    else:
+        cpv_codes = cpv_codes_raw if cpv_codes_raw else []
+    
     
     if not cpv_codes:
         return  # No validation needed without CPV codes
@@ -819,9 +835,10 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
     
     # Check if we have restricted CPV codes
     restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
+    social_cpv = check_cpv_requires_social_criteria(cpv_codes)
     
     # Story 21.3: Enhanced guidance
-    if restricted_cpv:
+    if restricted_cpv or social_cpv:
         st.markdown("---")
         
         # Educational info box
