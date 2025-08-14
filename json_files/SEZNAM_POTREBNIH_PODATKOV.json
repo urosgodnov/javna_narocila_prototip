@@ -59,7 +59,11 @@
                                 "title": "Zakoniti zastopnik (ime in priimek)"
                             }
                         },
-                        "required": ["name", "address", "legalRepresentative"]
+                        "required": [
+                            "name",
+                            "address",
+                            "legalRepresentative"
+                        ]
                     }
                 },
                 "wantsLogo": {
@@ -150,7 +154,10 @@
                     "description": "Ta podatek ni obvezen za odprti postopek.",
                     "render_if": {
                         "field": "submissionProcedure.procedure",
-                        "not_in": ["odprti postopek", "vseeno"]
+                        "not_in": [
+                            "odprti postopek",
+                            "vseeno"
+                        ]
                     }
                 }
             }
@@ -170,12 +177,12 @@
             "title": "Sklopi javnega naročila",
             "type": "array",
             "items": {
-                "type": "object", 
+                "type": "object",
                 "title": "Sklop",
                 "properties": {
-                    "name": { 
-                        "type": "string", 
-                        "title": "Naziv sklopa" 
+                    "name": {
+                        "type": "string",
+                        "title": "Naziv sklopa"
                     },
                     "orderType": {
                         "type": "object",
@@ -183,7 +190,9 @@
                         "$ref": "#/$defs/orderTypeProperties"
                     }
                 },
-                "required": ["name"]
+                "required": [
+                    "name"
+                ]
             },
             "render_if": {
                 "field": "lotsInfo.hasLots",
@@ -208,7 +217,10 @@
                 "hasSpecifications": {
                     "type": "string",
                     "title": "Naročnik že ima pripravljene tehnične zahteve / specifikacije",
-                    "enum": ["da", "ne"],
+                    "enum": [
+                        "da",
+                        "ne"
+                    ],
                     "default": ""
                 },
                 "noSpecificationsWarning": {
@@ -238,7 +250,9 @@
                                 "title": "Naložite dokument"
                             }
                         },
-                        "required": ["name"]
+                        "required": [
+                            "name"
+                        ]
                     },
                     "render_if": {
                         "field": "technicalSpecifications.hasSpecifications",
@@ -255,29 +269,34 @@
                 "type": {
                     "type": "string",
                     "title": "Prosimo navedite rok izvedbe oziroma trajanje javnega naročila in izberite eno od možnosti",
-                    "enum": ["datumsko", "v dnevih", "v mesecih", "v letih"],
+                    "enum": [
+                        "datumsko",
+                        "v dnevih",
+                        "v mesecih",
+                        "v letih"
+                    ],
                     "default": ""
                 },
-                "startDate": { 
-                    "type": "string", 
-                    "format": "date", 
+                "startDate": {
+                    "type": "string",
+                    "format": "date",
                     "title": "Od",
                     "render_if": {
                         "field": "executionDeadline.type",
                         "value": "datumsko"
                     }
                 },
-                "endDate": { 
-                    "type": "string", 
-                    "format": "date", 
+                "endDate": {
+                    "type": "string",
+                    "format": "date",
                     "title": "Do",
                     "render_if": {
                         "field": "executionDeadline.type",
                         "value": "datumsko"
                     }
                 },
-                "days": { 
-                    "type": "integer", 
+                "days": {
+                    "type": "integer",
                     "minimum": 1,
                     "title": "Dni od dneva sklenitve pogodbe o izvedbi javnega naročila",
                     "render_if": {
@@ -285,8 +304,8 @@
                         "value": "v dnevih"
                     }
                 },
-                "months": { 
-                    "type": "integer", 
+                "months": {
+                    "type": "integer",
                     "minimum": 1,
                     "title": "Mesecev od dneva sklenitve pogodbe o izvedbi javnega naročila",
                     "render_if": {
@@ -294,8 +313,8 @@
                         "value": "v mesecih"
                     }
                 },
-                "years": { 
-                    "type": "integer", 
+                "years": {
+                    "type": "integer",
                     "minimum": 1,
                     "title": "Let od dneva sklenitve pogodbe o izvedbi javnega naročila",
                     "render_if": {
@@ -304,7 +323,9 @@
                     }
                 }
             },
-            "required": ["type"]
+            "required": [
+                "type"
+            ]
         },
         "priceInfo": {
             "title": "Informacije o ceni",
@@ -348,7 +369,11 @@
                         "type": {
                             "type": "string",
                             "title": "Izberite eno od možnosti",
-                            "enum": ["v dnevih", "v mesecih", "v letih"],
+                            "enum": [
+                                "v dnevih",
+                                "v mesecih",
+                                "v letih"
+                            ],
                             "default": ""
                         },
                         "days": {
@@ -383,16 +408,6 @@
                 "hasOfferBillOfQuantities": {
                     "type": "boolean",
                     "title": "Naročnik že ima pripravljen ponudbeni predračun"
-                },
-                "noOfferBillOfQuantitiesWarning": {
-                    "type": "object",
-                    "title": "Opozorilo",
-                    "render_if": {
-                        "field": "priceInfo.hasOfferBillOfQuantities",
-                        "value": false
-                    },
-                    "properties": {},
-                    "description": "Razpisna dokumentacija bo pripravljena brez upoštevanja terminologije v ponudbenem predračunu naročnika. Za pripravo jasne in celovite dokumentacije ter pravno varnost je ključno, da je terminologija v vseh dokumentih v postopku oddaje javnega naročila medsebojno usklajena. Ko boste imeli pripravljen ponudbeni predračun, vam z veseljem ponujamo pomoč pri končnem pregledu in uskladitvi celotnega kompleta dokumentacije. Na ta način bomo skupaj zagotovili, da bo postopek za vas potekal kar se da tekoče in brez nepotrebnih zapletov."
                 },
                 "noOfferBillOfQuantitiesWarning": {
                     "type": "object",
@@ -463,7 +478,10 @@
                                 "title": "Ura ogleda"
                             }
                         },
-                        "required": ["date", "time"]
+                        "required": [
+                            "date",
+                            "time"
+                        ]
                     },
                     "minItems": 1,
                     "render_if": {
@@ -514,7 +532,7 @@
                         "field": "submissionProcedure.procedure",
                         "not_in": [
                             "konkurenčni dialog",
-                            "partnerstvo za inovacije", 
+                            "partnerstvo za inovacije",
                             "konkurenčni postopek s pogajanji",
                             "postopek s pogajanji brez predhodne objave",
                             "postopek naročila male vrednosti"
@@ -529,7 +547,7 @@
                         "field": "submissionProcedure.procedure",
                         "not_in": [
                             "odprti postopek",
-                            "omejeni postopek", 
+                            "omejeni postopek",
                             "vseeno"
                         ]
                     }
@@ -537,7 +555,10 @@
                 "negotiationSubject": {
                     "type": "string",
                     "title": "V zvezi s čim bi se želeli pogajati?",
-                    "enum": ["cena", "drugo"],
+                    "enum": [
+                        "cena",
+                        "drugo"
+                    ],
                     "default": "",
                     "render_if": {
                         "field": "negotiationsInfo.hasNegotiations",
@@ -555,7 +576,10 @@
                 "negotiationRounds": {
                     "type": "string",
                     "title": "Označite koliko krogov pogajanj boste izvedli",
-                    "enum": ["1 krog", "več krogov, ne vem še koliko"],
+                    "enum": [
+                        "1 krog",
+                        "več krogov, ne vem še koliko"
+                    ],
                     "default": "",
                     "render_if": {
                         "field": "negotiationsInfo.hasNegotiations",
@@ -597,7 +621,7 @@
                     "title": "Prosimo označite vse neobvezne razloge za izključitev, ki jih želite vključiti v dokumentacijo:",
                     "enum": [
                         "specifični razlogi",
-                        "ne želimo vključiti neobveznih razlogov za izključitev", 
+                        "ne želimo vključiti neobveznih razlogov za izključitev",
                         "vseeno nam je"
                     ],
                     "default": ""
@@ -675,7 +699,7 @@
                     }
                 },
                 "contractDeficienciesDetails": {
-                    "type": "string", 
+                    "type": "string",
                     "title": "→ Napišite kaj štejete za precejšnje ali stalne pomanjkljivosti:",
                     "description": "Definirajte konkretne primere pomanjkljivosti pri izpolnjevanju pogodbenih obveznosti.",
                     "render_if": {
@@ -770,39 +794,62 @@
             "title": "Sklepanje pogodbe",
             "type": "object",
             "properties": {
-                "sectionA_title": { "type": "string", "default": "A. IZBIRA NAČINA SKLENITVE", "title": "A. IZBIRA NAČINA SKLENITVE", "readonly": true },
-                "type": { 
-                    "type": "string", 
-                    "enum": ["pogodba", "okvirni sporazum"], 
+                "sectionA_title": {
+                    "type": "string",
+                    "default": "A. IZBIRA NAČINA SKLENITVE",
+                    "title": "A. IZBIRA NAČINA SKLENITVE",
+                    "readonly": true
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "pogodba",
+                        "okvirni sporazum"
+                    ],
                     "title": "Vrsta sklenitve",
                     "description": "Izberite način sklenitve javnega naročila"
                 },
                 "contractPeriodType": {
                     "type": "string",
-                    "enum": ["z veljavnostjo", "za obdobje od-do"],
+                    "enum": [
+                        "z veljavnostjo",
+                        "za obdobje od-do"
+                    ],
                     "title": "Način določitve obdobja pogodbe",
-                    "render_if": { "field": "contractInfo.type", "value": "pogodba" }
+                    "render_if": {
+                        "field": "contractInfo.type",
+                        "value": "pogodba"
+                    }
                 },
                 "contractValidity": {
                     "type": "string",
                     "title": "Veljavnost pogodbe",
                     "description": "Navedite za kakšno obdobje bi želeli skleniti pogodbo",
-                    "render_if": { "field": "contractInfo.contractPeriodType", "value": "z veljavnostjo" }
+                    "render_if": {
+                        "field": "contractInfo.contractPeriodType",
+                        "value": "z veljavnostjo"
+                    }
                 },
                 "contractDateFrom": {
                     "type": "string",
                     "format": "date",
                     "title": "Obdobje od",
-                    "render_if": { "field": "contractInfo.contractPeriodType", "value": "za obdobje od-do" }
+                    "render_if": {
+                        "field": "contractInfo.contractPeriodType",
+                        "value": "za obdobje od-do"
+                    }
                 },
                 "contractDateTo": {
                     "type": "string",
                     "format": "date",
                     "title": "Obdobje do",
-                    "render_if": { "field": "contractInfo.contractPeriodType", "value": "za obdobje od-do" }
+                    "render_if": {
+                        "field": "contractInfo.contractPeriodType",
+                        "value": "za obdobje od-do"
+                    }
                 },
-                "frameworkAgreementType": { 
-                    "type": "string", 
+                "frameworkAgreementType": {
+                    "type": "string",
                     "enum": [
                         "en_brez_konkurence",
                         "en_z_konkurenco",
@@ -819,24 +866,41 @@
                     },
                     "format": "radio",
                     "title": "Vrsta okvirnega sporazuma",
-                    "render_if": { "field": "contractInfo.type", "value": "okvirni sporazum" }
+                    "render_if": {
+                        "field": "contractInfo.type",
+                        "value": "okvirni sporazum"
+                    }
                 },
-                "frameworkDuration": { 
-                    "type": "string", 
+                "frameworkDuration": {
+                    "type": "string",
                     "title": "Obdobje okvirnega sporazuma",
                     "description": "Navedite za kakšno obdobje bi želeli skleniti okvirni sporazum (max. 4 leta)",
-                    "render_if": { "field": "contractInfo.type", "value": "okvirni sporazum" },
-                    "validation": { "maxYears": 4 }
+                    "render_if": {
+                        "field": "contractInfo.type",
+                        "value": "okvirni sporazum"
+                    },
+                    "validation": {
+                        "maxYears": 4
+                    }
                 },
-                "competitionFrequency": { 
-                    "type": "string", 
+                "competitionFrequency": {
+                    "type": "string",
                     "format": "textarea",
                     "title": "Pogostost odpiranja konkurence",
                     "description": "Navedite kako pogosto želite odpirati konkurenco",
                     "render_if_any": [
-                        { "field": "contractInfo.frameworkAgreementType", "value": "en_z_konkurenco" },
-                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_z_konkurenco" },
-                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_deloma" }
+                        {
+                            "field": "contractInfo.frameworkAgreementType",
+                            "value": "en_z_konkurenco"
+                        },
+                        {
+                            "field": "contractInfo.frameworkAgreementType",
+                            "value": "vec_z_konkurenco"
+                        },
+                        {
+                            "field": "contractInfo.frameworkAgreementType",
+                            "value": "vec_deloma"
+                        }
                     ]
                 },
                 "selectedCriteriaInfo": {
@@ -845,34 +909,63 @@
                     "title": "Merila pri odpiranju konkurence",
                     "description": "Pri odpiranju konkurence bodo uporabljena izbrana merila iz prejšnje točke",
                     "render_if_any": [
-                        { "field": "contractInfo.frameworkAgreementType", "value": "en_z_konkurenco" },
-                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_z_konkurenco" },
-                        { "field": "contractInfo.frameworkAgreementType", "value": "vec_deloma" }
+                        {
+                            "field": "contractInfo.frameworkAgreementType",
+                            "value": "en_z_konkurenco"
+                        },
+                        {
+                            "field": "contractInfo.frameworkAgreementType",
+                            "value": "vec_z_konkurenco"
+                        },
+                        {
+                            "field": "contractInfo.frameworkAgreementType",
+                            "value": "vec_deloma"
+                        }
                     ]
                 },
-                "sectionB_title": { "type": "string", "default": "B. PODALJŠANJE POGODBE", "title": "B. PODALJŠANJE POGODBE", "readonly": true },
-                "canBeExtended": { 
+                "sectionB_title": {
                     "type": "string",
-                    "enum": ["ne", "da"],
+                    "default": "B. PODALJŠANJE POGODBE",
+                    "title": "B. PODALJŠANJE POGODBE",
+                    "readonly": true
+                },
+                "canBeExtended": {
+                    "type": "string",
+                    "enum": [
+                        "ne",
+                        "da"
+                    ],
                     "format": "radio",
                     "title": "Ali je možno podaljšanje pogodbe?",
                     "description": "Ali naročnik predvideva možnost podaljšanja pogodbe?",
                     "default": "ne"
                 },
-                "extensionReasons": { 
-                    "type": "string", 
+                "extensionReasons": {
+                    "type": "string",
                     "format": "textarea",
                     "title": "Razlogi za podaljšanje",
                     "description": "Navedite v katerih primerih oz. iz katerih razlogov lahko pride do podaljšanja pogodbe",
-                    "render_if": { "field": "contractInfo.canBeExtended", "value": "da" },
-                    "required_if": { "field": "contractInfo.canBeExtended", "value": "da" }
+                    "render_if": {
+                        "field": "contractInfo.canBeExtended",
+                        "value": "da"
+                    },
+                    "required_if": {
+                        "field": "contractInfo.canBeExtended",
+                        "value": "da"
+                    }
                 },
                 "extensionDuration": {
                     "type": "string",
                     "title": "Trajanje podaljšanja",
                     "description": "Navedite za koliko časa bi v navedenih primerih želeli podaljšati pogodbo",
-                    "render_if": { "field": "contractInfo.canBeExtended", "value": "da" },
-                    "required_if": { "field": "contractInfo.canBeExtended", "value": "da" }
+                    "render_if": {
+                        "field": "contractInfo.canBeExtended",
+                        "value": "da"
+                    },
+                    "required_if": {
+                        "field": "contractInfo.canBeExtended",
+                        "value": "da"
+                    }
                 }
             }
         },
@@ -890,36 +983,45 @@
                 "type": {
                     "type": "string",
                     "title": "Vrsta javnega naročila",
-                    "enum": ["blago", "storitve", "gradnje", "mešano javno naročilo"],
+                    "enum": [
+                        "blago",
+                        "storitve",
+                        "gradnje",
+                        "mešano javno naročilo"
+                    ],
                     "default": "blago"
                 },
-                
-                "estimatedValue": { 
-                    "type": "number", 
-                    "title": "Ocenjena vrednost javnega naročila (EUR brez DDV)", 
+                "estimatedValue": {
+                    "type": "number",
+                    "title": "Ocenjena vrednost javnega naročila (EUR brez DDV)",
                     "description": "Kako je potrebno izračunati ocenjeno vrednost... (24. člen ZJN-3)",
                     "render_if": {
                         "field_parent": "type",
-                        "not_in": ["mešano javno naročilo"]
+                        "not_in": [
+                            "mešano javno naročilo"
+                        ]
                     }
                 },
-                "guaranteedFunds": { 
-                    "type": "number", 
+                "guaranteedFunds": {
+                    "type": "number",
                     "title": "Višina zagotovljenih sredstev (EUR)",
                     "render_if": {
                         "field_parent": "type",
-                        "not_in": ["mešano javno naročilo"]
+                        "not_in": [
+                            "mešano javno naročilo"
+                        ]
                     }
                 },
-                "isCofinanced": { 
-                    "type": "boolean", 
+                "isCofinanced": {
+                    "type": "boolean",
                     "title": "Javno naročilo je sofinancirano",
                     "render_if": {
                         "field_parent": "type",
-                        "not_in": ["mešano javno naročilo"]
+                        "not_in": [
+                            "mešano javno naročilo"
+                        ]
                     }
                 },
-                
                 "cofinancers": {
                     "type": "array",
                     "title": "Sofinancerji",
@@ -927,61 +1029,67 @@
                         "type": "object",
                         "title": "Sofinancer",
                         "properties": {
-                            "name": { 
-                                "type": "string", 
-                                "title": "Polni naziv in naslov sofinancerja" 
+                            "name": {
+                                "type": "string",
+                                "title": "Polni naziv in naslov sofinancerja"
                             },
-                            "program": { 
-                                "type": "string", 
-                                "title": "Naziv, področje in oznaka programa/projekta" 
+                            "program": {
+                                "type": "string",
+                                "title": "Naziv, področje in oznaka programa/projekta"
                             },
-                            "logo": { 
-                                "type": "string", 
-                                "format": "file", 
-                                "title": "Logotipe sofinancerja" 
+                            "logo": {
+                                "type": "string",
+                                "format": "file",
+                                "title": "Logotipe sofinancerja"
                             },
-                            "specialRequirements": { 
-                                "type": "string", 
-                                "format": "textarea", 
-                                "title": "Posebne zahteve sofinancerja" 
+                            "specialRequirements": {
+                                "type": "string",
+                                "format": "textarea",
+                                "title": "Posebne zahteve sofinancerja"
                             }
                         },
-                        "required": ["name", "program"]
+                        "required": [
+                            "name",
+                            "program"
+                        ]
                     },
                     "render_if": {
                         "field_parent": "isCofinanced",
                         "value": true
                     }
                 },
-                
-                "deliveryType": { 
-                    "type": "string", 
+                "deliveryType": {
+                    "type": "string",
                     "title": "Vrsta dobave",
-                    "enum": ["enkratna dobava", "sukcesivne dobave"],
+                    "enum": [
+                        "enkratna dobava",
+                        "sukcesivne dobave"
+                    ],
                     "render_if": {
                         "field_parent": "type",
                         "value": "blago"
                     }
                 },
-                "includeZJN3Obligations": { 
-                    "type": "boolean", 
+                "includeZJN3Obligations": {
+                    "type": "boolean",
                     "title": "Dokumentacija o oddaji javnega naročila naj vsebuje obveznosti iz 94. člena ZJN-3 (npr. nominacijo podizvajalcev)",
                     "render_if": {
                         "field_parent": "type",
                         "value": "blago"
                     }
                 },
-                
-                "serviceType": { 
-                    "type": "string", 
+                "serviceType": {
+                    "type": "string",
                     "title": "Vrsta storitve",
-                    "enum": ["enkratna", "ponavljajoče se storitve"],
+                    "enum": [
+                        "enkratna",
+                        "ponavljajoče se storitve"
+                    ],
                     "render_if": {
                         "field_parent": "type",
                         "value": "storitve"
                     }
                 },
-                
                 "mixedOrderComponents": {
                     "type": "array",
                     "title": "Postavke mešanega javnega naročila",
@@ -992,7 +1100,11 @@
                             "type": {
                                 "type": "string",
                                 "title": "Vrsta postavke",
-                                "enum": ["blago", "storitve", "gradnje"]
+                                "enum": [
+                                    "blago",
+                                    "storitve",
+                                    "gradnje"
+                                ]
                             },
                             "description": {
                                 "type": "string",
@@ -1017,52 +1129,66 @@
                                     "type": "object",
                                     "title": "Sofinancer",
                                     "properties": {
-                                        "name": { 
-                                            "type": "string", 
-                                            "title": "Polni naziv in naslov sofinancerja" 
+                                        "name": {
+                                            "type": "string",
+                                            "title": "Polni naziv in naslov sofinancerja"
                                         },
-                                        "program": { 
-                                            "type": "string", 
-                                            "title": "Naziv, področje in oznaka programa/projekta" 
+                                        "program": {
+                                            "type": "string",
+                                            "title": "Naziv, področje in oznaka programa/projekta"
                                         },
-                                        "logo": { 
-                                            "type": "string", 
-                                            "format": "file", 
-                                            "title": "Logotipe sofinancerja" 
+                                        "logo": {
+                                            "type": "string",
+                                            "format": "file",
+                                            "title": "Logotipe sofinancerja"
                                         },
-                                        "specialRequirements": { 
-                                            "type": "string", 
-                                            "format": "textarea", 
-                                            "title": "Posebne zahteve sofinancerja" 
+                                        "specialRequirements": {
+                                            "type": "string",
+                                            "format": "textarea",
+                                            "title": "Posebne zahteve sofinancerja"
                                         }
                                     },
-                                    "required": ["name", "program"]
+                                    "required": [
+                                        "name",
+                                        "program"
+                                    ]
                                 },
                                 "render_if": {
                                     "field_parent": "isCofinanced",
                                     "value": true
                                 }
                             },
-                            "deliveryType": { 
-                                "type": "string", 
+                            "deliveryType": {
+                                "type": "string",
                                 "title": "Vrsta dobave",
-                                "enum": ["enkratna dobava", "sukcesivne dobave"],
+                                "enum": [
+                                    "enkratna dobava",
+                                    "sukcesivne dobave"
+                                ],
                                 "render_if": {
                                     "field_parent": "type",
                                     "value": "blago"
                                 }
                             },
-                            "serviceType": { 
-                                "type": "string", 
+                            "serviceType": {
+                                "type": "string",
                                 "title": "Vrsta storitve",
-                                "enum": ["enkratna", "ponavljajoče se storitve"],
+                                "enum": [
+                                    "enkratna",
+                                    "ponavljajoče se storitve"
+                                ],
                                 "render_if": {
                                     "field_parent": "type",
                                     "value": "storitve"
                                 }
                             }
                         },
-                        "required": ["type", "description", "estimatedValue", "guaranteedFunds"]
+                        "required": [
+                            "type",
+                            "description",
+                            "estimatedValue",
+                            "guaranteedFunds"
+                        ]
                     },
                     "render_if": {
                         "field_parent": "type",
@@ -1486,7 +1612,10 @@
                             "title": "→ Navedite v kakšni višini zahtevate finančno zavarovanje za resnost ponudbe (EUR)",
                             "render_if": {
                                 "field": "financialGuarantees.fzSeriousness.instrument",
-                                "not_in": ["", null]
+                                "not_in": [
+                                    "",
+                                    null
+                                ]
                             }
                         },
                         "amountInfo": {
@@ -1496,7 +1625,10 @@
                             "description": "Višina finančnega zavarovanja za resnost ponudbe lahko znaša največ 3% ocenjene vrednosti (brez DDV).",
                             "render_if": {
                                 "field": "financialGuarantees.fzSeriousness.instrument",
-                                "not_in": ["", null]
+                                "not_in": [
+                                    "",
+                                    null
+                                ]
                             }
                         }
                     }
@@ -1565,7 +1697,10 @@
                             "title": "→ Navedite v kakšni višini zahtevate finančno zavarovanje za dobro izvedbo (EUR)",
                             "render_if": {
                                 "field": "financialGuarantees.fzPerformance.instrument",
-                                "not_in": ["", null]
+                                "not_in": [
+                                    "",
+                                    null
+                                ]
                             }
                         },
                         "amountInfo": {
@@ -1575,7 +1710,10 @@
                             "description": "Višina finančnega zavarovanja za dobro izvedbo lahko znaša največ 10% pogodbene vrednosti (brez DDV).",
                             "render_if": {
                                 "field": "financialGuarantees.fzPerformance.instrument",
-                                "not_in": ["", null]
+                                "not_in": [
+                                    "",
+                                    null
+                                ]
                             }
                         }
                     }
@@ -1644,7 +1782,10 @@
                             "title": "→ Navedite v kakšni višini zahtevate finančno zavarovanje za odpravo napak (EUR)",
                             "render_if": {
                                 "field": "financialGuarantees.fzWarranty.instrument",
-                                "not_in": ["", null]
+                                "not_in": [
+                                    "",
+                                    null
+                                ]
                             }
                         },
                         "amountInfo": {
@@ -1654,7 +1795,10 @@
                             "description": "Višina finančnega zavarovanja za odpravo napak v garancijski dobi lahko znaša največ 5% pogodbene vrednosti (brez DDV).",
                             "render_if": {
                                 "field": "financialGuarantees.fzWarranty.instrument",
-                                "not_in": ["", null]
+                                "not_in": [
+                                    "",
+                                    null
+                                ]
                             }
                         }
                     }
@@ -1903,108 +2047,6 @@
                     "type": "number",
                     "title": "Drugo merilo (točke)",
                     "minimum": 0,
-                    "render_if": {
-                        "field": "selectionCriteria.otherCriteriaCustom",
-                        "value": true
-                    }
-                },
-                "scoringHeader": {
-                    "type": "object",
-                    "title": "NAVEDITE ŠTEVILO TOČK",
-                    "properties": {},
-                    "description": "Za vsako izbrano merilo določite število točk"
-                },
-                "pricePoints": {
-                    "type": "number",
-                    "title": "Cena → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.price",
-                        "value": true
-                    }
-                },
-                "additionalReferencesPoints": {
-                    "type": "number",
-                    "title": "Dodatne reference imenovanega kadra → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.additionalReferences",
-                        "value": true
-                    }
-                },
-                "additionalTechnicalRequirementsPoints": {
-                    "type": "number",
-                    "title": "Dodatne tehnične zahteve → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.additionalTechnicalRequirements",
-                        "value": true
-                    }
-                },
-                "shorterDeadlinePoints": {
-                    "type": "number",
-                    "title": "Krajši rok izvedbe → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.shorterDeadline",
-                        "value": true
-                    }
-                },
-                "longerWarrantyPoints": {
-                    "type": "number",
-                    "title": "Garancija daljša od zahtevane → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.longerWarranty",
-                        "value": true
-                    }
-                },
-                "costEfficiencyPoints": {
-                    "type": "number",
-                    "title": "Stroškovna učinkovitost → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.costEfficiency",
-                        "value": true
-                    }
-                },
-                "socialCriteriaYoungPoints": {
-                    "type": "number",
-                    "title": "Socialna merila - Delež zaposlenih mladih → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.socialCriteriaOptions.youngEmployeesShare",
-                        "value": true
-                    }
-                },
-                "socialCriteriaElderlyPoints": {
-                    "type": "number",
-                    "title": "Socialna merila - Delež zaposlenih starejših → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.socialCriteriaOptions.elderlyEmployeesShare",
-                        "value": true
-                    }
-                },
-                "socialCriteriaStaffPoints": {
-                    "type": "number",
-                    "title": "Socialna merila - Priglašeni kader je zaposlen pri ponudniku → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.socialCriteriaOptions.registeredStaffEmployed",
-                        "value": true
-                    }
-                },
-                "socialCriteriaSalaryPoints": {
-                    "type": "number",
-                    "title": "Socialna merila - Povprečna plača priglašenega kadra → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.socialCriteriaOptions.averageSalary",
-                        "value": true
-                    }
-                },
-                "socialCriteriaOtherPoints": {
-                    "type": "number",
-                    "title": "Socialna merila - Drugo → točk",
-                    "render_if": {
-                        "field": "selectionCriteria.socialCriteriaOptions.otherSocial",
-                        "value": true
-                    }
-                },
-                "otherCriteriaCustomPoints": {
-                    "type": "number",
-                    "title": "Drugo merilo → točk",
                     "render_if": {
                         "field": "selectionCriteria.otherCriteriaCustom",
                         "value": true
