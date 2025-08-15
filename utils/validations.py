@@ -829,3 +829,268 @@ class ValidationManager:
         restricted_info['additional_required'] = check_cpv_requires_additional_criteria(cpv_codes)
         
         return len(errors) == 0, errors, warnings, restricted_info
+    
+    def validate_database_record(self, table_name: str, record: Dict[str, Any], 
+                                is_update: bool = False, record_id: int = None) -> Tuple[bool, List[str]]:
+        """
+        Validate database record before insert/update.
+        
+        Args:
+            table_name: Name of the database table
+            record: Dictionary of field values
+            is_update: Whether this is an update operation
+            record_id: ID of record being updated
+            
+        Returns:
+            Tuple of (is_valid, list_of_errors)
+        """
+        errors = []
+        
+        # Table-specific validation
+        if table_name == 'cpv_codes':
+            if not self._validate_cpv_code_format(record.get('code')):
+                errors.append("Neveljavna oblika CPV kode (npr. 12345678-9)")
+        
+        elif table_name == 'javna_narocila':
+            if record.get('vrednost', 0) < 0:
+                errors.append("Vrednost pogodbe ne more biti negativna")
+            
+            # Validate status
+            valid_statuses = ['Osnutek', 'Objavljeno', 'Zaključeno', 'Preklicano']
+            if record.get('status') and record['status'] not in valid_statuses:
+                errors.append(f"Neveljaven status. Dovoljen: {', '.join(valid_statuses)}")
+        
+        elif table_name == 'application_logs':
+            valid_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+            if record.get('log_level') not in valid_levels:
+                errors.append(f"Neveljaven nivo zapisa. Dovoljen: {', '.join(valid_levels)}")
+        
+        elif table_name == 'drafts':
+            # Validate JSON format
+            if 'form_data_json' in record:
+                try:
+                    import json
+                    if isinstance(record['form_data_json'], str):
+                        json.loads(record['form_data_json'])
+                except json.JSONDecodeError:
+                    errors.append("Neveljavna JSON oblika podatkov")
+        
+        # Foreign key validation
+        fk_errors = self._validate_foreign_keys(table_name, record)
+        errors.extend(fk_errors)
+        
+        # Unique constraint validation
+        unique_errors = self._validate_unique_constraints(table_name, record, is_update, record_id)
+        errors.extend(unique_errors)
+        
+        # Required field validation
+        required_errors = self._validate_required_database_fields(table_name, record)
+        errors.extend(required_errors)
+        
+        return len(errors) == 0, errors
+    
+    def _validate_cpv_code_format(self, code: str) -> bool:
+        """
+        Validate CPV code format.
+        
+        Args:
+            code: CPV code to validate
+            
+        Returns:
+            True if valid format
+        """
+        if not code:
+            return False
+        
+        import re
+        # CPV code format: 8 digits, hyphen, 1 check digit (e.g., 12345678-9)
+        pattern = r'^\d{8}-\d$'
+        return bool(re.match(pattern, code))
+    
+    def _validate_foreign_keys(self, table_name: str, record: Dict[str, Any]) -> List[str]:
+        """
+        Validate foreign key constraints.
+        
+        Args:
+            table_name: Name of the table
+            record: Record data
+            
+        Returns:
+            List of validation errors
+        """
+        errors = []
+        
+        # Define foreign key relationships
+        foreign_keys = {
+            'cpv_criteria': [
+                ('cpv_code', 'cpv_codes', 'code'),
+                ('criteria_type_id', 'criteria_types', 'id')
+            ],
+            'application_logs': [
+                ('organization_id', 'organizacija', 'id')
+            ]
+        }
+        
+        if table_name in foreign_keys:
+            import sqlite3
+            import database
+            
+            try:
+                with sqlite3.connect(database.DATABASE_FILE) as conn:
+                    cursor = conn.cursor()
+                    
+                    for fk_field, ref_table, ref_field in foreign_keys[table_name]:
+                        if fk_field in record and record[fk_field]:
+                            # Check if referenced record exists
+                            cursor.execute(
+                                f"SELECT COUNT(*) FROM {ref_table} WHERE {ref_field} = ?",
+                                (record[fk_field],)
+                            )
+                            
+                            if cursor.fetchone()[0] == 0:
+                                errors.append(
+                                    f"Tuji ključ kršitev: {fk_field}={record[fk_field]} "
+                                    f"ne obstaja v {ref_table}.{ref_field}"
+                                )
+            
+            except Exception as e:
+                errors.append(f"Napaka pri preverjanju tujih ključev: {str(e)}")
+        
+        return errors
+    
+    def _validate_unique_constraints(self, table_name: str, record: Dict[str, Any], 
+                                    is_update: bool = False, record_id: int = None) -> List[str]:
+        """
+        Validate unique constraints.
+        
+        Args:
+            table_name: Name of the table
+            record: Record data
+            is_update: Whether this is an update
+            record_id: ID of record being updated
+            
+        Returns:
+            List of validation errors
+        """
+        errors = []
+        
+        # Define unique fields per table
+        unique_fields = {
+            'cpv_codes': ['code'],
+            'criteria_types': ['name'],
+            'cpv_criteria': [('cpv_code', 'criteria_type_id')],  # Composite unique
+        }
+        
+        if table_name in unique_fields:
+            import sqlite3
+            import database
+            
+            try:
+                with sqlite3.connect(database.DATABASE_FILE) as conn:
+                    cursor = conn.cursor()
+                    
+                    for field in unique_fields[table_name]:
+                        if isinstance(field, tuple):
+                            # Composite unique constraint
+                            values = [record.get(f) for f in field]
+                            if all(values):
+                                where_clause = ' AND '.join([f"{f} = ?" for f in field])
+                                query = f"SELECT COUNT(*) FROM {table_name} WHERE {where_clause}"
+                                
+                                if is_update and record_id:
+                                    query += f" AND id != {record_id}"
+                                
+                                cursor.execute(query, values)
+                                
+                                if cursor.fetchone()[0] > 0:
+                                    errors.append(
+                                        f"Kombinacija {', '.join(field)} že obstaja"
+                                    )
+                        else:
+                            # Single field unique constraint
+                            if field in record and record[field]:
+                                query = f"SELECT COUNT(*) FROM {table_name} WHERE {field} = ?"
+                                
+                                if is_update and record_id:
+                                    query += f" AND id != {record_id}"
+                                
+                                cursor.execute(query, (record[field],))
+                                
+                                if cursor.fetchone()[0] > 0:
+                                    errors.append(
+                                        f"Vrednost '{record[field]}' za polje '{field}' že obstaja"
+                                    )
+            
+            except Exception as e:
+                errors.append(f"Napaka pri preverjanju unikatnosti: {str(e)}")
+        
+        return errors
+    
+    def _validate_required_database_fields(self, table_name: str, record: Dict[str, Any]) -> List[str]:
+        """
+        Validate required fields for database tables.
+        
+        Args:
+            table_name: Name of the table
+            record: Record data
+            
+        Returns:
+            List of validation errors
+        """
+        errors = []
+        
+        # Define required fields per table (excluding auto-generated fields)
+        required_fields = {
+            'drafts': ['timestamp', 'form_data_json'],
+            'javna_narocila': ['naziv', 'form_data_json'],
+            'cpv_codes': ['code', 'description'],
+            'criteria_types': ['name'],
+            'cpv_criteria': ['cpv_code', 'criteria_type_id'],
+            'organizacija': ['naziv'],
+            'application_logs': ['log_level']
+        }
+        
+        if table_name in required_fields:
+            for field in required_fields[table_name]:
+                if field not in record or not record[field]:
+                    errors.append(f"Polje '{field}' je obvezno")
+        
+        return errors
+    
+    def _validate_data_types(self, table_name: str, record: Dict[str, Any]) -> List[str]:
+        """
+        Validate data types for table fields.
+        
+        Args:
+            table_name: Name of the table
+            record: Record data
+            
+        Returns:
+            List of validation errors
+        """
+        errors = []
+        
+        # Define expected types for critical fields
+        type_definitions = {
+            'javna_narocila': {
+                'vrednost': (float, int),
+                'datum_objave': str,  # Should be date format
+            },
+            'application_logs': {
+                'retention_hours': (int,),
+                'line_number': (int,),
+            },
+            'cpv_criteria': {
+                'criteria_type_id': (int,),
+            }
+        }
+        
+        if table_name in type_definitions:
+            for field, expected_types in type_definitions[table_name].items():
+                if field in record and record[field] is not None:
+                    if not isinstance(record[field], expected_types):
+                        errors.append(
+                            f"Polje '{field}' mora biti tipa {expected_types}"
+                        )
+        
+        return errors

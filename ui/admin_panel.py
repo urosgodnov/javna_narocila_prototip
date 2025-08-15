@@ -189,19 +189,8 @@ def render_draft_management_tab():
 
 def render_database_management_tab():
     """Render the database management tab content."""
-    with st.container():
-        st.markdown("### 🗄️ Upravljanje zbirk ChromaDB")
-        
-        st.info("🚧 Funkcionalnost upravljanja zbirk ChromaDB še ni implementirana.")
-        
-        # Placeholder for future ChromaDB management features
-        st.markdown("""
-        **Načrtovane funkcionalnosti:**
-        - 📊 Pregled obstoječih zbirk
-        - ➕ Dodajanje novih zbirk
-        - 🗑️ Brisanje zbirk
-        - 🔄 Sinhronizacija podatkov
-        """, unsafe_allow_html=True)
+    from ui.database_manager import render_database_manager
+    render_database_manager()
 
 def render_organization_management_tab():
     """Render the organization management tab content."""
