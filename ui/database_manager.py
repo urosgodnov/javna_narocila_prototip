@@ -31,9 +31,175 @@ TABLE_NAMES = {
     'application_logs': 'Dnevniški zapisi'
 }
 
+def inject_custom_css():
+    """Inject custom CSS for beautiful UI."""
+    st.markdown("""
+    <style>
+        /* Gradient headers */
+        .db-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem;
+            border-radius: 10px;
+            color: white;
+            margin-bottom: 2rem;
+        }
+        
+        /* Card containers */
+        .db-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+            transition: transform 0.2s;
+        }
+        
+        .db-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        /* Enhanced table styling */
+        .dataframe {
+            border: none !important;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .dataframe thead th {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            padding: 12px !important;
+        }
+        
+        .dataframe tbody tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .dataframe tbody tr:hover {
+            background-color: #e9ecef !important;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .dataframe tbody td {
+            padding: 10px !important;
+        }
+        
+        /* Enhanced buttons */
+        .stButton > button {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            font-weight: 500;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* Success/Error messages */
+        .success-msg {
+            background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+            padding: 1rem;
+            border-radius: 5px;
+            color: #155724;
+            font-weight: 500;
+            margin: 1rem 0;
+        }
+        
+        .error-msg {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            padding: 1rem;
+            border-radius: 5px;
+            color: #721c24;
+            font-weight: 500;
+            margin: 1rem 0;
+        }
+        
+        /* Tab styling enhancements */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            background: linear-gradient(to right, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            padding: 10px;
+            border-radius: 10px;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            background-color: transparent;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        
+        .stTabs [aria-selected="true"] {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* Metrics styling */
+        [data-testid="metric-container"] {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1rem;
+            border-radius: 10px;
+            color: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        [data-testid="metric-container"] [data-testid="metric-label"] {
+            color: rgba(255, 255, 255, 0.9) !important;
+        }
+        
+        [data-testid="metric-container"] [data-testid="metric-value"] {
+            color: white !important;
+        }
+        
+        /* Form styling */
+        .stForm {
+            background: linear-gradient(to bottom right, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        
+        /* Selectbox styling */
+        .stSelectbox > div > div {
+            background: linear-gradient(to right, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+            border-radius: 5px;
+        }
+        
+        /* Input fields */
+        .stTextInput > div > div > input,
+        .stNumberInput > div > div > input {
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            border-radius: 5px;
+            transition: border-color 0.3s;
+        }
+        
+        .stTextInput > div > div > input:focus,
+        .stNumberInput > div > div > input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
 def render_database_manager():
     """Main function called from admin_panel.py"""
     st.markdown("### 🗄️ Upravljanje podatkovne baze")
+    
+    # Inject custom CSS for beautiful UI
+    inject_custom_css()
     
     # Create main tabs
     tab1, tab2, tab3 = st.tabs(["📊 Shema baze", "📝 Podatki", "🔧 Orodja"])
@@ -45,7 +211,7 @@ def render_database_manager():
         render_table_management()
     
     with tab3:
-        st.info("🔧 Orodja za bazo podatkov")
+        render_database_tools()
 
 
 def render_schema_visualization():
@@ -825,3 +991,358 @@ def get_foreign_key_options(table_name: str) -> List[Dict[str, Any]]:
     except Exception as e:
         st.error(f"Napaka pri pridobivanju opcij: {str(e)}")
         return []
+
+
+def render_database_tools():
+    """Database maintenance and analysis tools."""
+    st.markdown("## 🔧 Orodja za bazo podatkov")
+    
+    # Add tool cards
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        <div style="
+            padding: 20px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin-bottom: 20px;
+        ">
+            <h3>🔍 Preverjanje integritete</h3>
+            <p>Preveri povezanost podatkov in tuje ključe</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("▶️ Zaženi preverjanje", key="check_integrity", use_container_width=True):
+            check_database_integrity()
+    
+    with col2:
+        st.markdown("""
+        <div style="
+            padding: 20px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            margin-bottom: 20px;
+        ">
+            <h3>📊 Statistika baze</h3>
+            <p>Pregled velikosti in uporabe baze podatkov</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("▶️ Prikaži statistiko", key="show_stats", use_container_width=True):
+            show_database_statistics()
+    
+    # Additional tools row
+    st.markdown("### 🛠️ Dodatna orodja")
+    
+    col3, col4, col5 = st.columns(3)
+    
+    with col3:
+        if st.button("🗑️ Počisti prazne zapise", key="clean_empty", use_container_width=True):
+            clean_empty_records()
+    
+    with col4:
+        if st.button("🔄 Optimiziraj bazo", key="optimize_db", use_container_width=True):
+            optimize_database()
+    
+    with col5:
+        if st.button("📥 Izvozi celotno bazo", key="export_full", use_container_width=True):
+            export_full_database()
+
+
+def check_database_integrity():
+    """Check database integrity including foreign keys and constraints."""
+    st.markdown("### 🔍 Preverjanje integritete podatkovne baze")
+    
+    integrity_issues = []
+    
+    try:
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            
+            # Check foreign key violations
+            st.info("Preverjam tuje ključe...")
+            
+            # Check cpv_criteria foreign keys
+            cursor.execute("""
+                SELECT cc.id, cc.cpv_code 
+                FROM cpv_criteria cc
+                LEFT JOIN cpv_codes c ON cc.cpv_code = c.code
+                WHERE c.code IS NULL
+            """)
+            orphaned_cpv = cursor.fetchall()
+            if orphaned_cpv:
+                integrity_issues.append(f"❌ Najdenih {len(orphaned_cpv)} zapisov v cpv_criteria z neobstoječimi CPV kodami")
+            
+            cursor.execute("""
+                SELECT cc.id, cc.criteria_type_id
+                FROM cpv_criteria cc
+                LEFT JOIN criteria_types ct ON cc.criteria_type_id = ct.id
+                WHERE ct.id IS NULL
+            """)
+            orphaned_criteria = cursor.fetchall()
+            if orphaned_criteria:
+                integrity_issues.append(f"❌ Najdenih {len(orphaned_criteria)} zapisov v cpv_criteria z neobstoječimi tipi meril")
+            
+            # Check application_logs foreign keys
+            cursor.execute("""
+                SELECT al.id, al.organization_id
+                FROM application_logs al
+                LEFT JOIN organizacija o ON al.organization_id = o.id
+                WHERE al.organization_id IS NOT NULL AND o.id IS NULL
+            """)
+            orphaned_logs = cursor.fetchall()
+            if orphaned_logs:
+                integrity_issues.append(f"❌ Najdenih {len(orphaned_logs)} zapisov v application_logs z neobstoječimi organizacijami")
+            
+            # Check for duplicate primary keys (shouldn't happen with SQLite)
+            for table in TABLES:
+                cursor.execute(f"""
+                    SELECT id, COUNT(*) as cnt
+                    FROM {table}
+                    GROUP BY id
+                    HAVING cnt > 1
+                """)
+                duplicates = cursor.fetchall()
+                if duplicates:
+                    integrity_issues.append(f"❌ Tabela {table} ima {len(duplicates)} podvojenih primarnih ključev")
+            
+            # Check for NULL values in required fields
+            required_fields = {
+                'cpv_codes': ['code', 'description'],
+                'criteria_types': ['name'],
+                'organizacija': ['naziv'],
+            }
+            
+            for table, fields in required_fields.items():
+                for field in fields:
+                    cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {field} IS NULL OR {field} = ''")
+                    null_count = cursor.fetchone()[0]
+                    if null_count > 0:
+                        integrity_issues.append(f"⚠️ Tabela {table} ima {null_count} zapisov s praznim poljem {field}")
+        
+        # Display results
+        if integrity_issues:
+            st.error(f"Najdenih {len(integrity_issues)} težav z integriteto:")
+            for issue in integrity_issues:
+                st.write(issue)
+        else:
+            st.success("✅ Integriteta baze podatkov je v redu! Ni najdenih težav.")
+            
+    except Exception as e:
+        st.error(f"Napaka pri preverjanju integritete: {str(e)}")
+
+
+def show_database_statistics():
+    """Show database statistics and usage information."""
+    st.markdown("### 📊 Statistika podatkovne baze")
+    
+    try:
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            
+            # Get database file size
+            import os
+            db_size = os.path.getsize(database.DATABASE_FILE)
+            db_size_mb = db_size / (1024 * 1024)
+            
+            # Display overall metrics
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Velikost baze", f"{db_size_mb:.2f} MB")
+            
+            with col2:
+                total_tables = len(TABLES)
+                st.metric("Število tabel", total_tables)
+            
+            with col3:
+                total_records = 0
+                for table in TABLES:
+                    cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                    total_records += cursor.fetchone()[0]
+                st.metric("Skupno zapisov", total_records)
+            
+            # Table-specific statistics
+            st.markdown("#### 📋 Statistika po tabelah")
+            
+            stats_data = []
+            for table in TABLES:
+                # Get row count
+                cursor.execute(f"SELECT COUNT(*) FROM {table}")
+                row_count = cursor.fetchone()[0]
+                
+                # Get column count
+                cursor.execute(f"PRAGMA table_info({table})")
+                col_count = len(cursor.fetchall())
+                
+                # Get last modification (if created_at exists)
+                last_modified = "N/A"
+                try:
+                    cursor.execute(f"SELECT MAX(created_at) FROM {table}")
+                    result = cursor.fetchone()[0]
+                    if result:
+                        last_modified = result
+                except:
+                    pass
+                
+                stats_data.append({
+                    "Tabela": TABLE_NAMES.get(table, table),
+                    "Število zapisov": row_count,
+                    "Število stolpcev": col_count,
+                    "Zadnja sprememba": last_modified
+                })
+            
+            df_stats = pd.DataFrame(stats_data)
+            st.dataframe(df_stats, use_container_width=True, hide_index=True)
+            
+            # Growth chart (if we have timestamp data)
+            st.markdown("#### 📈 Rast podatkov")
+            
+            growth_data = []
+            for table in ['javna_narocila', 'application_logs', 'drafts']:
+                try:
+                    cursor.execute(f"""
+                        SELECT 
+                            DATE(created_at) as date,
+                            COUNT(*) as count
+                        FROM {table}
+                        WHERE created_at IS NOT NULL
+                        GROUP BY DATE(created_at)
+                        ORDER BY date DESC
+                        LIMIT 30
+                    """)
+                    results = cursor.fetchall()
+                    for date, count in results:
+                        growth_data.append({
+                            "Datum": date,
+                            "Tabela": TABLE_NAMES.get(table, table),
+                            "Novi zapisi": count
+                        })
+                except:
+                    pass
+            
+            if growth_data:
+                df_growth = pd.DataFrame(growth_data)
+                st.line_chart(df_growth.pivot(index="Datum", columns="Tabela", values="Novi zapisi"))
+            else:
+                st.info("Ni dovolj podatkov za prikaz grafa rasti")
+                
+    except Exception as e:
+        st.error(f"Napaka pri pridobivanju statistike: {str(e)}")
+
+
+def clean_empty_records():
+    """Clean empty or orphaned records from the database."""
+    st.markdown("### 🗑️ Čiščenje praznih zapisov")
+    
+    try:
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            
+            cleaned_count = 0
+            
+            # Clean empty drafts
+            cursor.execute("DELETE FROM drafts WHERE form_data_json IS NULL OR form_data_json = '{}'")
+            cleaned_count += cursor.rowcount
+            
+            # Clean old application logs (older than retention period)
+            cursor.execute("""
+                DELETE FROM application_logs 
+                WHERE expires_at IS NOT NULL AND expires_at < datetime('now')
+            """)
+            cleaned_count += cursor.rowcount
+            
+            conn.commit()
+            
+            if cleaned_count > 0:
+                st.success(f"✅ Počiščenih {cleaned_count} praznih ali zastarelih zapisov")
+            else:
+                st.info("Ni najdenih praznih zapisov za čiščenje")
+                
+    except Exception as e:
+        st.error(f"Napaka pri čiščenju: {str(e)}")
+
+
+def optimize_database():
+    """Optimize database by running VACUUM and ANALYZE."""
+    st.markdown("### 🔄 Optimizacija baze podatkov")
+    
+    try:
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            
+            # Get size before optimization
+            import os
+            size_before = os.path.getsize(database.DATABASE_FILE)
+            
+            st.info("Izvajam VACUUM...")
+            cursor.execute("VACUUM")
+            
+            st.info("Izvajam ANALYZE...")
+            cursor.execute("ANALYZE")
+            
+            conn.commit()
+            
+            # Get size after optimization
+            size_after = os.path.getsize(database.DATABASE_FILE)
+            size_saved = size_before - size_after
+            
+            if size_saved > 0:
+                size_saved_mb = size_saved / (1024 * 1024)
+                st.success(f"✅ Optimizacija končana! Prihranjen prostor: {size_saved_mb:.2f} MB")
+            else:
+                st.success("✅ Optimizacija končana! Baza je že optimalna.")
+                
+    except Exception as e:
+        st.error(f"Napaka pri optimizaciji: {str(e)}")
+
+
+def export_full_database():
+    """Export the entire database to CSV files."""
+    st.markdown("### 📥 Izvoz celotne baze podatkov")
+    
+    try:
+        import zipfile
+        import io
+        import datetime
+        
+        # Create a ZIP file in memory
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            
+            with sqlite3.connect(database.DATABASE_FILE) as conn:
+                for table in TABLES:
+                    # Read table data
+                    df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
+                    
+                    # Convert to CSV
+                    csv_data = df.to_csv(index=False)
+                    
+                    # Add to ZIP
+                    zip_file.writestr(f"{table}.csv", csv_data)
+                
+                # Add metadata file
+                metadata = f"""Database Export
+Generated: {datetime.datetime.now().isoformat()}
+Tables: {', '.join(TABLES)}
+Total tables: {len(TABLES)}
+"""
+                zip_file.writestr("metadata.txt", metadata)
+        
+        # Offer download
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        st.download_button(
+            label="💾 Prenesi izvoz baze (ZIP)",
+            data=zip_buffer.getvalue(),
+            file_name=f"database_export_{timestamp}.zip",
+            mime="application/zip"
+        )
+        
+        st.success("✅ Izvoz pripravljen! Kliknite gumb za prenos.")
+        
+    except Exception as e:
+        st.error(f"Napaka pri izvozu: {str(e)}")
