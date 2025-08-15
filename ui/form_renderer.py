@@ -6,12 +6,8 @@ from typing import List, Dict
 from localization import get_text, get_validation_message
 from utils.lot_utils import get_lot_scoped_key, render_lot_context_step
 from ui.components.cpv_selector import render_cpv_selector
-from utils.criteria_validation import (
-    validate_criteria_selection, 
-    check_cpv_requires_additional_criteria,
-    check_cpv_requires_social_criteria,
-    get_validation_summary
-)
+# Story 27.3: Removed direct criteria_validation imports - now using centralized ValidationManager
+from utils.criteria_validation import get_validation_summary  # Still needed for render_validation_summary
 from utils.criteria_suggestions import (
     get_suggested_criteria_for_cpv,
     get_criteria_help_text,
@@ -931,9 +927,12 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
     Render validation messages for criteria selection based on CPV codes.
     Story 21.2: Real-time validation UI
     Story 22.3: Respect validation toggles
+    Story 27.3: Refactored to use centralized ValidationManager
     """
     # Check if validation should run (Story 22.3)
     from utils.validation_control import should_validate
+    from utils.validations import ValidationManager
+    
     current_step = st.session_state.get('current_step', 0)
     
     if not should_validate(current_step):
@@ -976,16 +975,17 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
         'socialCriteria': st.session_state.get(f"{criteria_prefix}.socialCriteria", False),
     }
     
-    # Validate
-    validation_result = validate_criteria_selection(cpv_codes, selected_criteria)
+    # Use centralized ValidationManager for validation
+    validator = ValidationManager(st.session_state.get('schema', {}), st.session_state)
+    is_valid, errors, warnings, restricted_info = validator.validate_criteria_real_time(cpv_codes, selected_criteria)
     
     # Store validation state
     validation_key = f"{criteria_prefix}_validation" if lot_context else "selectionCriteria_validation"
-    st.session_state[validation_key] = validation_result.is_valid
+    st.session_state[validation_key] = is_valid
     
-    # Check if we have restricted CPV codes
-    restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
-    social_cpv = check_cpv_requires_social_criteria(cpv_codes)
+    # Get restriction information from the centralized validator
+    restricted_cpv = restricted_info.get('additional_required', {})
+    social_cpv = restricted_info.get('social_required', {})
     
     # Story 21.3: Enhanced guidance
     if restricted_cpv or social_cpv:
@@ -1037,24 +1037,19 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
                     st.success("✅ Priporočena merila so bila izbrana!")
                     st.rerun()
     
-    # Display validation messages if invalid
-    if not validation_result.is_valid:
-        st.error("⚠️ **Zahtevana dodatna merila**")
-        
-        # Show which CPV codes have restrictions
-        if validation_result.restricted_cpv_codes:
-            with st.container():
-                st.warning("**Naslednje CPV kode zahtevajo dodatna merila poleg cene:**")
-                for cpv in validation_result.restricted_cpv_codes:
-                    st.markdown(f"• **{cpv['code']}** - {cpv['description']}")
-                    st.caption(f"  ↳ {cpv['restriction']}")
-        
-        # Show what needs to be done
-        if validation_result.messages:
-            for message in validation_result.messages:
-                st.info(f"ℹ️ {message}")
-        
-        # Add override option for advanced users
+    # Display validation messages - now using centralized validation results
+    if not is_valid:
+        # TODO(human): Implement error display logic
+        # Display errors and warnings from the centralized validation
+        # Consider prioritizing errors over warnings and providing clear guidance
+        pass
+    
+    # Display warnings even if validation is valid
+    for warning in warnings:
+        st.warning(f"ℹ️ {warning}")
+    
+    # Add override option for advanced users if there are errors
+    if not is_valid and errors:
         col1, col2 = st.columns([3, 1])
         with col2:
             override_key = f"{validation_key}_override"

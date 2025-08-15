@@ -792,3 +792,40 @@ class ValidationManager:
                 cpv_codes.append(code)
         
         return cpv_codes
+    
+    def validate_criteria_real_time(self, cpv_codes: List[str], selected_criteria: Dict[str, bool]) -> Tuple[bool, List[str], List[str], Dict]:
+        """
+        Real-time validation for criteria selection based on CPV codes.
+        Used by form renderer for immediate feedback.
+        
+        Args:
+            cpv_codes: List of CPV codes
+            selected_criteria: Dictionary of selected criteria
+            
+        Returns:
+            Tuple of (is_valid, errors, warnings, restricted_info)
+        """
+        errors = []
+        warnings = []
+        restricted_info = {}
+        
+        # Check if any criteria is selected
+        if not any(selected_criteria.values()):
+            warnings.append("Niste izbrali nobenih meril. Pri odpiranju konkurence morate imeti definirana merila.")
+            return True, errors, warnings, restricted_info  # Just warning, not error
+        
+        # Check CPV requirements using existing methods
+        cpv_errors, cpv_warnings = self._validate_cpv_requirements(selected_criteria)
+        errors.extend(cpv_errors)
+        warnings.extend(cpv_warnings)
+        
+        # Get restriction information for display
+        from utils.criteria_validation import (
+            check_cpv_requires_social_criteria,
+            check_cpv_requires_additional_criteria
+        )
+        
+        restricted_info['social_required'] = check_cpv_requires_social_criteria(cpv_codes)
+        restricted_info['additional_required'] = check_cpv_requires_additional_criteria(cpv_codes)
+        
+        return len(errors) == 0, errors, warnings, restricted_info
