@@ -974,7 +974,8 @@ def render_logging_management_tab():
                 LIMIT 100
             """, conn)
             if not logs_df.empty:
-                logs_df['timestamp'] = pd.to_datetime(logs_df['timestamp'])
+                # Handle both timestamp formats (with and without microseconds)
+                logs_df['timestamp'] = pd.to_datetime(logs_df['timestamp'], format='mixed')
     else:
         # Use filters
         logs_df = fetch_logs_with_filters(st.session_state.log_filters)
@@ -1192,11 +1193,12 @@ def fetch_logs_with_filters(filters):
         
         # Convert timestamp to datetime
         if not df.empty:
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            # Handle both timestamp formats (with and without microseconds)
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='mixed')
             
             # Add time analysis columns if new columns exist
             if query_builder.has_optimized_columns() and 'log_time' in df.columns:
-                df['hour'] = pd.to_datetime(df['log_time']).dt.hour
+                df['hour'] = pd.to_datetime(df['log_time'], format='mixed').dt.hour
         
         return df
     
