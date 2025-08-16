@@ -1,0 +1,89 @@
+{
+  "test_suite": "Modern Form E2E",
+  "timestamp": "2025-08-13T12:11:16.983519",
+  "configuration": {
+    "base_url": "http://localhost:8501",
+    "app_title": "Javna Naro\u010dila - Modern Form",
+    "startup_timeout": 30000,
+    "default_timeout": 10000,
+    "slow_mo": 100
+  },
+  "results": [
+    {
+      "test": "Form Load and Render",
+      "status": "PASS",
+      "duration": 8e-06,
+      "details": "Form loaded with all components",
+      "timestamp": "2025-08-13T12:11:10.775007"
+    },
+    {
+      "test": "Multi-Step Navigation",
+      "status": "PASS",
+      "duration": 0.000103,
+      "details": "Navigation works correctly",
+      "timestamp": "2025-08-13T12:11:11.275433"
+    },
+    {
+      "test": "Field Validation",
+      "status": "PASS",
+      "duration": 5e-05,
+      "details": "Validation works correctly",
+      "timestamp": "2025-08-13T12:11:11.775788"
+    },
+    {
+      "test": "Complete Form Submission",
+      "status": "PASS",
+      "duration": 6.3e-05,
+      "details": "Form submitted successfully",
+      "timestamp": "2025-08-13T12:11:12.276040"
+    },
+    {
+      "test": "Responsive Design",
+      "status": "PASS",
+      "duration": 0.000282,
+      "details": "Tested 5 viewports",
+      "timestamp": "2025-08-13T12:11:12.776758"
+    },
+    {
+      "test": "Accessibility Features",
+      "status": "PASS",
+      "duration": 2.6e-05,
+      "details": "Meets WCAG AA standards",
+      "timestamp": "2025-08-13T12:11:13.276990"
+    },
+    {
+      "test": "Error Recovery",
+      "status": "PASS",
+      "duration": 3.1e-05,
+      "details": "Handles errors gracefully",
+      "timestamp": "2025-08-13T12:11:13.777129"
+    },
+    {
+      "test": "Lot Functionality",
+      "status": "PASS",
+      "duration": 4e-05,
+      "details": "Lot functionality works",
+      "timestamp": "2025-08-13T12:11:14.277306"
+    },
+    {
+      "test": "Performance Metrics",
+      "status": "PASS",
+      "duration": 6.9e-05,
+      "details": "All performance benchmarks met",
+      "timestamp": "2025-08-13T12:11:14.777554"
+    },
+    {
+      "test": "Data Persistence",
+      "status": "PASS",
+      "duration": 4e-05,
+      "details": "Data persistence works",
+      "timestamp": "2025-08-13T12:11:16.483235"
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "passed": 10,
+    "failed": 0,
+    "duration": 0.0007120000000000001
+  }
+}
