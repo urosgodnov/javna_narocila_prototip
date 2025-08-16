@@ -10,25 +10,80 @@ from typing import Dict, List, Any
 import database
 from utils.validations import ValidationManager
 
-# Constants
-TABLES = [
+# Constants - All tables grouped by category
+CORE_TABLES = [
     'drafts', 
     'javna_narocila', 
+    'organizacija'
+]
+
+CPV_TABLES = [
     'cpv_codes', 
     'criteria_types', 
-    'cpv_criteria', 
-    'organizacija', 
+    'cpv_criteria'
+]
+
+AI_TABLES = [
+    'ai_documents',
+    'ai_document_chunks',
+    'ai_system_prompts',
+    'ai_prompt_usage_log',
+    'ai_query_log',
+    'ai_query_sources'
+]
+
+DOCUMENT_TABLES = [
+    'form_documents',
+    'form_document_versions',
+    'form_document_associations',
+    'form_document_audit_log',
+    'form_document_processing_queue'
+]
+
+SYSTEM_TABLES = [
     'application_logs'
 ]
 
+# All tables combined
+TABLES = CORE_TABLES + CPV_TABLES + AI_TABLES + DOCUMENT_TABLES + SYSTEM_TABLES
+
 TABLE_NAMES = {
+    # Core tables
     'drafts': 'Osnutki',
     'javna_narocila': 'Javna naročila',
+    'organizacija': 'Organizacije',
+    
+    # CPV tables
     'cpv_codes': 'CPV kode',
     'criteria_types': 'Tipi meril',
     'cpv_criteria': 'CPV merila',
-    'organizacija': 'Organizacije',
+    
+    # AI tables
+    'ai_documents': 'AI dokumenti',
+    'ai_document_chunks': 'AI deli dokumentov',
+    'ai_system_prompts': 'AI sistemski pozivi',
+    'ai_prompt_usage_log': 'AI dnevnik uporabe pozivov',
+    'ai_query_log': 'AI dnevnik poizvedb',
+    'ai_query_sources': 'AI viri poizvedb',
+    
+    # Document tables
+    'form_documents': 'Obrazci dokumentov',
+    'form_document_versions': 'Verzije dokumentov',
+    'form_document_associations': 'Povezave dokumentov',
+    'form_document_audit_log': 'Revizijska sled dokumentov',
+    'form_document_processing_queue': 'Čakalna vrsta procesiranja',
+    
+    # System tables
     'application_logs': 'Dnevniški zapisi'
+}
+
+# Table categories for grouping in UI
+TABLE_CATEGORIES = {
+    '🏢 Osnovno': CORE_TABLES,
+    '📋 CPV klasifikacija': CPV_TABLES,
+    '🤖 AI sistem': AI_TABLES,
+    '📄 Dokumenti': DOCUMENT_TABLES,
+    '⚙️ Sistem': SYSTEM_TABLES
 }
 
 def inject_custom_css():
@@ -220,13 +275,31 @@ def render_schema_visualization():
     st.markdown("## 📊 Shema podatkovne baze")
     st.markdown("Pregled vseh tabel in njihovih struktur")
     
-    # Table details section
-    st.markdown("### 📋 Podrobnosti tabel")
+    # Show statistics summary
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📦 Skupno tabel", len(TABLES))
+    with col2:
+        st.metric("🏢 Osnovne tabele", len(CORE_TABLES))
+    with col3:
+        st.metric("🤖 AI tabele", len(AI_TABLES))
+    with col4:
+        st.metric("📄 Dokumentne tabele", len(DOCUMENT_TABLES))
     
-    # Create expanders for each table
-    for table in TABLES:
-        with st.expander(f"📁 {TABLE_NAMES.get(table, table)} ({table})"):
-            render_table_details(table)
+    # Table details section organized by category
+    st.markdown("### 📋 Podrobnosti tabel po kategorijah")
+    
+    # Create tabs for each category
+    category_tabs = st.tabs(list(TABLE_CATEGORIES.keys()))
+    
+    for idx, (category_name, category_tables) in enumerate(TABLE_CATEGORIES.items()):
+        with category_tabs[idx]:
+            st.markdown(f"#### {category_name}")
+            
+            # Create expanders for each table in this category
+            for table in category_tables:
+                with st.expander(f"📁 {TABLE_NAMES.get(table, table)} ({table})"):
+                    render_table_details(table)
 
 
 def render_table_details(table_name: str):
@@ -348,12 +421,27 @@ def render_table_management():
     </style>
     """, unsafe_allow_html=True)
     
-    # Create tabs for each table
-    tabs = st.tabs([f"📁 {TABLE_NAMES.get(table, table)}" for table in TABLES])
+    # Category selector
+    st.markdown("### 🗂️ Izberi kategorijo tabel")
+    selected_category = st.selectbox(
+        "Kategorija",
+        options=list(TABLE_CATEGORIES.keys()),
+        key="table_category_selector"
+    )
     
-    for idx, (tab, table) in enumerate(zip(tabs, TABLES)):
-        with tab:
-            render_single_table_management(table)
+    # Get tables for selected category
+    category_tables = TABLE_CATEGORIES[selected_category]
+    
+    # Create tabs for tables in selected category
+    if category_tables:
+        st.markdown(f"### {selected_category}")
+        tabs = st.tabs([f"📁 {TABLE_NAMES.get(table, table)}" for table in category_tables])
+        
+        for idx, (tab, table) in enumerate(zip(tabs, category_tables)):
+            with tab:
+                render_single_table_management(table)
+    else:
+        st.info("V tej kategoriji ni tabel.")
 
 
 def render_single_table_management(table_name: str):
@@ -940,9 +1028,22 @@ def get_referenced_table(column_name: str) -> str:
     """
     # Map foreign key columns to their referenced tables
     fk_mapping = {
+        # Core tables
         'organization_id': 'organizacija',
+        
+        # CPV tables
         'criteria_type_id': 'criteria_types',
         'cpv_code': 'cpv_codes',  # Note: cpv_code is a string FK, not _id
+        
+        # AI tables
+        'document_id': 'ai_documents',
+        'prompt_id': 'ai_system_prompts',
+        'query_id': 'ai_query_log',
+        
+        # Document tables
+        'form_document_id': 'form_documents',
+        'parent_version_id': 'form_document_versions',
+        'associated_document_id': 'form_documents',
     }
     
     return fk_mapping.get(column_name)

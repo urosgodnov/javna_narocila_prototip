@@ -14,10 +14,20 @@ load_dotenv()
 
 # Import AI processing capabilities
 try:
-    from ui.ai_processor import FormAIAssistant
+    # Story 28.5: Try to import enhanced AI first
+    from ui.ai_form_integration_enhanced import EnhancedFormAIAssistant
+    FormAIAssistant = EnhancedFormAIAssistant
     AI_AVAILABLE = True
+    AI_ENHANCED = True
 except ImportError:
-    AI_AVAILABLE = False
+    # Fall back to basic AI
+    try:
+        from ui.ai_processor import FormAIAssistant
+        AI_AVAILABLE = True
+        AI_ENHANCED = False
+    except ImportError:
+        AI_AVAILABLE = False
+        AI_ENHANCED = False
 
 # Define form field mappings
 AI_ENABLED_FIELDS = {
@@ -129,7 +139,16 @@ def render_ai_field(
             st.markdown("<br>", unsafe_allow_html=True)  # Spacing
             
             button_key = f"ai_btn_{field_key}"
-            if st.button("🤖 AI", key=button_key, help="Generiraj predlog z AI"):
+            
+            # Story 28.5: Show enhanced AI indicator  
+            if AI_ENHANCED and context and context.get('form_id'):
+                button_label = "🤖📄 AI"
+                button_help = "Generiraj predlog z AI (z dokumenti)"
+            else:
+                button_label = "🤖 AI"
+                button_help = "Generiraj predlog z AI"
+            
+            if st.button(button_label, key=button_key, help=button_help):
                 with st.spinner("Generiram predlog..."):
                     try:
                         # Initialize AI assistant
@@ -211,7 +230,16 @@ def render_ai_text_input(
             st.markdown("<br>", unsafe_allow_html=True)  # Spacing
             
             button_key = f"ai_btn_{field_key}"
-            if st.button("🤖 AI", key=button_key, help="Generiraj predlog z AI"):
+            
+            # Story 28.5: Show enhanced AI indicator  
+            if AI_ENHANCED and context and context.get('form_id'):
+                button_label = "🤖📄 AI"
+                button_help = "Generiraj predlog z AI (z dokumenti)"
+            else:
+                button_label = "🤖 AI"
+                button_help = "Generiraj predlog z AI"
+            
+            if st.button(button_label, key=button_key, help=button_help):
                 with st.spinner("Generiram predlog..."):
                     try:
                         # Initialize AI assistant

@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta
 import os
 
-DATABASE_FILE = 'mainDB.db'
+DATABASE_FILE = 'mainDB.db'  # Back to using main database after fixing corruption
 
 def init_db():
     with sqlite3.connect(DATABASE_FILE) as conn:
@@ -99,6 +99,12 @@ def init_db():
         
         # Execute logs table migration
         create_logs_table()
+        
+        # Execute form documents table migration
+        create_form_documents_tables()
+        
+        # Execute AI documents table migration
+        create_ai_documents_tables()
         
         conn.commit()
 
@@ -264,7 +270,7 @@ def create_logs_table():
                 )
             ''')
             
-            # Create application_logs table
+            # Create application_logs table with new columns
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS application_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -282,17 +288,29 @@ def create_logs_table():
                     additional_context TEXT,
                     log_type TEXT,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    log_date DATE,
+                    log_time TIME,
                     FOREIGN KEY (organization_id) REFERENCES organizacija(id) ON DELETE CASCADE
                 )
             ''')
             
-            # Create indexes
+            # Ensure new columns exist if table already exists
+            cursor.execute("PRAGMA table_info(application_logs)")
+            existing_cols = [col[1] for col in cursor.fetchall()]
+            if 'log_date' not in existing_cols:
+                cursor.execute('ALTER TABLE application_logs ADD COLUMN log_date DATE')
+            if 'log_time' not in existing_cols:
+                cursor.execute('ALTER TABLE application_logs ADD COLUMN log_time TIME')
+            
+            # Create indexes including new columns
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_expires ON application_logs(expires_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON application_logs(timestamp DESC)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_org_level ON application_logs(organization_id, log_level)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_level ON application_logs(log_level)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_type ON application_logs(log_type) WHERE log_type IS NOT NULL')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_message ON application_logs(message)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_date ON application_logs(log_date DESC)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_date_time ON application_logs(log_date DESC, log_time DESC)')
             
             # Create views
             cursor.execute('''
@@ -374,3 +392,222 @@ def calculate_expires_at(timestamp, retention_hours):
     if isinstance(timestamp, str):
         timestamp = datetime.fromisoformat(timestamp)
     return timestamp + timedelta(hours=retention_hours)
+
+# ============ FORM DOCUMENTS TABLE OPERATIONS ============
+
+def create_form_documents_tables():
+    """Create the form_documents tables and related objects."""
+    migration_file = os.path.join('migrations', '002_form_documents_tables.sql')
+    
+    if os.path.exists(migration_file):
+        # Execute migration from file
+        with open(migration_file, 'r') as f:
+            migration_sql = f.read()
+        
+        with sqlite3.connect(DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            # Use executescript for complex SQL with triggers
+            try:
+                cursor.executescript(migration_sql)
+            except sqlite3.OperationalError as e:
+                # If error is not about existing objects, raise it
+                error_msg = str(e).lower()
+                if "already exists" not in error_msg and "duplicate" not in error_msg:
+                    # Log the error for debugging
+                    print(f"Migration error: {e}")
+                    # For now, continue without the new tables
+                    pass
+            conn.commit()
+    else:
+        # Create tables directly if migration file doesn't exist
+        with sqlite3.connect(DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            
+            # Create form_documents table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS form_documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    form_id INTEGER,
+                    form_type TEXT CHECK(form_type IN ('draft', 'submission')),
+                    field_name TEXT NOT NULL,
+                    file_type TEXT NOT NULL,
+                    original_name TEXT NOT NULL,
+                    file_path TEXT NOT NULL UNIQUE,
+                    file_size INTEGER,
+                    mime_type TEXT,
+                    file_hash TEXT,
+                    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    processing_status TEXT DEFAULT 'pending',
+                    processing_error TEXT,
+                    ai_document_id INTEGER,
+                    metadata_json TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ai_document_id) REFERENCES ai_documents(id) ON DELETE SET NULL
+                )
+            ''')
+            
+            # Create indexes
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_form_documents_form ON form_documents(form_id, form_type)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_form_documents_status ON form_documents(processing_status)')
+            
+            conn.commit()
+
+def save_form_document(form_id, form_type, field_name, file_path, original_name, 
+                      file_size, mime_type, file_hash=None, metadata=None):
+    """Save form document metadata to database with new schema."""
+    import hashlib
+    
+    # Generate hash if not provided
+    if not file_hash:
+        with open(file_path, 'rb') as f:
+            file_hash = hashlib.sha256(f.read()).hexdigest()
+    
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # Check if document with same hash already exists
+        cursor.execute('SELECT id FROM form_documents WHERE file_hash = ? AND is_active = 1', (file_hash,))
+        existing = cursor.fetchone()
+        
+        if existing:
+            doc_id = existing[0]
+        else:
+            # Insert new document
+            cursor.execute('''
+                INSERT INTO form_documents 
+                (file_hash, original_name, file_path, file_size, 
+                 mime_type, file_type, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (file_hash, original_name, file_path, file_size,
+                  mime_type, os.path.splitext(original_name)[1].lower(), 
+                  json.dumps(metadata) if metadata else None))
+            doc_id = cursor.lastrowid
+        
+        # Create association
+        cursor.execute('''
+            INSERT OR IGNORE INTO form_document_associations
+            (form_document_id, form_id, form_type, field_name)
+            VALUES (?, ?, ?, ?)
+        ''', (doc_id, form_id, form_type, field_name))
+        
+        conn.commit()
+        return doc_id
+
+def get_form_documents(form_id, form_type='draft'):
+    """Get all documents for a specific form."""
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT d.*, a.field_name, a.association_type
+            FROM form_documents d
+            JOIN form_document_associations a ON d.id = a.form_document_id
+            WHERE a.form_id = ? AND a.form_type = ? AND d.is_active = 1
+            ORDER BY d.upload_date DESC
+        ''', (form_id, form_type))
+        
+        columns = [desc[0] for desc in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+def update_form_document_status(doc_id, status, error_message=None):
+    """Update the processing status of a form document."""
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE form_documents 
+            SET processing_status = ?, processing_error = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (status, error_message, doc_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+# ============ AI DOCUMENTS TABLE OPERATIONS ============
+
+def create_ai_documents_tables():
+    """Create the ai_documents tables and related objects."""
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # First check if tables already exist with proper schema
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_documents'")
+        if cursor.fetchone():
+            # Table exists, check if it has created_at column
+            cursor.execute("PRAGMA table_info(ai_documents)")
+            columns = {col[1] for col in cursor.fetchall()}
+            
+            if 'created_at' in columns:
+                # Table exists with correct schema, nothing to do
+                return
+            else:
+                # Table exists but needs column migration
+                # Add missing columns if they don't exist
+                if 'created_at' not in columns:
+                    cursor.execute("ALTER TABLE ai_documents ADD COLUMN created_at DATETIME")
+                    cursor.execute("UPDATE ai_documents SET created_at = upload_date WHERE created_at IS NULL AND upload_date IS NOT NULL")
+                
+                if 'processed_at' not in columns:
+                    cursor.execute("ALTER TABLE ai_documents ADD COLUMN processed_at DATETIME")
+                
+                if 'updated_at' not in columns:
+                    cursor.execute("ALTER TABLE ai_documents ADD COLUMN updated_at DATETIME")
+                    cursor.execute("UPDATE ai_documents SET updated_at = COALESCE(created_at, upload_date, CURRENT_TIMESTAMP) WHERE updated_at IS NULL")
+                
+                conn.commit()
+                return
+        
+        # Table doesn't exist, try to create from migration file
+        migration_file = os.path.join('migrations', '003_ai_documents_tables.sql')
+        
+        if os.path.exists(migration_file):
+            # Execute migration from file
+            with open(migration_file, 'r') as f:
+                migration_sql = f.read()
+            
+            try:
+                cursor.executescript(migration_sql)
+            except sqlite3.OperationalError as e:
+                # If error is not about existing objects, raise it
+                error_msg = str(e).lower()
+                if "already exists" not in error_msg and "duplicate" not in error_msg:
+                    print(f"AI migration warning: {e}")
+                    pass
+            conn.commit()
+        else:
+            # Create tables directly if migration file doesn't exist
+            # Create ai_documents table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ai_documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    filename TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_type TEXT NOT NULL,
+                    tip_dokumenta TEXT DEFAULT 'general',
+                    tags TEXT,
+                    description TEXT,
+                    processing_status TEXT DEFAULT 'pending',
+                    chunk_count INTEGER DEFAULT 0,
+                    embedding_count INTEGER DEFAULT 0,
+                    metadata_json TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    processed_at DATETIME,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Create ai_document_chunks table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ai_document_chunks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    document_id INTEGER NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    chunk_text TEXT NOT NULL,
+                    chunk_size INTEGER NOT NULL,
+                    vector_id TEXT,
+                    embedding_generated BOOLEAN DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (document_id) REFERENCES ai_documents(id) ON DELETE CASCADE,
+                    UNIQUE(document_id, chunk_index)
+                )
+            ''')
+            
+            conn.commit()

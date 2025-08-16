@@ -712,17 +712,33 @@ def render_query_interface():
         
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # Query history in sidebar
-    with st.sidebar:
-        st.markdown("### 📜 Zgodovina poizvedb")
-        if st.session_state.query_history:
-            for i, hist_item in enumerate(reversed(st.session_state.query_history[-5:])):
-                with st.expander(f"🔍 {hist_item['query'][:50]}..."):
-                    st.write(f"**Čas:** {hist_item['timestamp'].strftime('%H:%M:%S')}")
-                    st.write(f"**Zanesljivost:** {hist_item['confidence']:.0%}")
-                    st.write(f"**Odziv:** {hist_item['response_time']:.2f}s")
-        else:
-            st.info("Ni zgodovine poizvedb")
+    # Optional: Query history in main panel (collapsible)
+    if st.session_state.query_history:
+        st.markdown("---")
+        with st.expander("📜 Zgodovina poizvedb", expanded=False):
+            # Create a clean table view of query history
+            history_data = []
+            for item in reversed(st.session_state.query_history[-10:]):
+                history_data.append({
+                    'Poizvedba': item['query'][:80] + '...' if len(item['query']) > 80 else item['query'],
+                    'Čas': item['timestamp'].strftime('%H:%M:%S'),
+                    'Zanesljivost': f"{item['confidence']:.0%}",
+                    'Odziv': f"{item['response_time']:.2f}s"
+                })
+            
+            if history_data:
+                df = pd.DataFrame(history_data)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                
+                # Add export button for history
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Izvozi zgodovino",
+                    data=csv,
+                    file_name=f"query_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    key="export_query_history"
+                )
 
 
 def update_query_feedback(query_id: int, feedback: str):

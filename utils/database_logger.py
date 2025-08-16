@@ -28,6 +28,7 @@ class DatabaseLogHandler(logging.Handler):
         self.db_connection = db_connection
         self.fallback_file = fallback_file
         self.fallback_handler = None
+        self._has_new_columns = None  # Cache schema check result
         
         # Ensure fallback directory exists
         if fallback_file:
@@ -36,6 +37,9 @@ class DatabaseLogHandler(logging.Handler):
             self.fallback_handler.setFormatter(
                 logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             )
+        
+        # Check schema once on initialization
+        self._check_schema()
     
     def emit(self, record: logging.LogRecord):
         """Process a log record and store it in the database.
@@ -60,9 +64,11 @@ class DatabaseLogHandler(logging.Handler):
             # Prepare additional context
             additional_context = self._get_additional_context(record)
             
-            # Log data to insert
+            # Log data to insert - include date/time if new columns exist
             log_data = {
                 'timestamp': timestamp.isoformat(),
+                'log_date': timestamp.date().isoformat() if self._has_new_columns else None,
+                'log_time': timestamp.time().isoformat() if self._has_new_columns else None,
                 'organization_id': org_id,
                 'organization_name': org_name,
                 'session_id': session_id,
@@ -167,6 +173,19 @@ class DatabaseLogHandler(logging.Handler):
         
         return context if context else None
     
+    def _check_schema(self):
+        """Check if new date/time columns exist in the database."""
+        try:
+            conn = self.db_connection or sqlite3.connect(database.DATABASE_FILE)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(application_logs)")
+            columns = [col[1] for col in cursor.fetchall()]
+            self._has_new_columns = 'log_date' in columns and 'log_time' in columns
+            if not self.db_connection:
+                conn.close()
+        except Exception:
+            self._has_new_columns = False
+    
     def _insert_log_entry(self, log_data: Dict[str, Any]):
         """Insert a log entry into the database.
         
@@ -176,27 +195,55 @@ class DatabaseLogHandler(logging.Handler):
         conn = self.db_connection or sqlite3.connect(database.DATABASE_FILE)
         try:
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO application_logs (
-                    timestamp, organization_id, organization_name, session_id,
-                    log_level, module, function_name, line_number, message,
-                    retention_hours, expires_at, additional_context, log_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                log_data['timestamp'],
-                log_data['organization_id'],
-                log_data['organization_name'],
-                log_data['session_id'],
-                log_data['log_level'],
-                log_data['module'],
-                log_data['function_name'],
-                log_data['line_number'],
-                log_data['message'],
-                log_data['retention_hours'],
-                log_data['expires_at'],
-                log_data['additional_context'],
-                log_data['log_type']
-            ))
+            
+            if self._has_new_columns:
+                # Use optimized insert with date/time columns
+                cursor.execute("""
+                    INSERT INTO application_logs (
+                        timestamp, log_date, log_time, organization_id, organization_name, 
+                        session_id, log_level, module, function_name, line_number, message,
+                        retention_hours, expires_at, additional_context, log_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    log_data['timestamp'],
+                    log_data['log_date'],
+                    log_data['log_time'],
+                    log_data['organization_id'],
+                    log_data['organization_name'],
+                    log_data['session_id'],
+                    log_data['log_level'],
+                    log_data['module'],
+                    log_data['function_name'],
+                    log_data['line_number'],
+                    log_data['message'],
+                    log_data['retention_hours'],
+                    log_data['expires_at'],
+                    log_data['additional_context'],
+                    log_data['log_type']
+                ))
+            else:
+                # Fallback to original insert without date/time columns
+                cursor.execute("""
+                    INSERT INTO application_logs (
+                        timestamp, organization_id, organization_name, session_id,
+                        log_level, module, function_name, line_number, message,
+                        retention_hours, expires_at, additional_context, log_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    log_data['timestamp'],
+                    log_data['organization_id'],
+                    log_data['organization_name'],
+                    log_data['session_id'],
+                    log_data['log_level'],
+                    log_data['module'],
+                    log_data['function_name'],
+                    log_data['line_number'],
+                    log_data['message'],
+                    log_data['retention_hours'],
+                    log_data['expires_at'],
+                    log_data['additional_context'],
+                    log_data['log_type']
+                ))
             
             if not self.db_connection:
                 conn.commit()

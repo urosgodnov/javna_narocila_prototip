@@ -742,13 +742,70 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 if cpv_value != st.session_state.get(session_key):
                     st.session_state[session_key] = cpv_value
             elif prop_details.get("format") == "file":
-                # Enhanced file uploader
-                st.file_uploader(
-                    display_label, 
+                # Enhanced file uploader with document persistence
+                from io import BytesIO
+                import os
+                
+                # Check if we have existing documents for this field
+                existing_doc = None
+                remove_key = f"{session_key}_remove"
+                
+                # Check if file was marked for removal
+                if remove_key not in st.session_state or not st.session_state[remove_key]:
+                    if 'form_id' in st.session_state and st.session_state.form_id:
+                        try:
+                            from services.form_document_service import FormDocumentService
+                            doc_service = FormDocumentService()
+                            existing_docs = doc_service.get_documents_for_form(
+                                st.session_state.form_id, 
+                                'draft', 
+                                prop_name
+                            )
+                            if existing_docs:
+                                existing_doc = existing_docs[0]  # Take the most recent
+                        except Exception as e:
+                            # Service not available or error - continue without persistence
+                            pass
+                
+                # Show existing file info if available
+                if existing_doc:
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.info(f"📄 Current file: {existing_doc['original_name']} ({existing_doc['file_size'] / 1024:.1f} KB)")
+                    with col2:
+                        if st.button("Remove", key=f"remove_{session_key}"):
+                            # Mark for removal in session state
+                            st.session_state[remove_key] = True
+                            # Store document ID for removal on save
+                            st.session_state[f"{session_key}_remove_doc_id"] = existing_doc['id']
+                            st.rerun()
+                
+                # Show file uploader (for new upload or replacement)
+                uploaded_file = st.file_uploader(
+                    display_label if not existing_doc else "Replace file:", 
                     key=session_key, 
                     help=help_text,
                     type=['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']
                 )
+                
+                # Handle new upload - store in session for later persistence
+                if uploaded_file is not None:
+                    # Read file data and store in session
+                    file_data = uploaded_file.read()
+                    uploaded_file.seek(0)  # Reset for potential re-reading
+                    
+                    # Store file metadata in session for persistence on save
+                    file_info_key = f"{session_key}_file_info"
+                    st.session_state[file_info_key] = {
+                        'data': file_data,
+                        'name': uploaded_file.name,
+                        'type': uploaded_file.type,
+                        'size': uploaded_file.size,
+                        'field': prop_name
+                    }
+                    
+                    # Show upload feedback
+                    st.success(f"✅ {uploaded_file.name} ready to save ({uploaded_file.size / 1024:.1f} KB)")
             elif prop_details.get("format") == "date":
                 # Initialize session state if it doesn't exist
                 if session_key not in st.session_state:

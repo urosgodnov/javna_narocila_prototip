@@ -1173,6 +1173,8 @@ def render_drafts_sidebar(draft_options):
             loaded_data = database.load_draft(selected_draft_id)
             if loaded_data:
                 st.session_state.update(loaded_data)
+                # Story 28.3: Store form_id for file loading
+                st.session_state.form_id = selected_draft_id
                 st.success(get_text("draft_loaded"))
                 st.rerun()
             else:
@@ -1186,7 +1188,73 @@ def render_drafts_sidebar(draft_options):
         ):
             form_values = get_form_data_from_session()
             draft_id = database.save_draft(form_values)
-            st.success(get_text("draft_saved", draft_id=draft_id))
+            
+            # Story 28.3: Save uploaded files with the draft
+            try:
+                from services.form_document_service import FormDocumentService
+                from io import BytesIO
+                
+                doc_service = FormDocumentService()
+                files_saved = 0
+                files_removed = 0
+                
+                # Process document removals first
+                for key in list(st.session_state.keys()):
+                    if key.endswith('_remove_doc_id'):
+                        doc_id = st.session_state[key]
+                        if doc_service.delete_document(doc_id, user='current_user'):
+                            files_removed += 1
+                        # Clear removal markers
+                        del st.session_state[key]
+                        remove_key = key.replace('_remove_doc_id', '_remove')
+                        if remove_key in st.session_state:
+                            del st.session_state[remove_key]
+                
+                # Process all file uploads stored in session state
+                for key in list(st.session_state.keys()):
+                    if key.endswith('_file_info'):
+                        file_info = st.session_state[key]
+                        
+                        # Save the document
+                        file_data = BytesIO(file_info['data'])
+                        doc_id, is_new, msg = doc_service.save_document(
+                            file_data=file_data,
+                            form_id=draft_id,
+                            form_type='draft',
+                            field_name=file_info['field'],
+                            original_name=file_info['name'],
+                            mime_type=file_info['type'],
+                            user='current_user'
+                        )
+                        
+                        # Story 28.4: Trigger AI processing for new documents
+                        if is_new:
+                            try:
+                                from services.form_document_processor import trigger_document_processing
+                                trigger_document_processing(doc_id)
+                            except ImportError:
+                                # AI processor not available
+                                pass
+                        
+                        # Clear from session after saving
+                        del st.session_state[key]
+                        files_saved += 1
+                
+                # Build success message
+                messages = [get_text("draft_saved", draft_id=draft_id)]
+                if files_saved > 0:
+                    messages.append(f"{files_saved} file(s) saved")
+                if files_removed > 0:
+                    messages.append(f"{files_removed} file(s) removed")
+                
+                st.success(" - ".join(messages))
+            except ImportError:
+                # FormDocumentService not available - save without files
+                st.success(get_text("draft_saved", draft_id=draft_id))
+            except Exception as e:
+                # Log error but don't fail the draft save
+                st.warning(f"Draft saved but files could not be saved: {str(e)}")
+            
             st.rerun()
 
 if __name__ == "__main__":

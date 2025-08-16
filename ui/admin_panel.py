@@ -1,6 +1,8 @@
 """Administration panel UI components."""
 import streamlit as st
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from datetime import datetime, timedelta
 import template_service
 from config import ADMIN_PASSWORD
@@ -748,6 +750,9 @@ def render_logging_management_tab():
     """Render the logging management tab with viewing, filtering, and export capabilities."""
     st.subheader("📋 Upravljanje dnevniških zapisov")
     
+    # Import LogQueryBuilder for optimized queries
+    from utils.log_query_builder import LogQueryBuilder
+    
     # Initialize session state for filters
     if 'log_filters' not in st.session_state:
         st.session_state.log_filters = {
@@ -755,12 +760,57 @@ def render_logging_management_tab():
             'organization_id': None,
             'date_from': None,
             'date_to': None,
+            'time_from': None,  # NEW: time filtering
+            'time_to': None,    # NEW: time filtering
             'search_query': '',
-            'log_type': None
+            'log_type': None,
+            'use_quick_filter': None  # NEW: quick filter tracking
         }
     
     # Filters section in main content area
     with st.expander("🔍 Filtri", expanded=True):
+        # Quick filters row (NEW)
+        st.markdown("**Hitri filtri:**")
+        qcol1, qcol2, qcol3, qcol4, qcol5 = st.columns(5)
+        
+        with qcol1:
+            if st.button("📅 Danes", use_container_width=True, key="quick_today"):
+                st.session_state.log_filters['date_from'] = datetime.now().date()
+                st.session_state.log_filters['date_to'] = datetime.now().date()
+                st.session_state.log_filters['use_quick_filter'] = 'today'
+                st.rerun()
+        
+        with qcol2:
+            if st.button("⏰ 24 ur", use_container_width=True, key="quick_24h"):
+                st.session_state.log_filters['date_from'] = (datetime.now() - timedelta(days=1)).date()
+                st.session_state.log_filters['date_to'] = datetime.now().date()
+                st.session_state.log_filters['use_quick_filter'] = '24h'
+                st.rerun()
+        
+        with qcol3:
+            if st.button("📆 Ta teden", use_container_width=True, key="quick_week"):
+                today = datetime.now().date()
+                start_week = today - timedelta(days=today.weekday())
+                st.session_state.log_filters['date_from'] = start_week
+                st.session_state.log_filters['date_to'] = today
+                st.session_state.log_filters['use_quick_filter'] = 'week'
+                st.rerun()
+        
+        with qcol4:
+            if st.button("📊 Zadnjih 100", use_container_width=True, key="quick_last100"):
+                st.session_state.log_filters['date_from'] = None
+                st.session_state.log_filters['date_to'] = None
+                st.session_state.log_filters['use_quick_filter'] = 'last100'
+                st.rerun()
+        
+        with qcol5:
+            if st.button("🔴 Samo napake", use_container_width=True, key="quick_errors"):
+                st.session_state.log_filters['log_levels'] = ['ERROR', 'CRITICAL']
+                st.session_state.log_filters['use_quick_filter'] = 'errors'
+                st.rerun()
+        
+        st.markdown("---")
+        
         # First row of filters
         col1, col2, col3, col4 = st.columns(4)
         
@@ -769,7 +819,7 @@ def render_logging_management_tab():
             log_levels = st.multiselect(
                 "Nivo zapisov",
                 options=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
-                default=st.session_state.log_filters.get('log_levels', ['ERROR', 'WARNING']),
+                default=st.session_state.log_filters.get('log_levels', []),  # Empty by default to show all
                 key='filter_log_levels'
             )
         
@@ -777,7 +827,7 @@ def render_logging_management_tab():
             # Date from filter
             date_from = st.date_input(
                 "Od datuma",
-                value=datetime.now().date() - timedelta(days=7),
+                value=st.session_state.log_filters.get('date_from', None),  # No default date filter
                 key='filter_date_from'
             )
         
@@ -785,7 +835,7 @@ def render_logging_management_tab():
             # Date to filter
             date_to = st.date_input(
                 "Do datuma",
-                value=datetime.now().date(),
+                value=st.session_state.log_filters.get('date_to', None),  # No default date filter
                 key='filter_date_to'
             )
         
@@ -807,7 +857,42 @@ def render_logging_management_tab():
                 organization_name = None
                 st.selectbox("Organizacija", options=['Vse'], key='filter_org')
         
-        # Second row with search and apply button
+        # Second row with time filters (NEW)
+        tcol1, tcol2, tcol3, tcol4 = st.columns(4)
+        
+        with tcol1:
+            # Time from filter
+            time_from = st.time_input(
+                "Od časa (neobvezno)",
+                value=st.session_state.log_filters.get('time_from'),
+                key='filter_time_from',
+                help="Filtriraj zapise po času dneva"
+            )
+        
+        with tcol2:
+            # Time to filter
+            time_to = st.time_input(
+                "Do časa (neobvezno)",
+                value=st.session_state.log_filters.get('time_to'),
+                key='filter_time_to',
+                help="Filtriraj zapise po času dneva"
+            )
+        
+        with tcol3:
+            # Business hours preset
+            if st.button("🏢 Delovni čas (8-17)", use_container_width=True):
+                st.session_state.log_filters['time_from'] = datetime.strptime("08:00", "%H:%M").time()
+                st.session_state.log_filters['time_to'] = datetime.strptime("17:00", "%H:%M").time()
+                st.rerun()
+        
+        with tcol4:
+            # Night hours preset
+            if st.button("🌙 Nočni čas (22-06)", use_container_width=True):
+                st.session_state.log_filters['time_from'] = datetime.strptime("22:00", "%H:%M").time()
+                st.session_state.log_filters['time_to'] = datetime.strptime("06:00", "%H:%M").time()
+                st.rerun()
+        
+        # Third row with search and apply button
         col1, col2, col3 = st.columns([3, 1, 1])
         
         with col1:
@@ -827,7 +912,11 @@ def render_logging_management_tab():
                     'organization_name': organization_name,
                     'date_from': date_from,
                     'date_to': date_to,
-                    'search_query': search_query
+                    'time_from': time_from,  # NEW
+                    'time_to': time_to,      # NEW
+                    'search_query': search_query,
+                    'log_type': None,
+                    'use_quick_filter': None
                 }
                 st.rerun()
         
@@ -837,9 +926,13 @@ def render_logging_management_tab():
                 st.session_state.log_filters = {
                     'log_levels': [],
                     'organization_name': None,
-                    'date_from': datetime.now().date() - timedelta(days=7),
-                    'date_to': datetime.now().date(),
-                    'search_query': ''
+                    'date_from': None,  # No default date
+                    'date_to': None,    # No default date
+                    'time_from': None,  # NEW
+                    'time_to': None,    # NEW
+                    'search_query': '',
+                    'log_type': None,
+                    'use_quick_filter': None
                 }
                 st.rerun()
     
@@ -861,7 +954,30 @@ def render_logging_management_tab():
             export_logs_to_csv()
     
     # Fetch and display logs
-    logs_df = fetch_logs_with_filters(st.session_state.log_filters)
+    # Check if filters have been explicitly applied (not just defaults)
+    filters_applied = any([
+        st.session_state.log_filters.get('log_levels'),
+        st.session_state.log_filters.get('date_from'),
+        st.session_state.log_filters.get('date_to'),
+        st.session_state.log_filters.get('organization_name'),
+        st.session_state.log_filters.get('search_query'),
+        st.session_state.log_filters.get('use_quick_filter')
+    ])
+    
+    if not filters_applied:
+        # No filters applied - show recent logs
+        st.info("📋 Prikazujem zadnjih 100 zapisov. Uporabite filtre za prilagojeno iskanje.")
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            logs_df = pd.read_sql_query("""
+                SELECT * FROM application_logs 
+                ORDER BY id DESC 
+                LIMIT 100
+            """, conn)
+            if not logs_df.empty:
+                logs_df['timestamp'] = pd.to_datetime(logs_df['timestamp'])
+    else:
+        # Use filters
+        logs_df = fetch_logs_with_filters(st.session_state.log_filters)
     
     if not logs_df.empty:
         # Statistics
@@ -880,11 +996,21 @@ def render_logging_management_tab():
             st.metric("Opozorila", warning_count)
         
         with col4:
-            # Calculate average logs per hour
+            # NEW: Enhanced statistics based on available columns
             if len(logs_df) > 0:
-                time_span = (logs_df['timestamp'].max() - logs_df['timestamp'].min()).total_seconds() / 3600
-                avg_per_hour = len(logs_df) / max(time_span, 1)
-                st.metric("Zapisov/uro", f"{avg_per_hour:.1f}")
+                from utils.log_query_builder import LogQueryBuilder
+                query_builder = LogQueryBuilder()
+                
+                if query_builder.has_optimized_columns() and 'log_time' in logs_df.columns:
+                    # Peak hour analysis with new columns
+                    if 'hour' in logs_df.columns:
+                        peak_hour = logs_df.groupby('hour').size().idxmax() if not logs_df.empty else 0
+                        st.metric("Najbolj aktivna ura", f"{peak_hour:02d}:00")
+                else:
+                    # Fallback to average logs per hour
+                    time_span = (logs_df['timestamp'].max() - logs_df['timestamp'].min()).total_seconds() / 3600
+                    avg_per_hour = len(logs_df) / max(time_span, 1)
+                    st.metric("Zapisov/uro", f"{avg_per_hour:.1f}")
         
         # Display logs table
         st.markdown("#### 📜 Dnevniški zapisi")
@@ -1032,45 +1158,45 @@ def render_logging_management_tab():
 
 
 def fetch_logs_with_filters(filters):
-    """Fetch logs from database with applied filters."""
-    query = "SELECT * FROM application_logs WHERE 1=1"
-    params = []
+    """Fetch logs from database with applied filters using optimized queries."""
+    from utils.log_query_builder import LogQueryBuilder
+    import time
     
-    # Apply log level filter
-    if filters.get('log_levels'):
-        placeholders = ','.join(['?' for _ in filters['log_levels']])
-        query += f" AND log_level IN ({placeholders})"
-        params.extend(filters['log_levels'])
+    # Initialize query builder
+    query_builder = LogQueryBuilder()
     
-    # Apply date range filter
-    if filters.get('date_from'):
-        query += " AND DATE(timestamp) >= ?"
-        params.append(filters['date_from'])
+    # Track query performance
+    start_time = time.time()
     
-    if filters.get('date_to'):
-        query += " AND DATE(timestamp) <= ?"
-        params.append(filters['date_to'])
+    # Special handling for quick filters
+    if filters.get('use_quick_filter') == 'last100':
+        query, params = query_builder.recent_logs_query(100)
+    else:
+        # Build optimized query based on filters
+        query, params = query_builder.filtered_query(filters.copy())
     
-    # Apply search filter
-    if filters.get('search_query'):
-        query += " AND message LIKE ?"
-        params.append(f"%{filters['search_query']}%")
-    
-    # Apply organization filter
-    if filters.get('organization_name'):
-        query += " AND organization_name = ?"
-        params.append(filters['organization_name'])
-    
-    # Order by timestamp descending
-    query += " ORDER BY timestamp DESC"
+    # Add LIMIT if not already present
+    if "LIMIT" not in query:
+        query += " LIMIT 1000"
     
     # Execute query
     with sqlite3.connect(database.DATABASE_FILE) as conn:
         df = pd.read_sql_query(query, conn, params=params)
         
+        # Track query time
+        query_time = time.time() - start_time
+        
+        # Show performance metric if enabled
+        if st.session_state.get('show_performance', False):
+            st.sidebar.metric("Query Time", f"{query_time:.3f}s")
+        
         # Convert timestamp to datetime
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'])
+            
+            # Add time analysis columns if new columns exist
+            if query_builder.has_optimized_columns() and 'log_time' in df.columns:
+                df['hour'] = pd.to_datetime(df['log_time']).dt.hour
         
         return df
     
@@ -1109,9 +1235,9 @@ def render_admin_panel():
         render_admin_header()
         
         # Tabbed interface for different admin sections
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
             "📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", 
-            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila", "📋 Dnevnik", "🤖 AI Management"
+            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila", "📋 Dnevnik", "🤖 AI Management", "🧪 Test dokumentov"
         ])
         
         with tab1:
@@ -1138,3 +1264,7 @@ def render_admin_panel():
         with tab8:
             from ui.ai_manager import render_ai_manager
             render_ai_manager()
+        
+        with tab9:
+            from ui.admin_document_tester import render_document_testing_tab
+            render_document_testing_tab()

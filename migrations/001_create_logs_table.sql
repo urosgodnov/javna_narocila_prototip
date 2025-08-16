@@ -3,8 +3,8 @@
 -- Purpose: Store application logs with automatic retention management
 -- Database: SQLite
 
--- Drop table if exists (for development - remove in production)
-DROP TABLE IF EXISTS application_logs;
+-- Create table only if it doesn't exist (preserves existing data)
+-- DROP TABLE IF EXISTS application_logs; -- REMOVED to preserve data
 
 -- Create organizacija table if it doesn't exist (for foreign key reference)
 CREATE TABLE IF NOT EXISTS organizacija (
@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS organizacija (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create the main logs table
-CREATE TABLE application_logs (
+-- Create the main logs table with optimized date/time columns
+CREATE TABLE IF NOT EXISTS application_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
     
@@ -41,17 +41,24 @@ CREATE TABLE application_logs (
     -- Performance and search
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     
+    -- Optimized date/time columns for faster queries (Story 33)
+    log_date DATE,
+    log_time TIME,
+    
     -- Foreign key
     FOREIGN KEY (organization_id) REFERENCES organizacija(id) ON DELETE CASCADE
 );
 
 -- Create indexes for performance
-CREATE INDEX idx_logs_expires ON application_logs(expires_at);
-CREATE INDEX idx_logs_timestamp ON application_logs(timestamp DESC);
-CREATE INDEX idx_logs_org_level ON application_logs(organization_id, log_level);
-CREATE INDEX idx_logs_level ON application_logs(log_level);
-CREATE INDEX idx_logs_type ON application_logs(log_type) WHERE log_type IS NOT NULL;
-CREATE INDEX idx_logs_message ON application_logs(message);
+CREATE INDEX IF NOT EXISTS idx_logs_expires ON application_logs(expires_at);
+CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON application_logs(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_logs_org_level ON application_logs(organization_id, log_level);
+CREATE INDEX IF NOT EXISTS idx_logs_level ON application_logs(log_level);
+CREATE INDEX IF NOT EXISTS idx_logs_type ON application_logs(log_type) WHERE log_type IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_logs_message ON application_logs(message);
+-- Indexes for optimized date/time queries (Story 33)
+CREATE INDEX IF NOT EXISTS idx_logs_date ON application_logs(log_date DESC);
+CREATE INDEX IF NOT EXISTS idx_logs_date_time ON application_logs(log_date DESC, log_time DESC);
 
 -- Create a view for log statistics
 CREATE VIEW IF NOT EXISTS log_statistics AS
