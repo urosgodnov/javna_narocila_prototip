@@ -23,6 +23,36 @@ class ValidationManager:
         self.errors = []
         self.warnings = []
     
+    def _collect_array_data(self):
+        """
+        Collect array data from individual session state fields into proper array structure.
+        For example, collect clientInfo.clients.0.name, clientInfo.clients.1.name etc. 
+        into clientInfo.clients array.
+        """
+        # Check for clients array data
+        if not self.session_state.get('clientInfo.isSingleClient', True):
+            # Multiple clients mode - collect array data
+            clients = []
+            i = 0
+            while True:
+                # Check if this index exists
+                name_key = f'clientInfo.clients.{i}.name'
+                if name_key not in self.session_state:
+                    break
+                    
+                # Collect data for this client
+                client = {
+                    'name': self.session_state.get(f'clientInfo.clients.{i}.name', ''),
+                    'address': self.session_state.get(f'clientInfo.clients.{i}.address', ''),
+                    'legalRepresentative': self.session_state.get(f'clientInfo.clients.{i}.legalRepresentative', ''),
+                    'type': self.session_state.get(f'clientInfo.clients.{i}.type', '')
+                }
+                clients.append(client)
+                i += 1
+                
+            # Update the array in session state
+            self.session_state['clientInfo.clients'] = clients
+    
     def validate_step(self, step_keys: List[str], step_number: int = None) -> Tuple[bool, List[str]]:
         """
         Main validation entry point for form steps.
@@ -37,13 +67,35 @@ class ValidationManager:
         self.errors = []
         self.warnings = []
         
+        # Collect array data from individual fields
+        self._collect_array_data()
+        
+        # Map step numbers to screen-specific validation methods
+        screen_validators = {
+            0: self.validate_screen_1_customers,  # Step 0 = Screen 1 (clientInfo)
+            2: self.validate_screen_3_legal_basis,  # Step 2 = Screen 3 (legalBasis)
+            4: self.validate_screen_5_lots,  # Step 4 = Screen 5 (lotsInfo)
+            6: self.validate_screen_7_technical_specs,  # Step 6 = Screen 7 (technicalSpecs)
+            # Screen 13 uses existing validate_merila
+            12: lambda: self.validate_merila()  # Step 12 = Screen 13
+        }
+        
+        # Call screen-specific validator if available
+        if step_number in screen_validators:
+            is_valid, screen_errors = screen_validators[step_number]()
+            self.errors.extend(screen_errors)
+        
         # Expand section keys to field keys
         expanded_keys = self._expand_step_keys(step_keys)
         
-        # Run all validations
-        self._validate_required_fields(expanded_keys)
+        # Run generic validations (skip _validate_required_fields for step 0 to avoid duplicates)
+        if step_number != 0:
+            self._validate_required_fields(expanded_keys)
         self._validate_dropdowns(expanded_keys)
+        
+        # Always run _validate_multiple_entries - it handles multiple clients and lots
         self._validate_multiple_entries()
+        
         self._validate_conditional_requirements()
         
         return len(self.errors) == 0, self.errors
@@ -121,23 +173,50 @@ class ValidationManager:
                     required_fields.add(f"{section_key}.{field}")
         
         for key in field_keys:
+            # Skip single client fields if in multiple client mode
+            is_single_client = self.session_state.get('clientInfo.isSingleClient', True)
+            if not is_single_client and key.startswith('clientInfo.singleClient'):
+                continue
+            
+            # Skip multiple client fields if in single client mode  
+            if is_single_client and key == 'clientInfo.clients':
+                continue
+            
             field_value = self.session_state.get(key, '')
             
             # Get field schema - handle nested fields
             field_schema = None
+            is_required = False  # Initialize is_required
+            
             if '.' in key:
                 parts = key.split('.')
                 current_schema = self.schema.get('properties', {})
-                for part in parts[:-1]:
-                    if part in current_schema:
-                        current_schema = current_schema[part].get('properties', {})
-                if parts[-1] in current_schema:
-                    field_schema = current_schema[parts[-1]]
+                
+                # Special handling for array items (e.g., clientInfo.clients.0.legalRepresentative)
+                if len(parts) >= 3 and parts[1] == 'clients' and parts[2].isdigit():
+                    # This is a client array item
+                    # Get the clients array schema
+                    if 'clientInfo' in current_schema and 'clients' in current_schema['clientInfo'].get('properties', {}):
+                        clients_schema = current_schema['clientInfo']['properties']['clients']
+                        if 'items' in clients_schema and 'properties' in clients_schema['items']:
+                            field_name = parts[3] if len(parts) > 3 else ''
+                            field_schema = clients_schema['items']['properties'].get(field_name, {})
+                            # Check if this field is required in the items schema
+                            if field_name in clients_schema['items'].get('required', []):
+                                is_required = True
+                else:
+                    # Normal nested field handling
+                    for part in parts[:-1]:
+                        if part in current_schema:
+                            current_schema = current_schema[part].get('properties', {})
+                    if parts[-1] in current_schema:
+                        field_schema = current_schema[parts[-1]]
             else:
                 field_schema = self.schema.get('properties', {}).get(key, {})
             
-            # Check if this field is required
-            is_required = key in required_fields
+            # Check if this field is required (if not already determined by array handling)
+            if not is_required:
+                is_required = key in required_fields
             
             # Also check for individual field required property
             if field_schema:
@@ -156,11 +235,51 @@ class ValidationManager:
                 'projectInfo.projectName',
                 'projectInfo.projectType', 
                 'projectInfo.cpvCodes',
-                'clientInfo.singleClientName',
-                'clientInfo.singleClientAddress',
                 'procedureInfo.procedureType',
                 'contractInfo.type'
             ]
+            
+            # Add conditional client fields based on mode
+            is_single_client = self.session_state.get('clientInfo.isSingleClient', True)
+            if is_single_client:
+                critical_fields.extend([
+                    'clientInfo.singleClientName',
+                    'clientInfo.singleClientAddress',
+                    'clientInfo.singleClientLegalRepresentative'
+                ])
+            
+            # Screen-specific required fields (excluding optional ones)
+            # Screen 2: All fields except internal number
+            screen_2_required = [
+                'projectInfo.projectName',
+                'projectInfo.projectType',
+                'projectInfo.cpvCodes',
+                'projectInfo.estimatedValue',
+                'projectInfo.description'
+            ]
+            
+            # Screen 4: All fields except reason description  
+            screen_4_required = [
+                'procedureInfo.procedureType',
+                'procedureInfo.submissionDeadline',
+                'procedureInfo.openingDate'
+            ]
+            
+            # Screen 6: All fields except co-financing and documentation
+            screen_6_required = [
+                'generalOrder.deliveryLocation',
+                'generalOrder.deliveryDeadline',
+                'generalOrder.paymentTerms',
+                'generalOrder.contractDuration'
+            ]
+            
+            # Add screen-specific fields to critical if we're on that screen
+            if self.session_state.get('current_step') == 2:
+                critical_fields.extend([f for f in screen_2_required if f not in critical_fields])
+            elif self.session_state.get('current_step') == 4:
+                critical_fields.extend([f for f in screen_4_required if f not in critical_fields])
+            elif self.session_state.get('current_step') == 6:
+                critical_fields.extend([f for f in screen_6_required if f not in critical_fields])
             
             if key in critical_fields:
                 is_required = True
@@ -190,12 +309,13 @@ class ValidationManager:
         # List of critical dropdowns that must have valid selection
         critical_dropdowns = [
             ('procedureInfo.procedureType', 'Vrsta postopka'),
-            ('clientInfo.singleClientType', 'Vrsta naročnika'),
             ('contractInfo.type', 'Vrsta pogodbe'),
             ('projectInfo.projectType', 'Vrsta naročila'),
             ('submissionInfo.submissionMethod', 'Način oddaje ponudb'),
             ('tenderInfo.evaluationCriteria', 'Merilo za izbor')
         ]
+        
+        # Note: singleClientType doesn't exist in modern schema - removed
         
         for field_key, field_label in critical_dropdowns:
             if field_key in field_keys or any(field_key in k for k in field_keys):
@@ -208,23 +328,47 @@ class ValidationManager:
         Validate multiple entry requirements.
         For example, when multiple clients are selected, validate that at least 2 are entered.
         """
-        # Multiple clients validation
-        if self.session_state.get('clientInfo.multipleClients') == 'da':
-            # Count complete client entries
-            client_count = 0
-            for i in range(1, 11):  # Support up to 10 clients
-                client_name = self.session_state.get(f'clientInfo.client{i}Name', '').strip()
-                client_address = self.session_state.get(f'clientInfo.client{i}Address', '').strip()
-                client_type = self.session_state.get(f'clientInfo.client{i}Type', '').strip()
-                
-                if client_name and client_address and client_type:
-                    client_count += 1
+        # Multiple clients validation - check if NOT single client mode
+        is_single_client = self.session_state.get('clientInfo.isSingleClient', True)
+        if not is_single_client:
+            # Check if we have clients array (as per JSON schema)
+            clients_array = self.session_state.get('clientInfo.clients', [])
             
-            if client_count < 2:
-                self.errors.append(
-                    f"Pri več naročnikih morate vnesti podatke za najmanj 2 naročnika "
-                    f"(trenutno: {client_count})"
-                )
+            if clients_array:
+                # Array structure - validate each client
+                client_count = 0
+                incomplete_clients = []
+                
+                for idx, client in enumerate(clients_array):
+                    if isinstance(client, dict):
+                        name = client.get('name', '').strip()
+                        address = client.get('address', '').strip()
+                        legal_rep = client.get('legalRepresentative', '').strip()
+                        
+                        # Check if all required fields are present
+                        missing = []
+                        if not name:
+                            missing.append('naziv')
+                        if not address:
+                            missing.append('naslov')
+                        if not legal_rep:
+                            missing.append('zakoniti zastopnik')
+                        
+                        if not missing:
+                            client_count += 1
+                        elif name or address or legal_rep:  # Partially filled
+                            incomplete_clients.append(f"Naročnik {idx+1}: manjka {', '.join(missing)}")
+                
+                if client_count < 2:
+                    self.errors.append(
+                        f"Pri več naročnikih morate vnesti podatke za najmanj 2 naročnika "
+                        f"(trenutno popolnih: {client_count})"
+                    )
+                    for incomplete in incomplete_clients:
+                        self.errors.append(incomplete)
+            else:
+                # No clients array - maybe error or not initialized
+                self.errors.append("Pri več naročnikih morate vnesti podatke za najmanj 2 naročnika")
         
         # Lot validation
         is_lot_divided = self.session_state.get('lotInfo.isLotDivided') == 'da'
@@ -357,6 +501,133 @@ class ValidationManager:
     def is_valid(self) -> bool:
         """Check if validation passed (no errors)."""
         return len(self.errors) == 0
+    
+    # ============ SCREEN-SPECIFIC VALIDATION METHODS ============
+    
+    def validate_screen_1_customers(self) -> Tuple[bool, List[str]]:
+        """
+        Validate customer data for screen 1.
+        Requirements:
+        - Single customer: all fields required
+        - Multiple customers: minimum 2 complete entries (handled by _validate_multiple_entries)
+        - Logo upload: file required if option selected
+        """
+        errors = []
+        
+        # For multiple customers, the validation is already handled in _validate_multiple_entries()
+        # We just need to handle single customer here
+        if self.session_state.get('clientInfo.multipleClients') != 'da':
+            # Single customer validation
+            required_fields = {
+                'clientInfo.singleClientName': 'Ime naročnika',
+                'clientInfo.singleClientAddress': 'Naslov naročnika', 
+                'clientInfo.singleClientLegalRepresentative': 'Zakoniti zastopnik (ime in priimek)'
+            }
+            
+            for field_key, field_label in required_fields.items():
+                value = self.session_state.get(field_key, '').strip() if self.session_state.get(field_key) else ''
+                if not value:
+                    errors.append(f"{field_label} je obvezno polje")
+        
+        # Logo validation - check if user wants logo but hasn't uploaded file
+        if self.session_state.get('clientInfo.wantsLogo', False):
+            # Check both direct key (Streamlit widget) and file_info key (saved metadata)
+            logo_file = self.session_state.get('clientInfo.logo')
+            logo_file_info = self.session_state.get('clientInfo.logo_file_info')
+            
+            if not logo_file and not logo_file_info:
+                errors.append("Pri dodajanju logotipov morate naložiti datoteko")
+        
+        return len(errors) == 0, errors
+    
+    def validate_screen_3_legal_basis(self) -> Tuple[bool, List[str]]:
+        """
+        Validate legal basis for screen 3.
+        Requirement: If additional legal basis selected, at least one entry required.
+        """
+        errors = []
+        
+        if self.session_state.get('legalBasis.additionalBasis') == 'da':
+            # Count non-empty legal basis entries
+            valid_basis_count = 0
+            for i in range(1, 6):  # Check up to 5 basis entries
+                basis_text = self.session_state.get(f'legalBasis.basis_{i}', '').strip()
+                if basis_text:
+                    valid_basis_count += 1
+            
+            if valid_basis_count < 1:
+                errors.append("Pri dodatni pravni podlagi morate vnesti najmanj eno podlago")
+        
+        return len(errors) == 0, errors
+    
+    def validate_screen_5_lots(self) -> Tuple[bool, List[str]]:
+        """
+        Validate lot division for screen 5.
+        Requirements:
+        - If divided into lots, minimum 2 lots required
+        - Each lot must have required fields filled
+        """
+        errors = []
+        
+        is_lot_divided = self.session_state.get('lotInfo.isLotDivided') == 'da'
+        
+        if is_lot_divided:
+            lot_count = self.session_state.get('lotInfo.lotCount', 0)
+            
+            # Convert to int if string
+            if isinstance(lot_count, str):
+                try:
+                    lot_count = int(lot_count)
+                except ValueError:
+                    lot_count = 0
+            
+            if lot_count < 2:
+                errors.append("Pri delitvi na sklope morate imeti najmanj 2 sklopa")
+            
+            # Check actual lot entries
+            complete_lots = 0
+            for i in range(1, lot_count + 1):
+                lot_name = self.session_state.get(f'lot_{i}_name', '').strip()
+                lot_description = self.session_state.get(f'lot_{i}_description', '').strip()
+                lot_cpv = self.session_state.get(f'lot_{i}_cpv', '').strip()
+                lot_value = self.session_state.get(f'lot_{i}_value', '')
+                
+                # Check required fields (excluding sofinancirano and dokumentacija)
+                if lot_name and lot_description and lot_cpv and lot_value:
+                    complete_lots += 1
+            
+            if complete_lots < lot_count:
+                errors.append(f"Vnesite vse obvezne podatke za sklope (izpolnjeni: {complete_lots}/{lot_count})")
+        
+        return len(errors) == 0, errors
+    
+    def validate_screen_7_technical_specs(self) -> Tuple[bool, List[str]]:
+        """
+        Validate technical specifications for screen 7.
+        Requirements:
+        - Technical specs field is required
+        - If specs exist, minimum 1 document required
+        """
+        errors = []
+        
+        # Check if technical specs field is answered
+        has_specs = self.session_state.get('technicalSpecs.hasExisting')
+        
+        if not has_specs or has_specs not in ['da', 'ne']:
+            errors.append("Polje 'Naročnik že ima pripravljene tehnične zahteve / specifikacije' je obvezno")
+        elif has_specs == 'da':
+            # Check document count
+            doc_count = self.session_state.get('technicalSpecs.documentCount', 0)
+            if isinstance(doc_count, str):
+                try:
+                    doc_count = int(doc_count)
+                except ValueError:
+                    doc_count = 0
+            
+            if doc_count < 1:
+                errors.append("Pri obstoječih tehničnih zahtevah morate naložiti najmanj 1 dokument")
+        
+        return len(errors) == 0, errors
     
     def validate_merila(self, step_key: str = 'selectionCriteria') -> Tuple[bool, List[str]]:
         """

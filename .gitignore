@@ -420,7 +420,6 @@ FodyWeavers.xsd
 
 # from my project folder
 .venv/
-tests/
 web-bundles/
 .vscode/
 .pytest_cache/
