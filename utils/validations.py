@@ -90,7 +90,7 @@ class ValidationManager:
         
         # Run generic validations (skip _validate_required_fields for step 0 to avoid duplicates)
         if step_number != 0:
-            self._validate_required_fields(expanded_keys)
+            self._validate_required_fields(expanded_keys, step_number)
         self._validate_dropdowns(expanded_keys)
         
         # Always run _validate_multiple_entries - it handles multiple clients and lots
@@ -151,7 +151,7 @@ class ValidationManager:
         
         return expanded_keys
     
-    def _validate_required_fields(self, field_keys: List[str]):
+    def _validate_required_fields(self, field_keys: List[str], step_number: int = None):
         """
         Validate all required fields have values.
         
@@ -233,7 +233,6 @@ class ValidationManager:
             # Critical fields that are always required
             critical_fields = [
                 'projectInfo.projectName',
-                'projectInfo.projectType', 
                 'projectInfo.cpvCodes',
                 'procedureInfo.procedureType',
                 'contractInfo.type'
@@ -249,13 +248,12 @@ class ValidationManager:
                 ])
             
             # Screen-specific required fields (excluding optional ones)
-            # Screen 2: All fields except internal number
+            # Screen 2: All fields except internal number (based on actual schema)
             screen_2_required = [
                 'projectInfo.projectName',
-                'projectInfo.projectType',
-                'projectInfo.cpvCodes',
-                'projectInfo.estimatedValue',
-                'projectInfo.description'
+                'projectInfo.projectSubject',
+                'projectInfo.cpvCodes'
+                # internalProjectNumber is optional
             ]
             
             # Screen 4: All fields except reason description  
@@ -274,11 +272,15 @@ class ValidationManager:
             ]
             
             # Add screen-specific fields to critical if we're on that screen
-            if self.session_state.get('current_step') == 2:
+            # Note: Steps are 0-indexed (step 1 = second screen with projectInfo)
+            # Use step_number parameter if available, otherwise fall back to current_step
+            current_step = step_number if step_number is not None else self.session_state.get('current_step')
+            
+            if current_step == 1:  # Step 1 = Screen 2 (projectInfo)
                 critical_fields.extend([f for f in screen_2_required if f not in critical_fields])
-            elif self.session_state.get('current_step') == 4:
+            elif current_step == 3:  # Step 3 = Screen 4 (procedureInfo)
                 critical_fields.extend([f for f in screen_4_required if f not in critical_fields])
-            elif self.session_state.get('current_step') == 6:
+            elif current_step == 5:  # Step 5 = Screen 6 (generalOrder)
                 critical_fields.extend([f for f in screen_6_required if f not in critical_fields])
             
             if key in critical_fields:
@@ -310,7 +312,6 @@ class ValidationManager:
         critical_dropdowns = [
             ('procedureInfo.procedureType', 'Vrsta postopka'),
             ('contractInfo.type', 'Vrsta pogodbe'),
-            ('projectInfo.projectType', 'Vrsta naročila'),
             ('submissionInfo.submissionMethod', 'Način oddaje ponudb'),
             ('tenderInfo.evaluationCriteria', 'Merilo za izbor')
         ]
