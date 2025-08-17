@@ -52,6 +52,64 @@ class ValidationManager:
                 
             # Update the array in session state
             self.session_state['clientInfo.clients'] = clients
+        
+        # Collect legal basis array data
+        if self.session_state.get('legalBasis.useAdditional', False):
+            legal_bases = []
+            i = 0
+            while True:
+                field_key = f'legalBasis.additionalLegalBases.{i}'
+                if field_key not in self.session_state:
+                    break
+                basis_text = self.session_state.get(field_key, '')
+                if basis_text:  # Include even empty strings to preserve order
+                    legal_bases.append(basis_text)
+                i += 1
+            
+            if legal_bases:
+                self.session_state['legalBasis.additionalLegalBases'] = legal_bases
+        
+        # Collect lots array data
+        if self.session_state.get('lotsInfo.hasLots', False):
+            lots = []
+            i = 0
+            while True:
+                name_key = f'lots.{i}.name'
+                if name_key not in self.session_state:
+                    break
+                
+                lot = {
+                    'name': self.session_state.get(f'lots.{i}.name', ''),
+                    'description': self.session_state.get(f'lots.{i}.description', ''),
+                    'cpvCodes': self.session_state.get(f'lots.{i}.cpvCodes', ''),
+                    'estimatedValue': self.session_state.get(f'lots.{i}.estimatedValue', '')
+                }
+                lots.append(lot)
+                i += 1
+            
+            if lots:
+                self.session_state['lots'] = lots
+        
+        # Collect cofinancers array data
+        if self.session_state.get('orderType.isCofinanced', False):
+            cofinancers = []
+            i = 0
+            while True:
+                name_key = f'orderType.cofinancers.{i}.name'
+                if name_key not in self.session_state:
+                    break
+                
+                cofinancer = {
+                    'name': self.session_state.get(f'orderType.cofinancers.{i}.name', ''),
+                    'program': self.session_state.get(f'orderType.cofinancers.{i}.program', ''),
+                    'logo': self.session_state.get(f'orderType.cofinancers.{i}.logo', ''),
+                    'specialRequirements': self.session_state.get(f'orderType.cofinancers.{i}.specialRequirements', '')
+                }
+                cofinancers.append(cofinancer)
+                i += 1
+            
+            if cofinancers:
+                self.session_state['orderType.cofinancers'] = cofinancers
     
     def validate_step(self, step_keys: List[str], step_number: int = None) -> Tuple[bool, List[str]]:
         """
@@ -75,7 +133,9 @@ class ValidationManager:
             0: self.validate_screen_1_customers,  # Step 0 = Screen 1 (clientInfo)
             2: self.validate_screen_3_legal_basis,  # Step 2 = Screen 3 (legalBasis)
             4: self.validate_screen_5_lots,  # Step 4 = Screen 5 (lotsInfo)
+            5: self.validate_order_type,  # Step 5 = Screen 6 (orderType - when no lots)
             6: self.validate_screen_7_technical_specs,  # Step 6 = Screen 7 (technicalSpecs)
+            7: self.validate_execution_deadline,  # Step 7 = Screen 8 (executionDeadline)
             # Screen 13 uses existing validate_merila
             12: lambda: self.validate_merila()  # Step 12 = Screen 13
         }
@@ -234,7 +294,7 @@ class ValidationManager:
             critical_fields = [
                 'projectInfo.projectName',
                 'projectInfo.cpvCodes',
-                'procedureInfo.procedureType',
+                'submissionProcedure.procedure',
                 'contractInfo.type'
             ]
             
@@ -258,17 +318,18 @@ class ValidationManager:
             
             # Screen 4: All fields except reason description  
             screen_4_required = [
-                'procedureInfo.procedureType',
+                # Note: procedureType moved to submissionProcedure.procedure
                 'procedureInfo.submissionDeadline',
                 'procedureInfo.openingDate'
             ]
             
-            # Screen 6: All fields except co-financing and documentation
+            # Screen 6: Required fields for general order
             screen_6_required = [
-                'generalOrder.deliveryLocation',
-                'generalOrder.deliveryDeadline',
-                'generalOrder.paymentTerms',
-                'generalOrder.contractDuration'
+                # estimatedValue handled in validate_order_type with proper message
+                'orderType.deliveryLocation',
+                'orderType.deliveryDeadline',
+                'orderType.paymentTerms',
+                'orderType.contractDuration'
             ]
             
             # Add screen-specific fields to critical if we're on that screen
@@ -310,7 +371,7 @@ class ValidationManager:
         """
         # List of critical dropdowns that must have valid selection
         critical_dropdowns = [
-            ('procedureInfo.procedureType', 'Vrsta postopka'),
+            ('submissionProcedure.procedure', 'Postopek oddaje javnega naročila'),
             ('contractInfo.type', 'Vrsta pogodbe'),
             ('submissionInfo.submissionMethod', 'Način oddaje ponudb'),
             ('tenderInfo.evaluationCriteria', 'Merilo za izbor')
@@ -371,26 +432,7 @@ class ValidationManager:
                 # No clients array - maybe error or not initialized
                 self.errors.append("Pri več naročnikih morate vnesti podatke za najmanj 2 naročnika")
         
-        # Lot validation
-        is_lot_divided = self.session_state.get('lotInfo.isLotDivided') == 'da'
-        lot_count = self.session_state.get('lotInfo.lotCount', 0)
-        
-        if is_lot_divided:
-            if lot_count < 2:
-                self.errors.append("Pri delitvi na sklope morate imeti najmanj 2 sklopa")
-            
-            # Check actual lot entries
-            actual_lots = 0
-            for i in range(1, lot_count + 1):
-                lot_name = self.session_state.get(f'lot_{i}_name', '').strip()
-                if lot_name:
-                    actual_lots += 1
-            
-            if actual_lots < lot_count:
-                self.errors.append(
-                    f"Vnesite podatke za vse sklope "
-                    f"(vneseni: {actual_lots}/{lot_count})"
-                )
+        # Note: Lot validation moved to validate_screen_5_lots() to use correct field names
     
     def _validate_conditional_requirements(self):
         """
@@ -548,15 +590,31 @@ class ValidationManager:
         """
         errors = []
         
-        if self.session_state.get('legalBasis.additionalBasis') == 'da':
-            # Count non-empty legal basis entries
-            valid_basis_count = 0
-            for i in range(1, 6):  # Check up to 5 basis entries
-                basis_text = self.session_state.get(f'legalBasis.basis_{i}', '').strip()
-                if basis_text:
-                    valid_basis_count += 1
+        # Check boolean field (modern schema)
+        if self.session_state.get('legalBasis.useAdditional', False):
+            # Check array field (additionalLegalBases)
+            legal_bases = self.session_state.get('legalBasis.additionalLegalBases', [])
             
-            if valid_basis_count < 1:
+            # Also check for individual fields (form renderer might store as separate fields)
+            if not legal_bases:
+                # Try to collect from individual fields
+                collected_bases = []
+                i = 0
+                while True:
+                    field_key = f'legalBasis.additionalLegalBases.{i}'
+                    if field_key in self.session_state:
+                        basis_text = self.session_state.get(field_key, '').strip()
+                        if basis_text:
+                            collected_bases.append(basis_text)
+                        i += 1
+                    else:
+                        break
+                legal_bases = collected_bases
+            
+            # Check if we have at least one non-empty entry
+            valid_bases = [b for b in legal_bases if b and b.strip()]
+            
+            if len(valid_bases) < 1:
                 errors.append("Pri dodatni pravni podlagi morate vnesti najmanj eno podlago")
         
         return len(errors) == 0, errors
@@ -570,35 +628,243 @@ class ValidationManager:
         """
         errors = []
         
-        is_lot_divided = self.session_state.get('lotInfo.isLotDivided') == 'da'
+        # Check boolean field (modern schema)
+        has_lots = self.session_state.get('lotsInfo.hasLots', False)
         
-        if is_lot_divided:
-            lot_count = self.session_state.get('lotInfo.lotCount', 0)
+        if has_lots:
+            # Get lots array (might need collection first)
+            lots = self.session_state.get('lots', [])
             
-            # Convert to int if string
-            if isinstance(lot_count, str):
-                try:
-                    lot_count = int(lot_count)
-                except ValueError:
-                    lot_count = 0
+            # If lots array is empty, try to collect from individual fields
+            if not lots:
+                collected_lots = []
+                i = 0
+                while True:
+                    name_key = f'lots.{i}.name'
+                    if name_key not in self.session_state:
+                        break
+                    
+                    lot = {
+                        'name': self.session_state.get(f'lots.{i}.name', ''),
+                        'description': self.session_state.get(f'lots.{i}.description', ''),
+                        'cpvCodes': self.session_state.get(f'lots.{i}.cpvCodes', ''),
+                        'estimatedValue': self.session_state.get(f'lots.{i}.estimatedValue', '')
+                    }
+                    collected_lots.append(lot)
+                    i += 1
+                lots = collected_lots
             
-            if lot_count < 2:
+            # Check minimum 2 lots requirement
+            if len(lots) < 2:
                 errors.append("Pri delitvi na sklope morate imeti najmanj 2 sklopa")
             
-            # Check actual lot entries
+            # Check each lot has required fields
             complete_lots = 0
-            for i in range(1, lot_count + 1):
-                lot_name = self.session_state.get(f'lot_{i}_name', '').strip()
-                lot_description = self.session_state.get(f'lot_{i}_description', '').strip()
-                lot_cpv = self.session_state.get(f'lot_{i}_cpv', '').strip()
-                lot_value = self.session_state.get(f'lot_{i}_value', '')
-                
-                # Check required fields (excluding sofinancirano and dokumentacija)
-                if lot_name and lot_description and lot_cpv and lot_value:
-                    complete_lots += 1
+            for idx, lot in enumerate(lots):
+                if isinstance(lot, dict):
+                    name = lot.get('name', '').strip()
+                    description = lot.get('description', '').strip()
+                    cpv = lot.get('cpvCodes', '').strip()
+                    # estimatedValue might be optional
+                    
+                    if name and description and cpv:
+                        complete_lots += 1
+                    elif name or description or cpv:  # Partially filled
+                        errors.append(f"Sklop {idx+1}: izpolnite vse obvezne podatke (naziv, opis, CPV kode)")
             
-            if complete_lots < lot_count:
-                errors.append(f"Vnesite vse obvezne podatke za sklope (izpolnjeni: {complete_lots}/{lot_count})")
+            if complete_lots < len(lots) and len(lots) >= 2:
+                # Only show this if we have enough lots but some are incomplete
+                pass  # Individual errors already added above
+        
+        return len(errors) == 0, errors
+    
+    def validate_order_type(self) -> Tuple[bool, List[str]]:
+        """
+        Validate order type fields (step 5/6).
+        Requirements:
+        - estimatedValue is required
+        - If cofinanced, require cofinancer details
+        """
+        errors = []
+        
+        # Check estimated value - try multiple possible keys
+        estimated_value = None
+        
+        # Try different possible keys where the value might be stored
+        possible_keys = [
+            'general.orderType.estimatedValue',  # General mode key (no lots)
+            'orderType.estimatedValue',           # Direct key (fallback)
+        ]
+        
+        # Add keys for all possible lots
+        lots = self.session_state.get('lots', [])
+        for i in range(len(lots)):
+            possible_keys.append(f'lot_{i}.orderType.estimatedValue')
+        
+        for key in possible_keys:
+            if key in self.session_state:
+                estimated_value = self.session_state.get(key)
+                break
+        
+        # If still not found, search for any key with estimatedValue
+        if estimated_value is None:
+            for key in self.session_state.__dict__.keys() if hasattr(self.session_state, '__dict__') else []:
+                if 'estimatedValue' in key and self.session_state.get(key):
+                    estimated_value = self.session_state.get(key)
+                    break
+        
+        # Check if value exists and is greater than 0
+        if estimated_value is None or estimated_value == '':
+            errors.append("Ocenjena vrednost javnega naročila (EUR brez DDV) ne sme biti prazno")
+        else:
+            # Convert to float for comparison
+            try:
+                value_float = float(estimated_value)
+                if value_float <= 0:
+                    errors.append("Ocenjena vrednost javnega naročila mora biti večja od 0")
+            except (ValueError, TypeError):
+                errors.append("Ocenjena vrednost javnega naročila mora biti številka")
+        
+        # Check cofinancing - try multiple possible keys
+        is_cofinanced = False
+        cofinanced_keys = [
+            'general.orderType.isCofinanced',     # General mode key (no lots)
+            'orderType.isCofinanced',              # Direct key (fallback)
+        ]
+        
+        # Add keys for all possible lots
+        for i in range(len(lots)):
+            cofinanced_keys.append(f'lot_{i}.orderType.isCofinanced')
+        
+        import logging
+        
+        for key in cofinanced_keys:
+            if key in self.session_state:
+                value = self.session_state.get(key, False)
+                logging.info(f"[validate_order_type] Checking {key}: {value} (type: {type(value)})")
+                # Handle both boolean and string values
+                if value == True or value == 'true' or value == 'da':
+                    is_cofinanced = True
+                    break
+        
+        # If checkbox not found but we have cofinancers, assume it's cofinanced
+        if not is_cofinanced:
+            # Check if we have any cofinancer data
+            prefixes = ['general.orderType', 'orderType']
+            # Add lot prefixes
+            for i in range(len(lots)):
+                prefixes.append(f'lot_{i}.orderType')
+            
+            for prefix in prefixes:
+                # Check for array
+                array_key = f'{prefix}.cofinancers'
+                if array_key in self.session_state and self.session_state.get(array_key):
+                    logging.info(f"[validate_order_type] Found cofinancers array at {array_key}, assuming cofinanced")
+                    is_cofinanced = True
+                    break
+                
+                # Check for individual fields
+                name_key = f'{prefix}.cofinancers.0.name'
+                if name_key in self.session_state and self.session_state.get(name_key):
+                    logging.info(f"[validate_order_type] Found cofinancer data at {name_key}, assuming cofinanced")
+                    is_cofinanced = True
+                    break
+        
+        logging.info(f"[validate_order_type] Final is_cofinanced: {is_cofinanced}")
+        
+        if is_cofinanced:
+            # Check cofinancers array - try multiple possible keys
+            cofinancers = []
+            cofinancer_keys = [
+                'general.orderType.cofinancers',
+                'orderType.cofinancers',
+                'lot_0.orderType.cofinancers'
+            ]
+            
+            for key in cofinancer_keys:
+                if key in self.session_state:
+                    cofinancers = self.session_state.get(key, [])
+                    logging.info(f"[validate_order_type] Found cofinancers at {key}: {cofinancers}")
+                    break
+            
+            # Try to collect from individual fields if array is empty
+            if not cofinancers:
+                logging.info("[validate_order_type] Trying to collect cofinancers from individual fields")
+                collected_cofinancers = []
+                # Try different key patterns
+                prefixes = ['general.orderType', 'orderType', 'lot_0.orderType']
+                for prefix in prefixes:
+                    i = 0
+                    while True:
+                        name_key = f'{prefix}.cofinancers.{i}.name'
+                        if name_key not in self.session_state:
+                            break
+                        
+                        name_value = self.session_state.get(f'{prefix}.cofinancers.{i}.name', '')
+                        program_value = self.session_state.get(f'{prefix}.cofinancers.{i}.program', '')
+                        logging.info(f"[validate_order_type] Found cofinancer {i}: name={name_value}, program={program_value}")
+                        
+                        cofinancer = {
+                            'name': name_value,
+                            'program': program_value
+                        }
+                        collected_cofinancers.append(cofinancer)
+                        i += 1
+                    
+                    if collected_cofinancers:
+                        logging.info(f"[validate_order_type] Collected {len(collected_cofinancers)} cofinancers with prefix {prefix}")
+                        break  # Found cofinancers with this prefix
+                
+                cofinancers = collected_cofinancers
+            
+            # Validate at least one cofinancer with required fields
+            has_valid_cofinancer = False
+            
+            # If we have placeholder objects, check the actual field values
+            if cofinancers and all(not c or c == {} for c in cofinancers):
+                logging.info("[validate_order_type] Found placeholder objects, checking individual fields")
+                # We have placeholder objects, check individual fields
+                for idx in range(len(cofinancers)):
+                    # Try to find the actual values in session state
+                    name = None
+                    program = None
+                    
+                    # Try different key patterns
+                    for prefix in ['general.orderType', 'orderType', 'lot_0.orderType']:
+                        name_key = f'{prefix}.cofinancers.{idx}.name'
+                        program_key = f'{prefix}.cofinancers.{idx}.program'
+                        
+                        if name_key in self.session_state:
+                            name = self.session_state.get(name_key, '')
+                            program = self.session_state.get(program_key, '')
+                            logging.info(f"[validate_order_type] Found cofinancer {idx} at {prefix}: name={name}, program={program}")
+                            break
+                    
+                    if name and program:
+                        if name.strip() and program.strip():
+                            has_valid_cofinancer = True
+                    elif name or program:  # Partially filled
+                        if not name or not name.strip():
+                            errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv in naslov sofinancerja")
+                        if not program or not program.strip():
+                            errors.append(f"Sofinancer {idx+1}: Vnesite naziv, področje in oznako programa/projekta")
+            else:
+                # Normal validation for properly structured cofinancers
+                for idx, cofinancer in enumerate(cofinancers):
+                    if isinstance(cofinancer, dict):
+                        name = cofinancer.get('name', '').strip()
+                        program = cofinancer.get('program', '').strip()
+                        
+                        if name and program:
+                            has_valid_cofinancer = True
+                        elif name or program:  # Partially filled
+                            if not name:
+                                errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv in naslov sofinancerja")
+                            if not program:
+                                errors.append(f"Sofinancer {idx+1}: Vnesite naziv, področje in oznako programa/projekta")
+            
+            if not has_valid_cofinancer:
+                errors.append("Pri sofinanciranem naročilu morate vnesti podatke o vsaj enem sofinancerju")
         
         return len(errors) == 0, errors
     
@@ -611,14 +877,43 @@ class ValidationManager:
         """
         errors = []
         
-        # Check if technical specs field is answered
-        has_specs = self.session_state.get('technicalSpecs.hasExisting')
+        # Get lots for dynamic key generation
+        lots = self.session_state.get('lots', [])
+        
+        # Try different possible keys for hasSpecifications field
+        has_specs = None
+        possible_keys = [
+            'general.technicalSpecifications.hasSpecifications',  # General mode
+            'technicalSpecifications.hasSpecifications',          # Direct key
+        ]
+        
+        # Add lot-specific keys
+        for i in range(len(lots)):
+            possible_keys.append(f'lot_{i}.technicalSpecifications.hasSpecifications')
+        
+        for key in possible_keys:
+            if key in self.session_state:
+                has_specs = self.session_state.get(key)
+                break
         
         if not has_specs or has_specs not in ['da', 'ne']:
             errors.append("Polje 'Naročnik že ima pripravljene tehnične zahteve / specifikacije' je obvezno")
         elif has_specs == 'da':
-            # Check document count
-            doc_count = self.session_state.get('technicalSpecs.documentCount', 0)
+            # Check document count - also try multiple keys
+            doc_count = 0
+            doc_keys = [
+                'general.technicalSpecifications.documentCount',
+                'technicalSpecifications.documentCount',
+            ]
+            
+            for i in range(len(lots)):
+                doc_keys.append(f'lot_{i}.technicalSpecifications.documentCount')
+            
+            for key in doc_keys:
+                if key in self.session_state:
+                    doc_count = self.session_state.get(key, 0)
+                    break
+            
             if isinstance(doc_count, str):
                 try:
                     doc_count = int(doc_count)
@@ -627,6 +922,101 @@ class ValidationManager:
             
             if doc_count < 1:
                 errors.append("Pri obstoječih tehničnih zahtevah morate naložiti najmanj 1 dokument")
+        
+        return len(errors) == 0, errors
+    
+    def validate_execution_deadline(self) -> Tuple[bool, List[str]]:
+        """
+        Validate execution deadline fields.
+        Requirements:
+        - Type selection is required
+        - For date type: start and end dates required
+        - For duration types: positive integer required
+        """
+        errors = []
+        
+        # Get lots for dynamic key generation
+        lots = self.session_state.get('lots', [])
+        
+        # Try different possible keys for type field
+        deadline_type = None
+        type_keys = [
+            'general.executionDeadline.type',  # General mode
+            'executionDeadline.type',           # Direct key
+        ]
+        
+        # Add lot-specific keys
+        for i in range(len(lots)):
+            type_keys.append(f'lot_{i}.executionDeadline.type')
+        
+        for key in type_keys:
+            if key in self.session_state:
+                deadline_type = self.session_state.get(key)
+                break
+        
+        if not deadline_type or deadline_type == '':
+            errors.append("Prosimo izberite način določitve roka izvedbe")
+            return len(errors) == 0, errors
+        
+        # Get the prefix where we found the type
+        prefix = None
+        for key in type_keys:
+            if key in self.session_state and self.session_state.get(key) == deadline_type:
+                prefix = key.replace('.type', '')
+                break
+        
+        # Validate based on selected type
+        if deadline_type == 'datumsko':
+            # Check start and end dates
+            start_date = self.session_state.get(f'{prefix}.startDate')
+            end_date = self.session_state.get(f'{prefix}.endDate')
+            
+            if not start_date:
+                errors.append("Datum začetka je obvezen pri datumskem roku")
+            if not end_date:
+                errors.append("Datum konca je obvezen pri datumskem roku")
+                
+        elif deadline_type == 'v dnevih':
+            days = self.session_state.get(f'{prefix}.days')
+            if days is None or days == '':
+                errors.append("Število dni je obvezno")
+            else:
+                try:
+                    days_int = int(days)
+                    if days_int <= 0:
+                        errors.append("Število dni mora biti pozitivno celo število")
+                    elif days_int != float(days):
+                        errors.append("Število dni mora biti celo število (brez decimalnih mest)")
+                except (ValueError, TypeError):
+                    errors.append("Število dni mora biti veljavno celo število")
+                    
+        elif deadline_type == 'v mesecih':
+            months = self.session_state.get(f'{prefix}.months')
+            if months is None or months == '':
+                errors.append("Število mesecev je obvezno")
+            else:
+                try:
+                    months_int = int(months)
+                    if months_int <= 0:
+                        errors.append("Število mesecev mora biti pozitivno celo število")
+                    elif months_int != float(months):
+                        errors.append("Število mesecev mora biti celo število (brez decimalnih mest)")
+                except (ValueError, TypeError):
+                    errors.append("Število mesecev mora biti veljavno celo število")
+                    
+        elif deadline_type == 'v letih':
+            years = self.session_state.get(f'{prefix}.years')
+            if years is None or years == '':
+                errors.append("Število let je obvezno")
+            else:
+                try:
+                    years_int = int(years)
+                    if years_int <= 0:
+                        errors.append("Število let mora biti pozitivno celo število")
+                    elif years_int != float(years):
+                        errors.append("Število let mora biti celo število (brez decimalnih mest)")
+                except (ValueError, TypeError):
+                    errors.append("Število let mora biti veljavno celo število")
         
         return len(errors) == 0, errors
     
