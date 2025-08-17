@@ -13,6 +13,9 @@ from utils.criteria_suggestions import (
     get_criteria_help_text,
     get_criteria_display_names
 )
+# Story 003: Field Type Enhancements
+from utils.field_types import FieldTypeManager, RealTimeValidator
+from utils.ui_components import render_field_with_validation
 
 
 def get_social_criteria_specific_labels(criteria_prefix="selectionCriteria"):
@@ -305,14 +308,28 @@ def _is_field_required(parent_key, prop_name):
     except (KeyError, TypeError):
         return False
 
-def render_form(schema_properties, parent_key="", lot_context=None):
+def render_form(schema_properties, parent_key="", lot_context=None, field_manager=None, real_time_validator=None):
     """Recursively render form fields based on JSON schema properties.
     
     Args:
         schema_properties: Schema properties to render
         parent_key: Parent key for nested fields
         lot_context: Lot context information (from get_current_lot_context)
+        field_manager: FieldTypeManager instance for enhanced field rendering
+        real_time_validator: RealTimeValidator instance for field validation
     """
+    # Initialize field manager if not provided
+    if field_manager is None:
+        field_manager = FieldTypeManager()
+    
+    # Initialize real-time validator if not provided
+    if real_time_validator is None:
+        from utils.validations import ValidationManager
+        validation_manager = ValidationManager(
+            st.session_state.get('schema', {}),
+            st.session_state
+        )
+        real_time_validator = RealTimeValidator(validation_manager)
     # Debug: Show what we're rendering when contractInfo is involved
     if parent_key == '' and 'contractInfo' in schema_properties:
         with st.expander("🔍 Debug: render_form input", expanded=False):
@@ -369,7 +386,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 ref_props = st.session_state['schema']
                 for part in ref_path:
                     ref_props = ref_props[part]
-                render_form(ref_props.get("properties", {}), parent_key=full_key, lot_context=lot_context)
+                render_form(ref_props.get("properties", {}), parent_key=full_key, lot_context=lot_context, field_manager=field_manager, real_time_validator=real_time_validator)
             else:
                 # Only show section header if there's an explicit title
                 if "title" in prop_details:
@@ -391,7 +408,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                         st.info(help_text)
                         # Continue processing other fields in this section
                         
-                render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context)
+                render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context, field_manager=field_manager, real_time_validator=real_time_validator)
                 
                 # Add validation and ratio totals ONLY for the main selectionCriteria section
                 # Not for nested objects like socialCriteriaOptions or ratiosHeader
@@ -445,7 +462,7 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                                 st.rerun()
                         
                         # Render the form fields for this object
-                        render_form(items_schema.get("properties", {}), parent_key=f"{full_key}.{i}", lot_context=lot_context)
+                        render_form(items_schema.get("properties", {}), parent_key=f"{full_key}.{i}", lot_context=lot_context, field_manager=field_manager, real_time_validator=real_time_validator)
                 
                 # Add new item with improved UX and correct Slovenian grammar
                 item_title = items_schema.get('title', 'element')
@@ -550,7 +567,12 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 
                 # Initialize session state if it doesn't exist
                 if session_key not in st.session_state:
-                    st.session_state[session_key] = raw_default if raw_default in available_options else available_options[0] if prop_details.get("default") else ""
+                    if raw_default and raw_default in available_options:
+                        st.session_state[session_key] = raw_default
+                    elif available_options:
+                        st.session_state[session_key] = available_options[0]
+                    else:
+                        st.session_state[session_key] = ""
                 
                 # Use a separate widget key
                 widget_key = f"widget_{session_key}"
@@ -644,10 +666,13 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                         st.session_state[session_key] = ""
                 
                 # Calculate index based on current session state value, not current_value
-                index = None
                 session_value = st.session_state[session_key]
                 if session_value and session_value in enum_options:
                     index = enum_options.index(session_value)
+                elif enum_options:  # If we have options but no valid selection, use first option
+                    index = 0
+                else:
+                    index = None
 
                 # Use a separate widget key to avoid Streamlit cleaning up our session state
                 widget_key = f"widget_{session_key}"
@@ -831,24 +856,69 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 # Sync widget value back to session state
                 if date_value != st.session_state.get(session_key):
                     st.session_state[session_key] = date_value
-            else:
+            elif prop_details.get("format") == "time":
+                # Time input field
+                from datetime import time as datetime_time
+                
                 # Initialize session state if it doesn't exist
                 if session_key not in st.session_state:
-                    st.session_state[session_key] = raw_default
+                    default_time = datetime_time(10, 0)  # Default to 10:00
+                    st.session_state[session_key] = default_time
                 
-                # Enhanced text input with separate widget key
+                # Handle string time values
+                current_value = st.session_state[session_key]
+                if isinstance(current_value, str):
+                    try:
+                        # Parse string time "HH:MM"
+                        hour, minute = current_value.split(':')
+                        current_value = datetime_time(int(hour), int(minute))
+                    except:
+                        current_value = datetime_time(10, 0)
+                
+                # Enhanced time input with separate widget key
                 widget_key = f"widget_{session_key}"
-                text_value = st.text_input(
-                    display_label, 
-                    value=st.session_state[session_key], 
-                    key=widget_key, 
-                    help=help_text,
-                    placeholder=get_text("enter_text")
+                time_value = st.time_input(
+                    display_label,
+                    value=current_value,
+                    key=widget_key,
+                    help=help_text
                 )
                 
                 # Sync widget value back to session state
-                if text_value != st.session_state.get(session_key):
-                    st.session_state[session_key] = text_value
+                if time_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = time_value
+            else:
+                # Check if this field has enhanced configuration
+                if field_manager.is_enhanced_field(full_key):
+                    # Use enhanced field rendering
+                    enhanced_value = field_manager.render_field(
+                        full_key,
+                        value=st.session_state.get(session_key, raw_default),
+                        disabled=False,
+                        label=display_label,
+                        help=help_text
+                    )
+                    # Sync value back to session state
+                    if enhanced_value != st.session_state.get(session_key):
+                        st.session_state[session_key] = enhanced_value
+                else:
+                    # Initialize session state if it doesn't exist
+                    if session_key not in st.session_state:
+                        st.session_state[session_key] = raw_default
+                    
+                    # Enhanced text input with separate widget key
+                    widget_key = f"widget_{session_key}"
+                    text_value = st.text_input(
+                        display_label, 
+                        value=st.session_state[session_key], 
+                        key=widget_key, 
+                        help=help_text,
+                        placeholder=get_text("enter_text")
+                    )
+                    
+                    # Sync widget value back to session state
+                    if text_value != st.session_state.get(session_key):
+                        st.session_state[session_key] = text_value
                 
                 # Validation for framework agreement duration (4 year limit)
                 if "frameworkDuration" in full_key and text_value:
@@ -877,17 +947,31 @@ def render_form(schema_properties, parent_key="", lot_context=None):
         elif prop_type == "number":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)
             
-            # Initialize session state if it doesn't exist
-            if session_key not in st.session_state:
-                if isinstance(raw_default, (int, float)):
-                    st.session_state[session_key] = float(raw_default)
-                elif isinstance(raw_default, str) and raw_default:
-                    try:
+            # Check if this field has enhanced configuration
+            if field_manager.is_enhanced_field(full_key):
+                # Use enhanced field rendering
+                enhanced_value = field_manager.render_field(
+                    full_key,
+                    value=st.session_state.get(session_key, raw_default),
+                    disabled=False,
+                    label=display_label,
+                    help=help_text
+                )
+                # Sync value back to session state
+                if enhanced_value != st.session_state.get(session_key):
+                    st.session_state[session_key] = enhanced_value
+            else:
+                # Initialize session state if it doesn't exist
+                if session_key not in st.session_state:
+                    if isinstance(raw_default, (int, float)):
                         st.session_state[session_key] = float(raw_default)
-                    except ValueError:
+                    elif isinstance(raw_default, str) and raw_default:
+                        try:
+                            st.session_state[session_key] = float(raw_default)
+                        except ValueError:
+                            st.session_state[session_key] = 0.0
+                    else:
                         st.session_state[session_key] = 0.0
-                else:
-                    st.session_state[session_key] = 0.0
             
             # Use text input styled as number to remove spinner
             current_str = str(st.session_state[session_key]) if st.session_state[session_key] != 0.0 else ""

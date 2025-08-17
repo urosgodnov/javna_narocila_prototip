@@ -1,9 +1,20 @@
 import sqlite3
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import os
 
 DATABASE_FILE = 'mainDB.db'  # Back to using main database after fixing corruption
+
+def convert_dates_to_strings(obj):
+    """Recursively convert date objects to ISO format strings for JSON serialization."""
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {key: convert_dates_to_strings(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_dates_to_strings(item) for item in obj]
+    else:
+        return obj
 
 def init_db():
     with sqlite3.connect(DATABASE_FILE) as conn:
@@ -111,7 +122,9 @@ def init_db():
 def save_draft(form_data):
     init_db()
     timestamp = datetime.now().isoformat()
-    form_data_json = json.dumps(form_data)
+    # Convert any date objects to strings before JSON serialization
+    form_data_serializable = convert_dates_to_strings(form_data)
+    form_data_json = json.dumps(form_data_serializable)
     with sqlite3.connect(DATABASE_FILE) as conn:
         cursor = conn.cursor()
         cursor.execute('INSERT INTO drafts (timestamp, form_data_json) VALUES (?, ?)', (timestamp, form_data_json))
@@ -190,7 +203,9 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
     datum_objave = datetime.now().date().isoformat()
     status = 'Osnutek'
     
-    form_data_json = json.dumps(form_data)
+    # Convert any date objects to strings before JSON serialization
+    form_data_serializable = convert_dates_to_strings(form_data)
+    form_data_json = json.dumps(form_data_serializable)
     
     with sqlite3.connect(DATABASE_FILE) as conn:
         cursor = conn.cursor()
@@ -212,7 +227,9 @@ def update_procurement(procurement_id, form_data):
     postopek = form_data.get('submissionProcedure', {}).get('procedure', '')
     vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
     
-    form_data_json = json.dumps(form_data)
+    # Convert any date objects to strings before JSON serialization
+    form_data_serializable = convert_dates_to_strings(form_data)
+    form_data_json = json.dumps(form_data_serializable)
     zadnja_sprememba = datetime.now().isoformat()
     
     with sqlite3.connect(DATABASE_FILE) as conn:

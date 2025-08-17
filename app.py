@@ -106,26 +106,9 @@ def validate_step(step_keys, schema):
     for error in errors:
         st.error(f"⚠️ {error}")
     
-    # Special handling for Merila section
-    # Find the actual selectionCriteria key (might be prefixed)
-    selection_key = None
-    for key in step_keys:
-        if 'selectionCriteria' in key:
-            selection_key = key
-            break
-    
-    if selection_key:
-        merila_valid, merila_errors = validator.validate_merila(selection_key)
-        
-        # Display Merila-specific errors
-        for error in merila_errors:
-            st.error(f"⚠️ {error}")
-        
-        # Display warnings if any
-        for warning in validator.get_warnings():
-            st.warning(f"ℹ️ {warning}")
-        
-        is_valid = is_valid and merila_valid
+    # Display warnings if any (for Merila and other sections that generate warnings)
+    for warning in validator.get_warnings():
+        st.warning(f"ℹ️ {warning}")
     
     
     # The centralized ValidationManager now handles:

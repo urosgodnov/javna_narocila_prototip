@@ -23,6 +23,19 @@ class ValidationManager:
         self.errors = []
         self.warnings = []
     
+    def _safe_strip(self, value):
+        """Safely strip whitespace from a value, handling both strings and non-strings."""
+        if isinstance(value, str):
+            return value.strip()
+        return value
+    
+    def _find_selection_criteria_key(self, step_keys):
+        """Find the selectionCriteria key from the step keys (might be prefixed)."""
+        for key in step_keys:
+            if 'selectionCriteria' in key:
+                return key
+        return 'selectionCriteria'  # Default fallback
+    
     def _collect_array_data(self):
         """
         Collect array data from individual session state fields into proper array structure.
@@ -133,11 +146,15 @@ class ValidationManager:
             0: self.validate_screen_1_customers,  # Step 0 = Screen 1 (clientInfo)
             2: self.validate_screen_3_legal_basis,  # Step 2 = Screen 3 (legalBasis)
             4: self.validate_screen_5_lots,  # Step 4 = Screen 5 (lotsInfo)
-            5: self.validate_order_type,  # Step 5 = Screen 6 (orderType - when no lots)
+            5: self.validate_order_type,  # Step 5 = Screen 6 (orderType)
             6: self.validate_screen_7_technical_specs,  # Step 6 = Screen 7 (technicalSpecs)
             7: self.validate_execution_deadline,  # Step 7 = Screen 8 (executionDeadline)
-            # Screen 13 uses existing validate_merila
-            12: lambda: self.validate_merila()  # Step 12 = Screen 13
+            8: self.validate_price_info,  # Step 8 = Screen 9 (priceInfo)
+            9: self.validate_inspection_negotiations,  # Step 9 = Screen 10 (inspectionInfo, negotiationsInfo)
+            10: self.validate_participation_conditions,  # Step 10 = Screen 11 (participationAndExclusion, participationConditions)
+            11: self.validate_financial_guarantees,  # Step 11 = Screen 12 (financialGuarantees, variantOffers)
+            12: lambda: self.validate_merila(self._find_selection_criteria_key(step_keys)),  # Step 12 = Screen 13 (selectionCriteria/Merila)
+            13: self.validate_contract_info  # Step 13 = Screen 14 (contractInfo, otherInfo)
         }
         
         # Call screen-specific validator if available
@@ -486,8 +503,8 @@ class ValidationManager:
         
         # Contract extension validation (Story 24.3)
         if self.session_state.get('contractInfo.canBeExtended') == 'da':
-            extension_reasons = self.session_state.get('contractInfo.extensionReasons', '').strip()
-            extension_duration = self.session_state.get('contractInfo.extensionDuration', '').strip()
+            extension_reasons = self._safe_strip(self.session_state.get('contractInfo.extensionReasons', ''))
+            extension_duration = self._safe_strip(self.session_state.get('contractInfo.extensionDuration', ''))
             
             if not extension_reasons:
                 self.errors.append("Navedite razloge za možnost podaljšanja pogodbe")
@@ -568,7 +585,7 @@ class ValidationManager:
             }
             
             for field_key, field_label in required_fields.items():
-                value = self.session_state.get(field_key, '').strip() if self.session_state.get(field_key) else ''
+                value = self._safe_strip(self.session_state.get(field_key, '')) if self.session_state.get(field_key) else ''
                 if not value:
                     errors.append(f"{field_label} je obvezno polje")
         
@@ -1017,6 +1034,523 @@ class ValidationManager:
                         errors.append("Število let mora biti celo število (brez decimalnih mest)")
                 except (ValueError, TypeError):
                     errors.append("Število let mora biti veljavno celo število")
+        
+        return len(errors) == 0, errors
+    
+    def validate_price_info(self) -> Tuple[bool, List[str]]:
+        """
+        Validate price info fields (Step 8).
+        Requirements:
+        - Price clause selection is required
+        - If 'drugo' selected, description required
+        - If prepared estimate exists, document required
+        """
+        errors = []
+        
+        # Get lots for dynamic key generation
+        lots = self.session_state.get('lots', [])
+        
+        # Try different possible keys for price clause
+        price_clause = None
+        clause_keys = [
+            'general.priceInfo.priceClause',  # General mode
+            'priceInfo.priceClause',           # Direct key
+        ]
+        
+        # Add lot-specific keys
+        for i in range(len(lots)):
+            clause_keys.append(f'lot_{i}.priceInfo.priceClause')
+        
+        prefix = None
+        for key in clause_keys:
+            if key in self.session_state:
+                price_clause = self.session_state.get(key)
+                prefix = key.replace('.priceClause', '')
+                break
+        
+        if not price_clause or price_clause == '':
+            errors.append("Katero cenovno klavzulo bi želeli imeti v pogodbi je obvezno")
+        elif price_clause == 'drugo':
+            # Check for other description
+            other_desc = self.session_state.get(f'{prefix}.priceClauseOther', '').strip()
+            if not other_desc:
+                errors.append("Pri izbiri 'drugo' morate vnesti opis cenovne klavzule")
+        
+        # Check if prepared estimate exists - correct field name
+        has_estimate = self.session_state.get(f'{prefix}.hasOfferBillOfQuantities')
+        if has_estimate == True or has_estimate == 'true':  # Boolean field
+            # Check if document is uploaded
+            doc_field = f'{prefix}.offerBillOfQuantitiesDocument'
+            doc_uploaded = self.session_state.get(doc_field)
+            
+            # Also check for file info in session
+            file_info_key = f'{doc_field}_file_info'
+            has_file_info = file_info_key in self.session_state
+            
+            if not doc_uploaded and not has_file_info:
+                errors.append("Pri pripravljenem ponudbenem predračunu morate naložiti dokument")
+        
+        return len(errors) == 0, errors
+    
+    def validate_inspection_negotiations(self) -> Tuple[bool, List[str]]:
+        """
+        Validate inspection and negotiations (Step 9).
+        Requirements:
+        - If site visit organized, minimum 1 appointment required
+        - If negotiations included, topic and rounds required
+        """
+        errors = []
+        
+        # Get lots for dynamic key generation
+        lots = self.session_state.get('lots', [])
+        
+        # Check inspection info - correct field name is hasInspection
+        organized_visit = None
+        inspection_keys = [
+            'general.inspectionInfo.hasInspection',
+            'inspectionInfo.hasInspection',
+        ]
+        
+        for i in range(len(lots)):
+            inspection_keys.append(f'lot_{i}.inspectionInfo.hasInspection')
+        
+        inspection_prefix = None
+        for key in inspection_keys:
+            if key in self.session_state:
+                organized_visit = self.session_state.get(key)
+                inspection_prefix = key.replace('.hasInspection', '')
+                break
+        
+        if organized_visit == True or organized_visit == 'true':
+            # Check for inspection dates array or individual fields
+            dates_found = False
+            
+            # Try to find inspection dates
+            dates_array_key = f'{inspection_prefix}.inspectionDates'
+            if dates_array_key in self.session_state:
+                dates = self.session_state.get(dates_array_key, [])
+                if len(dates) > 0:
+                    dates_found = True
+                    # Check each date has required fields
+                    # Arrays might be stored as empty dicts with data in separate keys
+                    for i in range(len(dates)):
+                        # Check for date and time in separate session keys
+                        date_key = f'{inspection_prefix}.inspectionDates.{i}.date'
+                        time_key = f'{inspection_prefix}.inspectionDates.{i}.time'
+                        
+                        date_value = self.session_state.get(date_key)
+                        time_value = self.session_state.get(time_key)
+                        
+                        if not date_value:
+                            errors.append(f"Vnesite datum za {i+1}. termin ogleda")
+                        if not time_value:
+                            errors.append(f"Vnesite uro za {i+1}. termin ogleda")
+            
+            # Try individual fields
+            if not dates_found:
+                date_key = f'{inspection_prefix}.inspectionDates.0.date'
+                if date_key in self.session_state and self.session_state.get(date_key):
+                    dates_found = True
+            
+            if not dates_found:
+                errors.append("Pri organiziranem ogledu morate dodati najmanj 1 termin")
+            
+            # Check inspection location
+            location = self.session_state.get(f'{inspection_prefix}.inspectionLocation', '').strip()
+            if not location:
+                errors.append("Kam naj pridejo potencialni ponudniki za ogled je obvezno polje")
+        
+        # Check negotiations - correct field name is hasNegotiations
+        include_negotiations = None
+        negotiation_keys = [
+            'general.negotiationsInfo.hasNegotiations',
+            'negotiationsInfo.hasNegotiations',
+        ]
+        
+        for i in range(len(lots)):
+            negotiation_keys.append(f'lot_{i}.negotiationsInfo.hasNegotiations')
+        
+        negotiation_prefix = None
+        for key in negotiation_keys:
+            if key in self.session_state:
+                include_negotiations = self.session_state.get(key)
+                negotiation_prefix = key.replace('.hasNegotiations', '')
+                break
+        
+        if include_negotiations == True or include_negotiations == 'true':
+            # Check topic - correct field name is negotiationSubject
+            topic = self.session_state.get(f'{negotiation_prefix}.negotiationSubject')
+            if not topic:
+                errors.append("V zvezi s čim bi se želeli pogajati je obvezno")
+            elif topic == 'drugo':
+                other_topic = self.session_state.get(f'{negotiation_prefix}.otherNegotiationSubject', '').strip()
+                if not other_topic:
+                    errors.append("Pri izbiri 'drugo' morate vnesti opis teme pogajanj")
+            
+            # Check rounds - this is a string enum field, not integer
+            rounds = self.session_state.get(f'{negotiation_prefix}.negotiationRounds')
+            if not rounds:
+                errors.append("Označite koliko krogov pogajanj boste izvedli")
+            
+            # Check special wishes if set
+            has_wishes = self.session_state.get(f'{negotiation_prefix}.hasSpecialWishes')
+            if has_wishes == True or has_wishes == 'true':
+                wishes_text = self.session_state.get(f'{negotiation_prefix}.specialNegotiationWishes', '').strip()
+                if not wishes_text:
+                    errors.append("Pri posebnih željah v zvezi s pogajanji morate vnesti besedilo")
+        
+        return len(errors) == 0, errors
+    
+    def validate_participation_conditions(self) -> Tuple[bool, List[str]]:
+        """
+        Validate participation and exclusion conditions (Step 10).
+        Requirements:
+        - Exclusion reasons selection required
+        - If specific conditions, descriptions required
+        """
+        errors = []
+        
+        # Get lots for dynamic key generation
+        lots = self.session_state.get('lots', [])
+        
+        # Check exclusion reasons - using correct field name from schema
+        exclusion_type = None
+        exclusion_keys = [
+            'general.participationAndExclusion.exclusionReasonsSelection',
+            'participationAndExclusion.exclusionReasonsSelection',
+        ]
+        
+        for i in range(len(lots)):
+            exclusion_keys.append(f'lot_{i}.participationAndExclusion.exclusionReasonsSelection')
+        
+        exclusion_prefix = None
+        for key in exclusion_keys:
+            if key in self.session_state:
+                exclusion_type = self.session_state.get(key)
+                exclusion_prefix = key.replace('.exclusionReasonsSelection', '')
+                break
+        
+        if not exclusion_type:
+            errors.append("Prosimo označite vse neobvezne razloge za izključitev")
+        elif exclusion_type == 'specifični razlogi':
+            # Check for at least one specific reason selected
+            # Based on the actual field names in the JSON schema
+            specific_reasons = [
+                'exclusionReason_a',  # Criminal conviction
+                'exclusionReason_b',  # Tax obligations
+                'exclusionReason_c',  # Social security
+                'exclusionReason_ch', # Insolvency
+                'exclusionReason_d',  # Professional misconduct
+                'exclusionReason_e',  # Conflict of interest
+                'exclusionReason_f',  # Contract deficiencies
+                'exclusionReason_g',  # Comparable sanctions
+                'exclusionReason_h'   # Other
+            ]
+            
+            selected_count = 0
+            for reason in specific_reasons:
+                if self.session_state.get(f'{exclusion_prefix}.{reason}'):
+                    selected_count += 1
+            
+            if selected_count < 1:
+                errors.append("Pri specifičnih razlogih morate izbrati najmanj eno možnost")
+        
+        # Check participation conditions - using correct field name from schema
+        condition_type = None
+        condition_keys = [
+            'general.participationConditions.participationSelection',
+            'participationConditions.participationSelection',
+        ]
+        
+        for i in range(len(lots)):
+            condition_keys.append(f'lot_{i}.participationConditions.participationSelection')
+        
+        condition_prefix = None
+        for key in condition_keys:
+            if key in self.session_state:
+                condition_type = self.session_state.get(key)
+                condition_prefix = key.replace('.participationSelection', '')
+                break
+        
+        if not condition_type:
+            errors.append("Ali želite vključiti pogoje za sodelovanje je obvezno")
+        elif condition_type == 'da, specifični pogoji':
+            # Check each section for selected fields
+            # Professional Activity Section fields
+            prof_fields = [
+                'professionalRegister', 'businessRegister', 'specificLicense',
+                'organizationMembership', 'professionalOther', 'professionalAI'
+            ]
+            
+            # Economic Financial Section fields
+            econ_fields = [
+                'generalTurnover', 'specificTurnover', 'averageTurnover',
+                'averageSpecificTurnover', 'financialRatio', 'professionalInsurance',
+                'accountNotBlocked', 'otherEconomic', 'economicAI'
+            ]
+            
+            # Technical Professional Section fields
+            tech_fields = [
+                'companyReferences', 'staffReferences', 'staffRequirements',
+                'qualityCertificates', 'technicalOther', 'technicalAI'
+            ]
+            
+            # Check if at least one field is selected in any section
+            has_professional = any(
+                self.session_state.get(f'{condition_prefix}.professionalActivitySection.{field}')
+                for field in prof_fields
+            )
+            
+            has_economic = any(
+                self.session_state.get(f'{condition_prefix}.economicFinancialSection.{field}')
+                for field in econ_fields
+            )
+            
+            has_technical = any(
+                self.session_state.get(f'{condition_prefix}.technicalProfessionalSection.{field}')
+                for field in tech_fields
+            )
+            
+            # Check if at least one section has selections
+            if not (has_professional or has_economic or has_technical):
+                errors.append("Pri specifičnih pogojih morate izbrati najmanj eno možnost v katerikoli sekciji")
+            
+            # Check for required descriptions where fields are selected
+            # Professional Activity checks
+            for field in prof_fields:
+                if field == 'professionalAI':
+                    continue  # AI field doesn't need description
+                if self.session_state.get(f'{condition_prefix}.professionalActivitySection.{field}'):
+                    detail_field = field + 'Details'
+                    desc = self.session_state.get(f'{condition_prefix}.professionalActivitySection.{detail_field}', '').strip()
+                    if not desc:
+                        errors.append(f"Vnesite opis za izbrano polje v sekciji 'Ustreznost za opravljanje poklicne dejavnosti'")
+                        break  # Only show one error per section
+            
+            # Economic Financial checks
+            for field in econ_fields:
+                if field == 'economicAI':
+                    continue  # AI field doesn't need description
+                if self.session_state.get(f'{condition_prefix}.economicFinancialSection.{field}'):
+                    detail_field = field + 'Details'
+                    desc = self.session_state.get(f'{condition_prefix}.economicFinancialSection.{detail_field}', '').strip()
+                    if not desc:
+                        errors.append(f"Vnesite opis za izbrano polje v sekciji 'Ekonomski in finančni položaj'")
+                        break  # Only show one error per section
+            
+            # Technical Professional checks
+            for field in tech_fields:
+                if field == 'technicalAI':
+                    continue  # AI field doesn't need description
+                if self.session_state.get(f'{condition_prefix}.technicalProfessionalSection.{field}'):
+                    detail_field = field + 'Details'
+                    desc = self.session_state.get(f'{condition_prefix}.technicalProfessionalSection.{detail_field}', '').strip()
+                    if not desc:
+                        errors.append(f"Vnesite opis za izbrano polje v sekciji 'Tehnična in strokovna sposobnost'")
+                        break  # Only show one error per section
+        
+        return len(errors) == 0, errors
+    
+    def validate_financial_guarantees(self) -> Tuple[bool, List[str]]:
+        """
+        Validate financial guarantees and variant offers (Step 11).
+        Requirements:
+        - Financial guarantees selection required
+        - If guarantees required, details needed
+        - Variant offers selection required
+        """
+        errors = []
+        
+        # Get lots for dynamic key generation
+        lots = self.session_state.get('lots', [])
+        
+        # Check financial guarantees - using correct field name from schema
+        guarantees_required = None
+        guarantee_keys = [
+            'general.financialGuarantees.requiresFinancialGuarantees',
+            'financialGuarantees.requiresFinancialGuarantees',
+        ]
+        
+        for i in range(len(lots)):
+            guarantee_keys.append(f'lot_{i}.financialGuarantees.requiresFinancialGuarantees')
+        
+        guarantee_prefix = None
+        for key in guarantee_keys:
+            if key in self.session_state:
+                guarantees_required = self.session_state.get(key)
+                guarantee_prefix = key.replace('.requiresFinancialGuarantees', '')
+                break
+        
+        if not guarantees_required:
+            errors.append("Ali zahtevate finančna zavarovanja je obvezno")
+        elif guarantees_required == 'da, zahtevamo finančna zavarovanja':
+            # Check guarantee types - using correct field names from schema
+            guarantee_types = [
+                ('fzSeriousness', 'Zavarovanje za resnost ponudbe'),
+                ('fzPerformance', 'Zavarovanje za dobro izvedbo'),
+                ('fzWarranty', 'Zavarovanje za odpravo napak')
+            ]
+            
+            selected_guarantees = 0
+            for g_type, g_label in guarantee_types:
+                if self.session_state.get(f'{guarantee_prefix}.{g_type}.required'):
+                    selected_guarantees += 1
+                    
+                    # Check instrument/method
+                    instrument = self.session_state.get(f'{guarantee_prefix}.{g_type}.instrument')
+                    if not instrument:
+                        errors.append(f"Izberite instrument zavarovanja za {g_label}")
+                    elif instrument == 'denarni depozit':
+                        # Check deposit fields - they are nested under depositDetails
+                        deposit_fields = [
+                            ('iban', 'TRR naročnika (IBAN)'),
+                            ('bank', 'Banka naročnika'),
+                            ('swift', 'BIC (SWIFT)')
+                        ]
+                        
+                        for field_key, field_label in deposit_fields:
+                            field_value = self.session_state.get(f'{guarantee_prefix}.{g_type}.depositDetails.{field_key}', '')
+                            # Handle both string and non-string values
+                            if isinstance(field_value, str):
+                                field_value = field_value.strip()
+                            if not field_value:
+                                errors.append(f"{field_label} je obvezno za denarni depozit ({g_label})")
+                    
+                    # Check amount field (it's directly under the guarantee type)
+                    amount = self.session_state.get(f'{guarantee_prefix}.{g_type}.amount', '')
+                    # Handle both string and numeric values
+                    if isinstance(amount, str):
+                        amount = amount.strip()
+                    if not amount and amount != 0:
+                        errors.append(f"Višina zavarovanja je obvezna za {g_label}")
+                    else:
+                        try:
+                            amount_float = float(amount)
+                            if amount_float <= 0:
+                                errors.append(f"Višina zavarovanja mora biti pozitivna ({g_label})")
+                        except ValueError:
+                            errors.append(f"Višina zavarovanja mora biti številka ({g_label})")
+            
+            if selected_guarantees < 1:
+                errors.append("Pri finančnih zavarovanjih morate izbrati najmanj eno vrsto")
+        
+        # Check variant offers - using correct field name from schema
+        variants_allowed = None
+        variant_keys = [
+            'general.variantOffers.allowVariants',
+            'variantOffers.allowVariants',
+        ]
+        
+        for i in range(len(lots)):
+            variant_keys.append(f'lot_{i}.variantOffers.allowVariants')
+        
+        variant_prefix = None
+        for key in variant_keys:
+            if key in self.session_state:
+                variants_allowed = self.session_state.get(key)
+                variant_prefix = key.replace('.allowVariants', '')
+                break
+        
+        if not variants_allowed:
+            errors.append("Ali dopuščate predložitev variantnih ponudb je obvezno")
+        elif variants_allowed == 'da':
+            # Check for minimal requirements field (correct field name from schema)
+            min_req = self.session_state.get(f'{variant_prefix}.minimalRequirements', '')
+            # Handle both string and non-string values
+            if isinstance(min_req, str):
+                min_req = min_req.strip()
+            
+            if not min_req:
+                errors.append("Pri variantnih ponudbah morate navesti minimalne zahteve")
+        
+        return len(errors) == 0, errors
+    
+    def validate_contract_info(self) -> Tuple[bool, List[str]]:
+        """
+        Validate contract info (Step 13 - last step).
+        Requirements:
+        - Framework agreement dates validation
+        - Contract extension details if allowed
+        """
+        errors = []
+        
+        # Contract info is not lot-specific, it's global
+        contract_type = self.session_state.get('contractInfo.type')
+        
+        # Debug logging to understand what's happening
+        import logging
+        logging.info(f"[validate_contract_info] contract_type value: '{contract_type}'")
+        
+        # First, ensure we have a contract type selected
+        if not contract_type:
+            errors.append("Vrsta sklenitve je obvezna")
+            return len(errors) == 0, errors
+        
+        # Validate based on contract type
+        if contract_type == 'pogodba':
+            # For regular contracts, check contract validity
+            contract_period_type = self.session_state.get('contractInfo.contractPeriodType', '')
+            if contract_period_type == 'z veljavnostjo':
+                validity = self._safe_strip(self.session_state.get('contractInfo.contractValidity', ''))
+                if not validity:
+                    errors.append("Veljavnost pogodbe je obvezna")
+            elif contract_period_type == 'za obdobje od-do':
+                # Use correct field names from JSON schema
+                start_date = self.session_state.get('contractInfo.contractDateFrom')
+                end_date = self.session_state.get('contractInfo.contractDateTo')
+                if not start_date:
+                    errors.append("Obdobje od je obvezno")
+                if not end_date:
+                    errors.append("Obdobje do je obvezno")
+                
+                # Validate date logic if both dates are present
+                if start_date and end_date:
+                    # Handle both date objects and strings
+                    from datetime import datetime, date
+                    try:
+                        # Convert to comparable format
+                        if isinstance(start_date, date):
+                            start = start_date
+                        else:
+                            start = datetime.strptime(str(start_date), '%Y-%m-%d').date()
+                        
+                        if isinstance(end_date, date):
+                            end = end_date
+                        else:
+                            end = datetime.strptime(str(end_date), '%Y-%m-%d').date()
+                        
+                        if end < start:
+                            errors.append("Končni datum ne more biti pred začetnim datumom")
+                    except (ValueError, TypeError) as e:
+                        logging.debug(f"Date validation error: {e}")
+        
+        elif contract_type == 'okvirni sporazum':
+            # Check framework duration (text field, not dates)
+            duration = self._safe_strip(self.session_state.get('contractInfo.frameworkDuration', ''))
+            if not duration:
+                errors.append("Obdobje okvirnega sporazuma je obvezno")
+            
+            # Check framework agreement type
+            framework_type = self.session_state.get('contractInfo.frameworkType', '')
+            if not framework_type:
+                errors.append("Vrsta okvirnega sporazuma je obvezna")
+            
+            # If competition reopening, check frequency
+            if framework_type and 'odpiranjem konkurence' in framework_type:
+                frequency = self._safe_strip(self.session_state.get('contractInfo.competitionFrequency', ''))
+                if not frequency:
+                    errors.append("Pogostost odpiranja konkurence je obvezna pri tej vrsti okvirnega sporazuma")
+        
+        
+        # Check contract extension
+        if self.session_state.get('contractInfo.canBeExtended') == 'da':
+            reasons = self._safe_strip(self.session_state.get('contractInfo.extensionReasons', ''))
+            duration = self._safe_strip(self.session_state.get('contractInfo.extensionDuration', ''))
+            
+            if not reasons:
+                errors.append("Navedite razloge za možnost podaljšanja pogodbe")
+            if not duration:
+                errors.append("Navedite trajanje podaljšanja pogodbe")
         
         return len(errors) == 0, errors
     
