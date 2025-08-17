@@ -635,7 +635,13 @@ def render_form(schema_properties, parent_key="", lot_context=None):
                 
                 # Initialize the session state if it doesn't exist - BUT PRESERVE EXISTING VALUES
                 if session_key not in st.session_state:
-                    st.session_state[session_key] = raw_default if raw_default in enum_options else ""
+                    # Use raw_default if available and valid, otherwise use first option as default
+                    if raw_default and raw_default in enum_options:
+                        st.session_state[session_key] = raw_default
+                    elif enum_options:  # If we have options, use the first one as default
+                        st.session_state[session_key] = enum_options[0]
+                    else:
+                        st.session_state[session_key] = ""
                 
                 # Calculate index based on current session state value, not current_value
                 index = None
