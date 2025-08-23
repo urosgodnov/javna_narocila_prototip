@@ -312,12 +312,17 @@ def create_logs_table():
             ''')
             
             # Ensure new columns exist if table already exists
-            cursor.execute("PRAGMA table_info(application_logs)")
-            existing_cols = [col[1] for col in cursor.fetchall()]
-            if 'log_date' not in existing_cols:
-                cursor.execute('ALTER TABLE application_logs ADD COLUMN log_date DATE')
-            if 'log_time' not in existing_cols:
-                cursor.execute('ALTER TABLE application_logs ADD COLUMN log_time TIME')
+            try:
+                cursor.execute("PRAGMA table_info(application_logs)")
+                existing_cols = [col[1] for col in cursor.fetchall()]
+                if 'log_date' not in existing_cols:
+                    cursor.execute('ALTER TABLE application_logs ADD COLUMN log_date DATE')
+                if 'log_time' not in existing_cols:
+                    cursor.execute('ALTER TABLE application_logs ADD COLUMN log_time TIME')
+            except Exception as e:
+                # If there's any issue with the migration, log it but don't crash
+                print(f"Warning: Could not add log_date/log_time columns: {e}")
+                # These columns are optional optimizations, so we can continue without them
             
             # Create indexes including new columns
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_expires ON application_logs(expires_at)')
@@ -326,8 +331,18 @@ def create_logs_table():
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_level ON application_logs(log_level)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_type ON application_logs(log_type) WHERE log_type IS NOT NULL')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_message ON application_logs(message)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_date ON application_logs(log_date DESC)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_date_time ON application_logs(log_date DESC, log_time DESC)')
+            
+            # Only create indexes on log_date/log_time if columns exist
+            try:
+                cursor.execute("PRAGMA table_info(application_logs)")
+                existing_cols = [col[1] for col in cursor.fetchall()]
+                if 'log_date' in existing_cols:
+                    cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_date ON application_logs(log_date DESC)')
+                if 'log_date' in existing_cols and 'log_time' in existing_cols:
+                    cursor.execute('CREATE INDEX IF NOT EXISTS idx_logs_date_time ON application_logs(log_date DESC, log_time DESC)')
+            except Exception as e:
+                # If we can't create indexes, it's not critical
+                print(f"Warning: Could not create date/time indexes: {e}")
             
             # Create views
             cursor.execute('''

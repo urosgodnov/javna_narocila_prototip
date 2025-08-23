@@ -31,14 +31,26 @@ class LogQueryBuilder:
         try:
             conn = self.connection or sqlite3.connect(database.DATABASE_FILE)
             cursor = conn.cursor()
+            
+            # First ensure the table exists
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='application_logs'")
+            if not cursor.fetchone():
+                if self._owns_connection and not self.connection:
+                    conn.close()
+                return False
+            
             cursor.execute("PRAGMA table_info(application_logs)")
             columns = [col[1] for col in cursor.fetchall()]
             
             if self._owns_connection and not self.connection:
                 conn.close()
             
-            return 'log_date' in columns and 'log_time' in columns
-        except Exception:
+            # Only return True if BOTH columns exist
+            has_columns = 'log_date' in columns and 'log_time' in columns
+            return has_columns
+        except Exception as e:
+            # Log the error for debugging but don't crash
+            print(f"Error detecting schema: {e}")
             return False
     
     def date_range_query(self, 
