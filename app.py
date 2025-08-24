@@ -19,6 +19,7 @@ from ui.dashboard import render_dashboard
 from localization import get_text, format_step_indicator
 from init_database import initialize_cpv_data, check_cpv_data_status
 from utils.optimized_database_logger import configure_optimized_logging as configure_database_logging
+from utils.qdrant_init import init_qdrant_on_startup
 
 # Initialize CPV data on startup (outside of Streamlit context)
 def init_app_data():
@@ -34,6 +35,12 @@ def init_app_data():
             logging.info(f"CPV data initialized: {result['imported']} codes from {result['source']}")
         else:
             logging.warning(f"CPV initialization failed: {result['message']}")
+    
+    # Initialize Qdrant collection (non-blocking per Story 27.1)
+    qdrant_result = init_qdrant_on_startup()
+    if not qdrant_result['success']:
+        # Log but continue - non-blocking requirement
+        logging.info("App starting without vector database support")
 
 # Run initialization before Streamlit
 init_app_data()

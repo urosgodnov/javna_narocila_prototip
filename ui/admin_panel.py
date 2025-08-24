@@ -1237,9 +1237,10 @@ def render_admin_panel():
         render_admin_header()
         
         # Tabbed interface for different admin sections
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
             "📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", 
-            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila", "📋 Dnevnik", "🤖 AI Management", "🧪 Test dokumentov"
+            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila", "📋 Dnevnik", 
+            "🔍 Vector Database", "🤖 AI Management", "🧪 Test dokumentov"
         ])
         
         with tab1:
@@ -1264,9 +1265,13 @@ def render_admin_panel():
             render_logging_management_tab()
         
         with tab8:
+            from ui.vector_database_manager import render_vector_database_tab
+            render_vector_database_tab()
+        
+        with tab9:
             from ui.ai_manager import render_ai_manager
             render_ai_manager()
         
-        with tab9:
+        with tab10:
             from ui.admin_document_tester import render_document_testing_tab
             render_document_testing_tab()
