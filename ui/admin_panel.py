@@ -282,8 +282,21 @@ def render_organization_management_tab():
 def render_cpv_management_tab():
     """Render the CPV codes management tab content."""
     with st.container():
-        st.markdown("### 🔢 Upravljanje CPV kod")
+        st.markdown("### 🔢 Upravljanje CPV kod in meril")
         
+        # Create sub-tabs for CPV management and criteria
+        cpv_tab1, cpv_tab2 = st.tabs(["📝 CPV kode", "⚖️ Merila za CPV"])
+        
+        with cpv_tab1:
+            render_cpv_codes_section()
+        
+        with cpv_tab2:
+            render_cpv_criteria_section()
+
+
+def render_cpv_codes_section():
+    """Render the CPV codes management section."""
+    with st.container():
         # Statistics
         total_cpv = get_cpv_count()
         st.info(f"📊 Skupno CPV kod v bazi: **{total_cpv}**")
@@ -524,9 +537,14 @@ def get_default_social_criteria_codes() -> List[str]:
 
 
 def render_criteria_management_tab():
-    """Render the criteria management tab content."""
+    """Legacy function for backward compatibility - redirects to render_cpv_criteria_section."""
+    render_cpv_criteria_section()
+
+
+def render_cpv_criteria_section():
+    """Render the CPV criteria management section."""
     with st.container():
-        st.markdown("### ⚖️ Upravljanje meril za CPV kode")
+        st.markdown("#### ⚖️ Upravljanje meril za CPV kode")
         st.info("Določite CPV kode, kjer veljajo posebna merila za ocenjevanje ponudb.")
         
         # Ensure CPV data is initialized (should already be done at app startup)
@@ -1237,10 +1255,10 @@ def render_admin_panel():
         render_admin_header()
         
         # Tabbed interface for different admin sections
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
             "📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", 
-            "🏢 Organizacije", "🔢 CPV kode", "⚖️ Merila", "📋 Dnevnik", 
-            "🔍 Vector Database", "🤖 AI Management", "🧪 Test dokumentov"
+            "🏢 Organizacije", "🔢 CPV kode & Merila", "📋 Dnevnik", 
+            "🤖 AI Management"
         ])
         
         with tab1:
@@ -1259,19 +1277,8 @@ def render_admin_panel():
             render_cpv_management_tab()
         
         with tab6:
-            render_criteria_management_tab()
-        
-        with tab7:
             render_logging_management_tab()
         
-        with tab8:
-            from ui.vector_database_manager import render_vector_database_tab
-            render_vector_database_tab()
-        
-        with tab9:
+        with tab7:
             from ui.ai_manager import render_ai_manager
             render_ai_manager()
-        
-        with tab10:
-            from ui.admin_document_tester import render_document_testing_tab
-            render_document_testing_tab()

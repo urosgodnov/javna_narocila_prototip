@@ -669,13 +669,46 @@ def render_ai_search_interface():
     </div>
     """, unsafe_allow_html=True)
     
-    # Search input
-    search_query = st.text_area(
-        "Vnesite iskalni pojem ali vprašanje",
-        placeholder="npr. 'Kakšni so roki za oddajo ponudb?' ali 'pogoji za sodelovanje' ali 'reference za gradnje'",
-        height=100,
-        key="ai_unified_search"
-    )
+    # Preset scenarios
+    st.markdown("### 🎯 Hitri scenariji")
+    st.markdown("Izberite enega od pogostih scenarijev iskanja:")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # Check if we should trigger a preset search
+    trigger_search = False
+    preset_query = None
+    
+    with col1:
+        if st.button("📄 **Povzetek dokumenta**\n\nCeloten pregled", use_container_width=True, key="preset_summary", 
+                     help="Dobi povzetek celotnega dokumenta z glavnimi točkami"):
+            preset_query = "Povzemi trenutni dokument - kaj so glavni pogoji, roki, zahteve in merila?"
+            trigger_search = True
+    
+    with col2:
+        if st.button("🏢 **Zahteve ponudnika**\n\nPogoji sodelovanja", use_container_width=True, key="preset_requirements",
+                     help="Preglej vse zahteve, reference in pogoje za ponudnike"):
+            preset_query = "Kakšne so zahteve za ponudnike? Katere reference, certifikati in pogoji so potrebni?"
+            trigger_search = True
+    
+    with col3:
+        if st.button("📅 **Roki in vrednosti**\n\nKljučni datumi", use_container_width=True, key="preset_deadlines",
+                     help="Najdi vse pomembne roke in finančne vrednosti"):
+            preset_query = "Kateri so pomembni roki (oddaja, veljavnost, izvedba)? Kakšna je ocenjena vrednost?"
+            trigger_search = True
+    
+    st.divider()
+    
+    # Use preset query if a scenario was selected
+    if preset_query:
+        search_query = preset_query
+    else:
+        search_query = st.text_area(
+            "Vnesite iskalni pojem ali vprašanje",
+            placeholder="npr. 'Kakšni so roki za oddajo ponudb?' ali 'pogoji za sodelovanje' ali 'reference za gradnje'",
+            height=100,
+            key="ai_unified_search"
+        )
     
     # Search filters
     col1, col2, col3 = st.columns([2, 2, 1])
@@ -698,8 +731,9 @@ def render_ai_search_interface():
         st.markdown("<br>", unsafe_allow_html=True)
         search_btn = st.button("🔍 Išči", type="primary", use_container_width=True)
     
-    if search_btn and search_query:
-        perform_ai_search(search_query, doc_type_filter, result_limit)
+    # Trigger search if preset was selected or search button clicked
+    if (trigger_search and preset_query) or (search_btn and search_query):
+        perform_ai_search(preset_query if trigger_search else search_query, doc_type_filter, result_limit)
     
     # Recent searches
     st.divider()
@@ -774,7 +808,7 @@ def perform_ai_search(query: str, doc_type_filter: str, limit: int):
                 "trenutni dokument", "ta dokument", "celoten dokument"
             ])
             
-            # Log query
+            # Log query with proper error handling
             try:
                 with sqlite3.connect(database.DATABASE_FILE) as conn:
                     cursor = conn.cursor()
@@ -784,8 +818,9 @@ def perform_ai_search(query: str, doc_type_filter: str, limit: int):
                         VALUES (?, ?, ?, ?)
                     """, (query, f"Found {total} results", 0.8, 1.0))
                     conn.commit()
-            except:
-                pass
+            except Exception as e:
+                st.warning(f"Opozorilo: Poizvedba ni bila shranjena v zgodovino. Napaka: {str(e)}")
+                print(f"Error saving query to database: {e}")
             
             if results:
                 # Always generate AI response (except for raw search)
