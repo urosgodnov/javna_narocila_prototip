@@ -79,19 +79,20 @@ PROMPT_SECTIONS = {
 }
 
 def render_ai_manager():
-    """Main entry point from admin panel"""
+    """Unified AI and Vector Database Management"""
     
     # Check environment configuration
     if not validate_environment():
         st.error("❌ AI modul ni konfiguriran. Manjkajo API ključi v .env datoteki.")
-        st.info("Potrebni ključi: OPENAI_API_KEY, QDRANT_API_KEY")
+        st.info("Potrebni ključi: OPENAI_API_KEY, QDRANT_API_KEY (opcijsko)")
         st.markdown("""
         ### 📝 Navodila za konfiguracijo:
         1. Ustvarite `.env` datoteko v korenski mapi projekta
         2. Dodajte naslednje ključe:
         ```
         OPENAI_API_KEY=sk-...
-        QDRANT_API_KEY=your-key-here
+        QDRANT_API_KEY=your-key-here (opcijsko za vektorsko bazo)
+        QDRANT_URL=https://your-instance.qdrant.io
         ```
         3. Ponovno naložite aplikacijo
         """)
@@ -102,25 +103,37 @@ def render_ai_manager():
     
     inject_custom_css()
     
-    st.markdown("""
+    # Check vector database status
+    vector_db_status = "🟢 Aktivna"
+    try:
+        from services.qdrant_crud_service import QdrantCRUDService
+        crud = QdrantCRUDService()
+        stats = crud.get_collection_stats()
+        vector_info = f"{stats.get('total_vectors', 0)} vektorjev"
+    except:
+        vector_db_status = "🟡 Omejena"
+        vector_info = "Samo lokalno shranjevanje"
+    
+    st.markdown(f"""
     <div class="ai-header">
-        <h1>🤖 AI Management System</h1>
-        <p>Upravljanje z dokumenti in AI asistentom za javna naročila</p>
+        <h1>🤖 AI & Document Management</h1>
+        <p>Centralizirano upravljanje dokumentov in AI funkcionalnosti</p>
+        <p style="font-size: 0.9em; opacity: 0.8;">Vektorska baza: {vector_db_status} • {vector_info}</p>
     </div>
     """, unsafe_allow_html=True)
     
-    tabs = st.tabs(["📚 Dokumenti", "🔍 Poizvedbe", "🤖 Sistemski pozivi", "⚙️ Nastavitve", "📊 Analitika"])
+    tabs = st.tabs(["📚 Dokumenti", "🔍 AI Iskanje", "📊 Analitika", "🤖 Sistemski pozivi", "⚙️ Nastavitve"])
     
     with tabs[0]:
         render_document_management()
     with tabs[1]:
-        render_query_interface()
+        render_ai_search_interface()
     with tabs[2]:
-        render_system_prompts_management()
-    with tabs[3]:
-        render_settings_panel()
-    with tabs[4]:
         render_analytics_dashboard()
+    with tabs[3]:
+        render_system_prompts_management()
+    with tabs[4]:
+        render_settings_panel()
 
 def validate_environment() -> bool:
     """Check if required API keys are present"""
@@ -140,24 +153,77 @@ def init_ai_tables():
     with sqlite3.connect(database.DATABASE_FILE) as conn:
         cursor = conn.cursor()
         
-        # Documents table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS ai_documents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                filename TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                tip_dokumenta TEXT NOT NULL,
-                file_type TEXT,
-                file_size INTEGER,
-                upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                processing_status TEXT DEFAULT 'pending',
-                chunk_count INTEGER DEFAULT 0,
-                embedding_model TEXT,
-                metadata_json TEXT,
-                description TEXT,
-                tags TEXT
-            )
-        """)
+        # Check if table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='ai_documents'")
+        table_exists = cursor.fetchone() is not None
+        
+        if not table_exists:
+            # Create new table with both upload_date and created_at for compatibility
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ai_documents (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    filename TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    tip_dokumenta TEXT,
+                    document_type TEXT,
+                    file_type TEXT,
+                    file_size INTEGER,
+                    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    processing_status TEXT DEFAULT 'pending',
+                    chunk_count INTEGER DEFAULT 0,
+                    chunks_count INTEGER DEFAULT 0,
+                    embedding_model TEXT,
+                    metadata_json TEXT,
+                    description TEXT,
+                    tags TEXT,
+                    document_id TEXT,
+                    original_filename TEXT,
+                    organization TEXT,
+                    file_format TEXT,
+                    vectors_count INTEGER,
+                    extraction_method TEXT,
+                    processed_at DATETIME,
+                    updated_at DATETIME,
+                    status TEXT
+                )
+            """)
+        else:
+            # Add missing columns to existing table for compatibility
+            cursor.execute("PRAGMA table_info(ai_documents)")
+            existing_columns = {col[1] for col in cursor.fetchall()}
+            
+            # List of columns that might be missing
+            columns_to_add = [
+                ("upload_date", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+                ("created_at", "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+                ("document_id", "TEXT"),
+                ("original_filename", "TEXT"),
+                ("document_type", "TEXT"),
+                ("organization", "TEXT"),
+                ("file_format", "TEXT"),
+                ("file_size", "INTEGER"),
+                ("file_type", "TEXT"),
+                ("chunks_count", "INTEGER DEFAULT 0"),
+                ("chunk_count", "INTEGER DEFAULT 0"),
+                ("vectors_count", "INTEGER DEFAULT 0"),
+                ("extraction_method", "TEXT"),
+                ("processed_at", "DATETIME"),
+                ("updated_at", "DATETIME"),
+                ("status", "TEXT"),
+                ("tip_dokumenta", "TEXT"),
+                ("description", "TEXT"),
+                ("tags", "TEXT"),
+                ("metadata_json", "TEXT"),
+                ("embedding_model", "TEXT")
+            ]
+            
+            for col_name, col_def in columns_to_add:
+                if col_name not in existing_columns:
+                    try:
+                        cursor.execute(f"ALTER TABLE ai_documents ADD COLUMN {col_name} {col_def}")
+                    except sqlite3.OperationalError:
+                        pass  # Column might already exist
         
         # Document chunks table
         cursor.execute("""
@@ -433,43 +499,54 @@ def render_document_management():
     
     if documents:
         for doc in documents:
-            status_class = f"status-{doc['processing_status']}"
+            status_class = f"status-{doc.get('processing_status', 'pending')}"
             
-            with st.expander(f"{DOCUMENT_TYPES[doc['tip_dokumenta']]} - {doc['filename']}"):
+            with st.expander(f"{DOCUMENT_TYPES.get(doc.get('tip_dokumenta', 'general'), 'Splošno')} - {doc['filename']}"):
                 col1, col2, col3 = st.columns([3, 2, 1])
                 
                 with col1:
                     st.write(f"**Opis:** {doc.get('description', 'Ni opisa')}")
                     if doc.get('tags'):
                         st.write(f"**Oznake:** {doc['tags']}")
-                    st.write(f"**Velikost:** {doc['file_size'] / 1024:.1f} KB")
+                    st.write(f"**Velikost:** {doc.get('file_size', 0) / 1024:.1f} KB")
+                    if doc.get('chunks_count') or doc.get('chunk_count'):
+                        st.write(f"**Število delov:** {doc.get('chunks_count') or doc.get('chunk_count', 0)}")
+                    if doc.get('vectors_count'):
+                        st.write(f"**Vektorji:** {doc.get('vectors_count', 0)}")
                 
                 with col2:
+                    status = doc.get('processing_status', 'pending')
                     st.markdown(f"""
-                    <span class="status-badge {status_class}">
-                        {doc['processing_status'].upper()}
+                    <span class="status-badge status-{status}">
+                        {status.upper()}
                     </span>
                     """, unsafe_allow_html=True)
-                    st.write(f"**Naloženo:** {doc['upload_date']}")
-                    if doc['chunk_count'] > 0:
-                        st.write(f"**Število delov:** {doc['chunk_count']}")
+                    upload_date = doc.get('upload_date') or doc.get('created_at', 'Neznano')
+                    st.write(f"**Naloženo:** {upload_date}")
                 
                 with col3:
-                    # Process button for pending documents
-                    if doc['processing_status'] == 'pending' and AI_PROCESSING_AVAILABLE:
+                    # Reprocess button for completed documents
+                    if status == 'completed':
+                        if st.button("🔄 Ponovno procesiraj", key=f"reproc_{doc['id']}", use_container_width=True):
+                            with st.spinner("Ponovno procesiram..."):
+                                success = reprocess_document(doc['id'], doc.get('file_path'))
+                                if success:
+                                    st.success("Dokument ponovno procesiran!")
+                                    st.rerun()
+                    
+                    # Process button for pending/failed documents
+                    elif status in ['pending', 'failed']:
                         if st.button("⚙️ Procesiraj", key=f"proc_{doc['id']}", use_container_width=True):
                             with st.spinner("Procesiram dokument..."):
-                                success = process_document_async(doc['id'])
+                                success = reprocess_document(doc['id'], doc.get('file_path'))
                                 if success:
                                     st.success("Dokument procesiran!")
-                                else:
-                                    st.error("Napaka pri procesiranju")
-                                st.rerun()
+                                    st.rerun()
                     
                     # Delete button
                     if st.button("🗑️ Izbriši", key=f"del_{doc['id']}", use_container_width=True):
-                        if delete_document(doc['id']):
-                            st.success("Dokument izbrisan")
+                        if delete_document_with_vectors(doc['id'], doc.get('document_id')):
+                            st.success("Dokument in vektorji izbrisani")
                             st.rerun()
     else:
         st.info("🔍 Ni naloženih dokumentov ali ni rezultatov iskanja")
@@ -580,6 +657,233 @@ def render_system_prompts_management():
                             st.rerun()
     else:
         st.info("🔍 Ni shranjenih pozivov")
+
+def render_ai_search_interface():
+    """Unified AI search interface for documents"""
+    
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 2rem;">
+        <h2 style="margin: 0;">🔍 AI Iskanje po dokumentih</h2>
+        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Semantično iskanje po vseh naloženih dokumentih</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Search input
+    search_query = st.text_area(
+        "Vnesite iskalni pojem ali vprašanje",
+        placeholder="npr. 'Kakšni so roki za oddajo ponudb?' ali 'pogoji za sodelovanje' ali 'reference za gradnje'",
+        height=100,
+        key="ai_unified_search"
+    )
+    
+    # Search filters
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        doc_type_filter = st.selectbox(
+            "Filter po tipu dokumenta",
+            ["Vsi"] + list(DOCUMENT_TYPES.values()),
+            key="search_doc_type_filter"
+        )
+    
+    with col2:
+        result_limit = st.slider(
+            "Število rezultatov",
+            min_value=5, max_value=50, value=10,
+            key="search_result_limit"
+        )
+    
+    with col3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        search_btn = st.button("🔍 Išči", type="primary", use_container_width=True)
+    
+    if search_btn and search_query:
+        perform_ai_search(search_query, doc_type_filter, result_limit)
+    
+    # Recent searches
+    st.divider()
+    col_title, col_clear = st.columns([3, 1])
+    with col_title:
+        st.markdown("### 📌 Nedavna iskanja")
+    with col_clear:
+        if st.button("🗑️ Počisti vse", key="clear_all_queries", help="Izbriši vso zgodovino iskanj"):
+            if delete_all_queries():
+                st.rerun()
+    
+    try:
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT query_text, MAX(created_at) as last_used, MAX(id) as query_id
+                FROM ai_query_log
+                WHERE query_text IS NOT NULL
+                GROUP BY query_text
+                ORDER BY last_used DESC
+                LIMIT 5
+            """)
+            recent = cursor.fetchall()
+            
+            if recent:
+                for query, timestamp, query_id in recent:
+                    col1, col2, col3 = st.columns([4, 1, 1])
+                    with col1:
+                        st.text(query[:80] + '...' if len(query) > 80 else query)
+                    with col2:
+                        if st.button("Ponovi", key=f"repeat_{query_id}", use_container_width=True):
+                            perform_ai_search(query, "Vsi", 10)
+                    with col3:
+                        if st.button("❌", key=f"delete_{query_id}", help="Izbriši to iskanje"):
+                            if delete_single_query(query_text=query):
+                                st.rerun()
+            else:
+                st.info("Ni nedavnih iskanj")
+    except Exception as e:
+        st.info("Zgodovina iskanj ni na voljo")
+
+def perform_ai_search(query: str, doc_type_filter: str, limit: int):
+    """Perform AI-powered semantic search"""
+    try:
+        from services.qdrant_crud_service import QdrantCRUDService
+        
+        with st.spinner("Iščem v dokumentih..."):
+            crud_service = QdrantCRUDService()
+            
+            # Prepare filters
+            filters = {}
+            if doc_type_filter != "Vsi":
+                # Find key for value
+                for key, value in DOCUMENT_TYPES.items():
+                    if value == doc_type_filter:
+                        filters["document_type"] = key
+                        break
+            
+            # Search
+            results, total = crud_service.search_documents(
+                query=query,
+                filters=filters,
+                limit=limit
+            )
+            
+            # Check if this is a summary request
+            from services.ai_response_service import AIResponseService
+            ai_service = AIResponseService()
+            
+            is_summary_request = any(keyword in query.lower() for keyword in [
+                "povzemi", "povzetek", "opiši", "kaj vsebuje", "kaj je v",
+                "trenutni dokument", "ta dokument", "celoten dokument"
+            ])
+            
+            # Log query
+            try:
+                with sqlite3.connect(database.DATABASE_FILE) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO ai_query_log 
+                        (query_text, response_text, confidence_score, response_time_seconds)
+                        VALUES (?, ?, ?, ?)
+                    """, (query, f"Found {total} results", 0.8, 1.0))
+                    conn.commit()
+            except:
+                pass
+            
+            if results:
+                # Always generate AI response (except for raw search)
+                st.info("🤖 Generiram odgovor...")
+                
+                # Generate AI response
+                ai_response = ai_service.generate_response(
+                    query=query,
+                    chunks=results[:10],  # Use top 10 chunks for context
+                    context_mode="document",
+                    language="sl"
+                )
+                
+                # Display AI response based on request type
+                if is_summary_request:
+                    # For summaries - full width, no chunks shown by default
+                    st.markdown("### 📄 Povzetek dokumenta")
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                                padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
+                        {ai_response}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Source chunks in expander for summaries
+                    with st.expander("📚 Viri (kosi dokumenta)", expanded=False):
+                        for i, result in enumerate(results[:5], 1):
+                            st.markdown(f"**{i}. {result.get('original_filename', 'Neznano')}** (del {result.get('chunk_index', '?')})")
+                            st.text(result.get('chunk_text', '')[:200] + "...")
+                    
+                    st.success(f"✅ Povzetek ustvarjen iz {min(10, len(results))} delov dokumenta")
+                else:
+                    # For Q&A - show answer AND relevant chunks
+                    st.markdown("### 💡 Odgovor AI")
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); 
+                                padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
+                        {ai_response}
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    st.success(f"✅ Odgovor ustvarjen iz {min(10, len(results))} najdenih delov")
+                    
+                    # Show relevant chunks where answer was found
+                    st.markdown("### 📚 Relevantni deli dokumenta")
+                    st.info("Tukaj so deli dokumenta, kjer je bil najden odgovor:")
+                    
+                    # Display top 5 most relevant chunks with evidence
+                    for i, result in enumerate(results[:5], 1):
+                        score = result.get('score', 0)
+                        
+                        # Determine relevance indicator
+                        if score > 0.8:
+                            relevance = "🟢 Visoka"
+                            color = "green"
+                        elif score > 0.6:
+                            relevance = "🟡 Srednja"  
+                            color = "yellow"
+                        else:
+                            relevance = "🔴 Nizka"
+                            color = "red"
+                        
+                        with st.expander(f"📖 Del {result.get('chunk_index', '?')}: {result.get('original_filename', 'Neznano')} - {relevance} ({score:.2f})", expanded=(i==1)):
+                            # Show chunk metadata
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            
+                            with col1:
+                                st.caption(f"**Dokument:** {result.get('original_filename', 'Neznano')}")
+                            with col2:
+                                st.caption(f"**Del:** {result.get('chunk_index', '?')} od {result.get('total_chunks', '?')}")
+                            with col3:
+                                st.caption(f"**Relevanca:** {score:.0%}")
+                            
+                            # Show the actual text content
+                            st.markdown("**Vsebina:**")
+                            content = result.get('chunk_text', result.get('text', 'Ni vsebine'))
+                            
+                            # Highlight search terms in the content
+                            highlighted = content
+                            for term in query.split():
+                                if len(term) > 2:
+                                    highlighted = highlighted.replace(
+                                        term.lower(), 
+                                        f"<mark style='background: yellow; padding: 2px;'>{term.lower()}</mark>"
+                                    )
+                            
+                            st.markdown(
+                                f"<div style='padding: 15px; background: #f8f9fa; border-left: 4px solid {color}; border-radius: 5px; font-size: 14px;'>{highlighted}</div>",
+                                unsafe_allow_html=True
+                            )
+            else:
+                st.warning("😕 Ni najdenih rezultatov za to poizvedbo")
+                
+    except ImportError:
+        st.error("❌ AI iskanje ni na voljo - manjkajo potrebne knjižnice")
+        st.info("Namestite: pip install qdrant-client openai")
+    except Exception as e:
+        st.error(f"❌ Napaka pri iskanju: {str(e)}")
 
 def render_query_interface():
     """Render the query interface with chat UI"""
@@ -716,29 +1020,56 @@ def render_query_interface():
     if st.session_state.query_history:
         st.markdown("---")
         with st.expander("📜 Zgodovina poizvedb", expanded=False):
-            # Create a clean table view of query history
-            history_data = []
-            for item in reversed(st.session_state.query_history[-10:]):
-                history_data.append({
-                    'Poizvedba': item['query'][:80] + '...' if len(item['query']) > 80 else item['query'],
-                    'Čas': item['timestamp'].strftime('%H:%M:%S'),
-                    'Zanesljivost': f"{item['confidence']:.0%}",
-                    'Odziv': f"{item['response_time']:.2f}s"
-                })
+            # Add clear all button at the top of the expander
+            col1, col2 = st.columns([3, 1])
+            with col2:
+                if st.button("🗑️ Počisti vse", key="clear_history_expander"):
+                    if delete_all_queries():
+                        st.rerun()
             
-            if history_data:
-                df = pd.DataFrame(history_data)
-                st.dataframe(df, use_container_width=True, hide_index=True)
+            # Create a clean table view of query history with delete buttons
+            for idx, item in enumerate(reversed(st.session_state.query_history[-10:])):
+                col1, col2, col3 = st.columns([6, 1, 1])
                 
-                # Add export button for history
-                csv = df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Izvozi zgodovino",
-                    data=csv,
-                    file_name=f"query_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv",
-                    key="export_query_history"
-                )
+                with col1:
+                    query_text = item['query'][:80] + '...' if len(item['query']) > 80 else item['query']
+                    st.markdown(f"**{query_text}**")
+                    st.caption(f"⏱️ {item['timestamp'].strftime('%H:%M:%S')} | "
+                             f"💯 {item['confidence']:.0%} | "
+                             f"⚡ {item['response_time']:.2f}s")
+                
+                with col2:
+                    if st.button("Ponovi", key=f"repeat_hist_{idx}"):
+                        perform_ai_search(item['query'], "Vsi", 10)
+                
+                with col3:
+                    if st.button("❌", key=f"delete_hist_{idx}"):
+                        if delete_single_query(query_text=item['query']):
+                            st.rerun()
+                
+                st.divider()
+            
+            # Export button
+            if st.session_state.query_history:
+                history_data = []
+                for item in reversed(st.session_state.query_history[-10:]):
+                    history_data.append({
+                        'Poizvedba': item['query'],
+                        'Čas': item['timestamp'].strftime('%Y-%m-%d %H:%M:%S'),
+                        'Zanesljivost': f"{item['confidence']:.0%}",
+                        'Odziv': f"{item['response_time']:.2f}s"
+                    })
+                
+                if history_data:
+                    df = pd.DataFrame(history_data)
+                    csv = df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Izvozi zgodovino",
+                        data=csv,
+                        file_name=f"query_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv",
+                        key="export_query_history"
+                    )
 
 
 def update_query_feedback(query_id: int, feedback: str):
@@ -782,6 +1113,79 @@ def export_query_result_to_json(query_result: Dict) -> str:
         'timestamp': query_result['timestamp'].isoformat() if query_result.get('timestamp') else None
     }
     return json.dumps(export_data, ensure_ascii=False, indent=2)
+
+
+def delete_single_query(query_text: str) -> bool:
+    """Delete a single query from the database and session state"""
+    try:
+        # Delete from database
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                DELETE FROM ai_query_log 
+                WHERE query_text = ?
+            """, (query_text,))
+            conn.commit()
+        
+        # Remove from session state if present
+        if 'query_history' in st.session_state:
+            st.session_state.query_history = [
+                q for q in st.session_state.query_history 
+                if q.get('query') != query_text
+            ]
+        
+        if 'recent_queries' in st.session_state:
+            st.session_state.recent_queries = [
+                q for q in st.session_state.recent_queries 
+                if q != query_text
+            ]
+        
+        return True
+    except Exception as e:
+        st.error(f"Napaka pri brisanju poizvedbe: {str(e)}")
+        return False
+
+
+def delete_all_queries() -> bool:
+    """Delete all queries from the database and clear session state"""
+    try:
+        # Show confirmation dialog
+        if 'confirm_delete_all' not in st.session_state:
+            st.session_state.confirm_delete_all = False
+        
+        if not st.session_state.confirm_delete_all:
+            st.warning("Ali ste prepričani, da želite izbrisati vso zgodovino iskanj?")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Da, izbriši vse", key="confirm_yes"):
+                    st.session_state.confirm_delete_all = True
+                    st.rerun()
+            with col2:
+                if st.button("❌ Prekliči", key="confirm_no"):
+                    return False
+            return False
+        
+        # Delete from database
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM ai_query_log")
+            conn.commit()
+        
+        # Clear session state
+        if 'query_history' in st.session_state:
+            st.session_state.query_history = []
+        if 'recent_queries' in st.session_state:
+            st.session_state.recent_queries = []
+        
+        # Reset confirmation flag
+        st.session_state.confirm_delete_all = False
+        
+        st.success("Vsa zgodovina iskanj je bila izbrisana!")
+        return True
+        
+    except Exception as e:
+        st.error(f"Napaka pri brisanju zgodovine: {str(e)}")
+        return False
 
 
 def generate_analytics_report(start_date, end_date) -> str:
@@ -847,6 +1251,91 @@ def render_settings_panel():
     # Processing settings
     st.markdown("### 🔧 Nastavitve procesiranja")
     
+    # Model selection
+    st.markdown("#### 🤖 OpenAI Model")
+    
+    # Available OpenAI models with descriptions
+    OPENAI_MODELS = {
+        "gpt-5-nano": "GPT-5 Nano (prihodnji ultra-mini model)",
+        "gpt-4.1-mini": "GPT-4.1 Mini (najnovejši mini model)",
+        "gpt-4o-mini": "GPT-4o Mini (najhitrejši, najcenejši)",
+        "gpt-4o-mini-2024-07-18": "GPT-4o Mini Juli 2024",
+        "o1-mini": "O1 Mini (napredno sklepanje)",
+        "o1-preview": "O1 Preview (kompleksno sklepanje)",
+        "gpt-4o": "GPT-4o (hiter, multimodalni)",
+        "gpt-4o-2024-08-06": "GPT-4o Avgust 2024",
+        "gpt-4o-2024-05-13": "GPT-4o Maj 2024",
+        "gpt-4-turbo": "GPT-4 Turbo (najnovejši)",
+        "gpt-4-turbo-preview": "GPT-4 Turbo Preview",
+        "gpt-4-turbo-2024-04-09": "GPT-4 Turbo April 2024",
+        "gpt-4": "GPT-4 (zelo natančen)",
+        "gpt-4-32k": "GPT-4 32K (dolg kontekst)",
+        "gpt-4-0125-preview": "GPT-4 Turbo Januar 2024",
+        "gpt-4-1106-preview": "GPT-4 Turbo November 2023",
+        "gpt-3.5-turbo": "GPT-3.5 Turbo (cenovno ugoden)",
+        "gpt-3.5-turbo-16k": "GPT-3.5 Turbo 16K (dolg kontekst)",
+        "gpt-3.5-turbo-0125": "GPT-3.5 Turbo Januar 2024",
+        "gpt-3.5-turbo-1106": "GPT-3.5 Turbo November 2023"
+    }
+    
+    current_model = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+    
+    # Model selector
+    selected_model = st.selectbox(
+        "Izberi AI model",
+        options=list(OPENAI_MODELS.keys()),
+        index=list(OPENAI_MODELS.keys()).index(current_model) if current_model in OPENAI_MODELS else 0,
+        format_func=lambda x: f"{x} - {OPENAI_MODELS[x]}",
+        help="Različni modeli imajo različne zmogljivosti in cene"
+    )
+    
+    # Save model selection to session state
+    if 'selected_openai_model' not in st.session_state:
+        st.session_state.selected_openai_model = selected_model
+    else:
+        st.session_state.selected_openai_model = selected_model
+    
+    # Show model info
+    model_info = {
+        "gpt-5-nano": {"context": "256K", "cost": "$", "speed": "Ultra hitra", "quality": "Odlična"},
+        "gpt-4.1-mini": {"context": "128K", "cost": "$", "speed": "Zelo hitra", "quality": "Zelo dobra"},
+        "gpt-4o-mini": {"context": "128K", "cost": "$", "speed": "Zelo hitra", "quality": "Dobra"},
+        "gpt-4o-mini-2024-07-18": {"context": "128K", "cost": "$", "speed": "Zelo hitra", "quality": "Dobra"},
+        "o1-mini": {"context": "128K", "cost": "$$", "speed": "Srednja", "quality": "Odlična*"},
+        "o1-preview": {"context": "128K", "cost": "$$$$$", "speed": "Počasna", "quality": "Vrhunska*"},
+        "gpt-4o": {"context": "128K", "cost": "$$$", "speed": "Hitra", "quality": "Odlična"},
+        "gpt-4o-2024-08-06": {"context": "128K", "cost": "$$$", "speed": "Hitra", "quality": "Odlična"},
+        "gpt-4o-2024-05-13": {"context": "128K", "cost": "$$$", "speed": "Hitra", "quality": "Odlična"},
+        "gpt-4-turbo": {"context": "128K", "cost": "$$$$", "speed": "Srednja", "quality": "Odlična"},
+        "gpt-4-turbo-preview": {"context": "128K", "cost": "$$$$", "speed": "Srednja", "quality": "Odlična"},
+        "gpt-4-turbo-2024-04-09": {"context": "128K", "cost": "$$$$", "speed": "Srednja", "quality": "Odlična"},
+        "gpt-4": {"context": "8K", "cost": "$$$$", "speed": "Počasna", "quality": "Odlična"},
+        "gpt-4-32k": {"context": "32K", "cost": "$$$$$", "speed": "Počasna", "quality": "Odlična"},
+        "gpt-4-0125-preview": {"context": "128K", "cost": "$$$$", "speed": "Srednja", "quality": "Odlična"},
+        "gpt-4-1106-preview": {"context": "128K", "cost": "$$$$", "speed": "Srednja", "quality": "Odlična"},
+        "gpt-3.5-turbo": {"context": "16K", "cost": "$$", "speed": "Hitra", "quality": "Dobra"},
+        "gpt-3.5-turbo-16k": {"context": "16K", "cost": "$$", "speed": "Hitra", "quality": "Dobra"},
+        "gpt-3.5-turbo-0125": {"context": "16K", "cost": "$$", "speed": "Hitra", "quality": "Dobra"},
+        "gpt-3.5-turbo-1106": {"context": "16K", "cost": "$$", "speed": "Hitra", "quality": "Dobra"}
+    }
+    
+    if selected_model in model_info:
+        info = model_info[selected_model]
+        col1_info, col2_info, col3_info, col4_info = st.columns(4)
+        with col1_info:
+            st.metric("Kontekst", info["context"])
+        with col2_info:
+            st.metric("Cena", info["cost"])
+        with col3_info:
+            st.metric("Hitrost", info["speed"])
+        with col4_info:
+            st.metric("Kvaliteta", info["quality"])
+    
+    st.divider()
+    
+    # Other settings
+    st.markdown("#### 📝 Parametri procesiranja")
+    
     col1, col2 = st.columns(2)
     
     with col1:
@@ -886,6 +1375,65 @@ def render_settings_panel():
             step=0.1,
             help="Višja vrednost = bolj kreativni odgovori"
         )
+    
+    # Save settings button
+    if st.button("💾 Shrani nastavitve", type="primary"):
+        # Update environment variables (in memory)
+        os.environ['OPENAI_MODEL'] = selected_model
+        os.environ['CHUNK_SIZE'] = str(chunk_size)
+        os.environ['CHUNK_OVERLAP'] = str(chunk_overlap)
+        os.environ['AI_MAX_TOKENS'] = str(max_tokens)
+        os.environ['AI_TEMPERATURE'] = str(temperature)
+        
+        # Also update .env file for persistence
+        try:
+            env_path = '.env'
+            env_content = []
+            
+            # Read existing .env
+            if os.path.exists(env_path):
+                with open(env_path, 'r') as f:
+                    env_content = f.readlines()
+            
+            # Update or add settings
+            settings = {
+                'OPENAI_MODEL': selected_model,
+                'CHUNK_SIZE': str(chunk_size),
+                'CHUNK_OVERLAP': str(chunk_overlap),
+                'AI_MAX_TOKENS': str(max_tokens),
+                'AI_TEMPERATURE': str(temperature)
+            }
+            
+            # Update existing lines or prepare new ones
+            updated = {key: False for key in settings}
+            new_content = []
+            
+            for line in env_content:
+                updated_line = False
+                for key, value in settings.items():
+                    if line.startswith(f'{key}='):
+                        new_content.append(f'{key}={value}\n')
+                        updated[key] = True
+                        updated_line = True
+                        break
+                
+                if not updated_line:
+                    new_content.append(line)
+            
+            # Add any missing settings
+            for key, value in settings.items():
+                if not updated[key]:
+                    new_content.append(f'{key}={value}\n')
+            
+            # Write back to .env
+            with open(env_path, 'w') as f:
+                f.writelines(new_content)
+            
+            st.success(f"✅ Nastavitve shranjene! Model: {selected_model}")
+            
+        except Exception as e:
+            st.error(f"❌ Napaka pri shranjevanju: {str(e)}")
+            st.info("💡 Nastavitve so shranjene v pomnilniku in se bodo uporabile do ponovnega zagona")
     
     st.info("ℹ️ Nastavitve se bodo uporabile pri naslednjem procesiranju")
 
@@ -1046,7 +1594,7 @@ def render_analytics_dashboard():
                 title='Uspešnost odgovorov (na podlagi povratnih informacij)',
                 labels={'success_rate': 'Uspešnost (%)', 'date': 'Datum'}
             )
-            fig.update_yaxis(range=[0, 100])
+            fig.update_yaxes(range=[0, 100])
             fig.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)',
                 paper_bgcolor='rgba(0,0,0,0)'
@@ -1276,10 +1824,11 @@ def load_analytics_data(start_date, end_date):
 # Helper functions
 
 def save_document(file, tip_dokumenta: str, description: str = None, tags: str = None) -> Optional[int]:
-    """Save document with categorization"""
+    """Save document with categorization and vector processing"""
     try:
-        # Generate unique filename
+        # Generate unique IDs
         file_id = str(uuid.uuid4())
+        document_id = f"doc_{file_id[:8]}"
         file_extension = Path(file.name).suffix
         
         # Create directory structure
@@ -1291,24 +1840,111 @@ def save_document(file, tip_dokumenta: str, description: str = None, tags: str =
         with open(file_path, "wb") as f:
             f.write(file.getbuffer())
         
-        # Save metadata to database
+        # Save metadata to database with both schemas
         with sqlite3.connect(database.DATABASE_FILE) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO ai_documents 
-                (filename, file_path, tip_dokumenta, file_type, file_size, description, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (filename, file_path, tip_dokumenta, document_type, file_type, file_size, 
+                 description, tags, document_id, original_filename, file_format,
+                 upload_date, created_at, processing_status, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+                        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'pending', 'pending')
             """, (
                 file.name,
                 str(file_path),
                 tip_dokumenta,
+                tip_dokumenta,  # Use tip_dokumenta as document_type
                 file_extension,
                 file.size,
                 description,
-                tags
+                tags,
+                document_id,
+                file.name,
+                file_extension.lower().replace('.', '')
             ))
             conn.commit()
-            return cursor.lastrowid
+            doc_db_id = cursor.lastrowid
+            
+        # Process document for vector database if enabled
+        if st.session_state.get('enable_vector_processing', True):
+            try:
+                from services.qdrant_document_processor import QdrantDocumentProcessor
+                
+                with st.spinner(f"Processing document for AI search..."):
+                    processor = QdrantDocumentProcessor()
+                    
+                    # Prepare metadata without organization (for all organizations)
+                    metadata = {
+                        "document_id": document_id,
+                        "document_type": tip_dokumenta,
+                        "file_format": file_extension.lower().replace('.', ''),
+                        "description": description or "",
+                        "tags": tags or "",
+                        "original_filename": file.name
+                    }
+                    
+                    # Process document
+                    result = processor.process_document(
+                        str(file_path),
+                        metadata,
+                        progress_callback=None  # Could add progress tracking here
+                    )
+                    
+                    if result.get("status") == "success":
+                        # Update processing status
+                        with sqlite3.connect(database.DATABASE_FILE) as conn:
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                UPDATE ai_documents 
+                                SET processing_status = 'completed',
+                                    status = 'completed',
+                                    processed_at = CURRENT_TIMESTAMP,
+                                    chunks_count = ?,
+                                    chunk_count = ?,
+                                    vectors_count = ?,
+                                    extraction_method = ?
+                                WHERE id = ?
+                            """, (
+                                result.get("chunks_created", 0),
+                                result.get("chunks_created", 0),
+                                result.get("vectors_created", 0),
+                                result.get("extraction_method", "unknown"),
+                                doc_db_id
+                            ))
+                            conn.commit()
+                        
+                        st.success(f"✅ Document processed: {result.get('chunks_created', 0)} chunks, {result.get('vectors_created', 0)} vectors created")
+                    else:
+                        error_msg = result.get('error', 'Unknown error')
+                        if 'image' in error_msg.lower() or 'ocr' in error_msg.lower():
+                            st.warning("⚠️ Document saved but appears to be scanned/image PDF. OCR processing not available yet.")
+                            st.info("💡 The document is stored and can be manually reviewed.")
+                        else:
+                            st.warning(f"⚠️ Document saved but vector processing incomplete: {error_msg}")
+                        
+            except ImportError:
+                st.info("ℹ️ Vector processing not available - document saved for regular use")
+            except Exception as e:
+                error_str = str(e)
+                if 'pdf' in error_str.lower() and 'image' in error_str.lower():
+                    st.warning("⚠️ Document saved. This appears to be a scanned PDF that requires OCR.")
+                    st.info("💡 The document is stored for manual review. Text extraction from images will be added in future updates.")
+                else:
+                    st.warning(f"⚠️ Document saved but vector processing failed: {error_str}")
+                    
+                # Update status to indicate processing failed but document is saved
+                with sqlite3.connect(database.DATABASE_FILE) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        UPDATE ai_documents 
+                        SET processing_status = 'partial',
+                            status = 'partial'
+                        WHERE id = ?
+                    """, (doc_db_id,))
+                    conn.commit()
+        
+        return doc_db_id
     except Exception as e:
         st.error(f"Napaka pri shranjevanju: {str(e)}")
         return None
@@ -1332,10 +1968,119 @@ def load_documents(document_types: List[str] = None, search_query: str = None) -
             search_pattern = f"%{search_query}%"
             params.extend([search_pattern, search_pattern, search_pattern])
         
-        query += " ORDER BY upload_date DESC"
+        # Try both column names for compatibility
+        # upload_date is from original AI Manager, created_at is from Vector Database
+        query += " ORDER BY COALESCE(upload_date, created_at, datetime('now')) DESC"
         
         cursor.execute(query, params)
         return [dict(row) for row in cursor.fetchall()]
+
+def reprocess_document(doc_id: int, file_path: str = None) -> bool:
+    """Reprocess document for vector database"""
+    try:
+        # Get document info if file_path not provided
+        if not file_path:
+            with sqlite3.connect(database.DATABASE_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT file_path, tip_dokumenta, description, tags FROM ai_documents WHERE id = ?", (doc_id,))
+                result = cursor.fetchone()
+                if not result:
+                    return False
+                file_path, tip_dokumenta, description, tags = result
+        else:
+            # Get metadata from database
+            with sqlite3.connect(database.DATABASE_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT tip_dokumenta, description, tags, document_id FROM ai_documents WHERE id = ?", (doc_id,))
+                result = cursor.fetchone()
+                if result:
+                    tip_dokumenta, description, tags, document_id = result
+                else:
+                    tip_dokumenta = 'general'
+                    description = ''
+                    tags = ''
+                    document_id = f"doc_{str(uuid.uuid4())[:8]}"
+        
+        # Process with Qdrant
+        from services.qdrant_document_processor import QdrantDocumentProcessor
+        processor = QdrantDocumentProcessor()
+        
+        metadata = {
+            "document_id": document_id,
+            "document_type": tip_dokumenta,
+            "description": description or "",
+            "tags": tags or ""
+        }
+        
+        result = processor.process_document(file_path, metadata)
+        
+        if result.get("status") == "success":
+            # Update database
+            with sqlite3.connect(database.DATABASE_FILE) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE ai_documents 
+                    SET processing_status = 'completed',
+                        status = 'completed',
+                        processed_at = CURRENT_TIMESTAMP,
+                        chunks_count = ?,
+                        chunk_count = ?,
+                        vectors_count = ?
+                    WHERE id = ?
+                """, (
+                    result.get("chunks_created", 0),
+                    result.get("chunks_created", 0),
+                    result.get("vectors_created", 0),
+                    doc_id
+                ))
+                conn.commit()
+            return True
+    except Exception as e:
+        st.error(f"Napaka pri ponovnem procesiranju: {str(e)}")
+        return False
+    return False
+
+def delete_document_with_vectors(doc_id: int, document_id: str = None) -> bool:
+    """Delete document and its vectors from both database and Qdrant"""
+    try:
+        # Get document info
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT file_path, document_id FROM ai_documents WHERE id = ?", (doc_id,))
+            result = cursor.fetchone()
+            if not result:
+                return False
+            file_path, doc_document_id = result
+            
+            # Use provided document_id or the one from database
+            if not document_id:
+                document_id = doc_document_id
+        
+        # Delete from Qdrant if document_id exists
+        if document_id:
+            try:
+                from services.qdrant_crud_service import QdrantCRUDService
+                crud_service = QdrantCRUDService()
+                crud_service.delete_document(document_id)
+            except Exception as e:
+                st.warning(f"Vektorji morda niso bili izbrisani: {str(e)}")
+        
+        # Delete file
+        if file_path and Path(file_path).exists():
+            Path(file_path).unlink()
+        
+        # Delete from database
+        with sqlite3.connect(database.DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM ai_documents WHERE id = ?", (doc_id,))
+            # Also try to delete from chunks table if exists
+            cursor.execute("DELETE FROM ai_document_chunks WHERE document_id = ?", (document_id,)) if document_id else None
+            conn.commit()
+        
+        return True
+    except Exception as e:
+        st.error(f"Napaka pri brisanju: {str(e)}")
+        return False
 
 def delete_document(doc_id: int) -> bool:
     """Delete document and its file"""

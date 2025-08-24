@@ -13,6 +13,13 @@ from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 import uuid
 
+# Force load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    pass
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -24,14 +31,22 @@ try:
     from qdrant_client import QdrantClient
     from qdrant_client.models import (
         Filter, FieldCondition, MatchValue, 
-        PointIdsList, FilterSelector, HasIdCondition,
-        PointStruct, PayloadIndexParams, KeywordIndexParams,
-        TextIndexParams, IndexParams
+        PointIdsList, PointStruct
     )
+    # Try to import index params - these may not exist in all versions
+    try:
+        from qdrant_client.models import PayloadIndexParams, KeywordIndexParams
+        HAS_INDEX_PARAMS = True
+    except ImportError:
+        HAS_INDEX_PARAMS = False
+        logger.info("Index params not available in this qdrant-client version")
+    
     HAS_QDRANT = True
-except ImportError:
-    logger.warning("qdrant-client not installed")
+    logger.info("qdrant-client loaded successfully")
+except ImportError as e:
+    logger.error(f"qdrant-client not available: {e}")
     HAS_QDRANT = False
+    HAS_INDEX_PARAMS = False
 
 try:
     from openai import OpenAI
@@ -72,6 +87,11 @@ class QdrantCRUDService:
         if not self.qdrant_client:
             return
         
+        # Skip index creation if params not available in this version
+        if not HAS_INDEX_PARAMS:
+            logger.info("Skipping index creation - not supported in this qdrant-client version")
+            return
+            
         try:
             # Create indexes for common filter fields
             index_fields = {
@@ -163,14 +183,20 @@ class QdrantCRUDService:
                     qdrant_filter = Filter(must=conditions)
             
             # Search in Qdrant
-            results = self.qdrant_client.search(
-                collection_name=COLLECTION_NAME,
-                query_vector=query_vector,
-                filter=qdrant_filter,
-                limit=limit,
-                offset=offset,
-                with_payload=True
-            )
+            # Version 1.15.1 uses 'query_filter' parameter
+            search_params = {
+                "collection_name": COLLECTION_NAME,
+                "query_vector": query_vector,
+                "limit": limit,
+                "offset": offset,
+                "with_payload": True
+            }
+            
+            # Add filter if provided (using query_filter for v1.15.1)
+            if qdrant_filter:
+                search_params["query_filter"] = qdrant_filter
+            
+            results = self.qdrant_client.search(**search_params)
             
             # Format results
             formatted_results = []
@@ -204,7 +230,7 @@ class QdrantCRUDService:
             results = self.qdrant_client.search(
                 collection_name=COLLECTION_NAME,
                 query_vector=query_vector,
-                filter=filter_condition,
+                query_filter=filter_condition,  # Use query_filter for v1.15.1
                 limit=1000,  # High limit for counting
                 with_payload=False  # Don't need payload for counting
             )
