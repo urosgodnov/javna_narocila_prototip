@@ -109,16 +109,33 @@ class ValidationManager:
             cofinancers = []
             i = 0
             while True:
-                name_key = f'orderType.cofinancers.{i}.name'
-                if name_key not in self.session_state:
+                # Check for new field structure first
+                name_key = f'orderType.cofinancers.{i}.cofinancerName'
+                old_name_key = f'orderType.cofinancers.{i}.name'
+                
+                if name_key not in self.session_state and old_name_key not in self.session_state:
                     break
                 
-                cofinancer = {
-                    'name': self.session_state.get(f'orderType.cofinancers.{i}.name', ''),
-                    'program': self.session_state.get(f'orderType.cofinancers.{i}.program', ''),
-                    'logo': self.session_state.get(f'orderType.cofinancers.{i}.logo', ''),
-                    'specialRequirements': self.session_state.get(f'orderType.cofinancers.{i}.specialRequirements', '')
-                }
+                # Use new field structure if available
+                if name_key in self.session_state:
+                    cofinancer = {
+                        'cofinancerName': self.session_state.get(f'orderType.cofinancers.{i}.cofinancerName', ''),
+                        'cofinancerStreetAddress': self.session_state.get(f'orderType.cofinancers.{i}.cofinancerStreetAddress', ''),
+                        'cofinancerPostalCode': self.session_state.get(f'orderType.cofinancers.{i}.cofinancerPostalCode', ''),
+                        'programName': self.session_state.get(f'orderType.cofinancers.{i}.programName', ''),
+                        'programArea': self.session_state.get(f'orderType.cofinancers.{i}.programArea', ''),
+                        'programCode': self.session_state.get(f'orderType.cofinancers.{i}.programCode', ''),
+                        'logo': self.session_state.get(f'orderType.cofinancers.{i}.logo', ''),
+                        'specialRequirements': self.session_state.get(f'orderType.cofinancers.{i}.specialRequirements', '')
+                    }
+                else:
+                    # Fallback to old structure
+                    cofinancer = {
+                        'name': self.session_state.get(f'orderType.cofinancers.{i}.name', ''),
+                        'program': self.session_state.get(f'orderType.cofinancers.{i}.program', ''),
+                        'logo': self.session_state.get(f'orderType.cofinancers.{i}.logo', ''),
+                        'specialRequirements': self.session_state.get(f'orderType.cofinancers.{i}.specialRequirements', '')
+                    }
                 cofinancers.append(cofinancer)
                 i += 1
             
@@ -142,25 +159,56 @@ class ValidationManager:
         # Collect array data from individual fields
         self._collect_array_data()
         
-        # Map step numbers to screen-specific validation methods
-        screen_validators = {
-            0: self.validate_screen_1_customers,  # Step 0 = Screen 1 (clientInfo)
-            2: self.validate_screen_3_legal_basis,  # Step 2 = Screen 3 (legalBasis)
-            4: self.validate_screen_5_lots,  # Step 4 = Screen 5 (lotsInfo)
-            5: self.validate_order_type,  # Step 5 = Screen 6 (orderType)
-            6: self.validate_screen_7_technical_specs,  # Step 6 = Screen 7 (technicalSpecs)
-            7: self.validate_execution_deadline,  # Step 7 = Screen 8 (executionDeadline)
-            8: self.validate_price_info,  # Step 8 = Screen 9 (priceInfo)
-            9: self.validate_inspection_negotiations,  # Step 9 = Screen 10 (inspectionInfo, negotiationsInfo)
-            10: self.validate_participation_conditions,  # Step 10 = Screen 11 (participationAndExclusion, participationConditions)
-            11: self.validate_financial_guarantees,  # Step 11 = Screen 12 (financialGuarantees, variantOffers)
-            12: lambda: self.validate_merila(self._find_selection_criteria_key(step_keys)),  # Step 12 = Screen 13 (selectionCriteria/Merila)
-            13: self.validate_contract_info  # Step 13 = Screen 14 (contractInfo, otherInfo)
-        }
+        # Determine which validation to run based on step_keys content
+        # This is more reliable than using step numbers which can change
+        validator_func = None
         
-        # Call screen-specific validator if available
-        if step_number in screen_validators:
-            is_valid, screen_errors = screen_validators[step_number]()
+        if any('clientInfo' in key for key in step_keys):
+            validator_func = self.validate_screen_1_customers
+        elif any('legalBasis' in key for key in step_keys):
+            validator_func = self.validate_screen_3_legal_basis
+        elif any('lotsInfo' in key for key in step_keys):
+            validator_func = self.validate_screen_5_lots
+        elif any('orderType' in key for key in step_keys):
+            validator_func = self.validate_order_type
+        elif any('technicalSpecifications' in key for key in step_keys):
+            validator_func = self.validate_screen_7_technical_specs
+        elif any('executionDeadline' in key for key in step_keys):
+            validator_func = self.validate_execution_deadline
+        elif any('priceInfo' in key for key in step_keys):
+            validator_func = self.validate_price_info
+        elif any('inspectionInfo' in key or 'negotiationsInfo' in key for key in step_keys):
+            validator_func = self.validate_inspection_negotiations
+        elif any('participationConditions' in key or 'participationAndExclusion' in key for key in step_keys):
+            validator_func = self.validate_participation_conditions
+        elif any('financialGuarantees' in key or 'variantOffers' in key for key in step_keys):
+            validator_func = self.validate_financial_guarantees
+        elif any('selectionCriteria' in key or 'Merila' in key for key in step_keys):
+            validator_func = lambda: self.validate_merila(self._find_selection_criteria_key(step_keys))
+        elif any('contractInfo' in key or 'otherInfo' in key for key in step_keys):
+            validator_func = self.validate_contract_info
+        
+        # Fallback to step number mapping if no keys matched
+        if validator_func is None and step_number is not None:
+            screen_validators = {
+                0: self.validate_screen_1_customers,
+                2: self.validate_screen_3_legal_basis,
+                4: self.validate_screen_5_lots,
+                5: self.validate_order_type,
+                6: self.validate_screen_7_technical_specs,
+                7: self.validate_execution_deadline,
+                8: self.validate_price_info,
+                9: self.validate_inspection_negotiations,
+                10: self.validate_participation_conditions,
+                11: self.validate_financial_guarantees,
+                12: lambda: self.validate_merila(self._find_selection_criteria_key(step_keys)),
+                13: self.validate_contract_info
+            }
+            validator_func = screen_validators.get(step_number)
+        
+        # Call the validator if found
+        if validator_func:
+            is_valid, screen_errors = validator_func()
             self.errors.extend(screen_errors)
         
         # Expand section keys to field keys
@@ -176,7 +224,10 @@ class ValidationManager:
         
         self._validate_conditional_requirements()
         
-        return len(self.errors) == 0, self.errors
+        is_valid = len(self.errors) == 0
+        import logging
+        logging.info(f"[ValidationManager.validate_step] Final validation result: is_valid={is_valid}, errors={self.errors}")
+        return is_valid, self.errors
     
     def _expand_step_keys(self, step_keys: List[str]) -> List[str]:
         """
@@ -806,6 +857,24 @@ class ValidationManager:
                 'lot_0.orderType.cofinancers'
             ]
             
+            # First check if we have the cofinancer count key
+            cofinancer_count = 0
+            count_keys = ['orderType.cofinancerCount', 'general.orderType.cofinancerCount', 'lot_0.orderType.cofinancerCount']
+            for key in count_keys:
+                if key in self.session_state:
+                    cofinancer_count = self.session_state.get(key, 0)
+                    logging.info(f"[validate_order_type] Found cofinancer count at {key}: {cofinancer_count}")
+                    break
+            
+            # If we have a count, create placeholder objects
+            if cofinancer_count > 0 and not cofinancers:
+                cofinancers = [{}] * cofinancer_count
+                logging.info(f"[validate_order_type] Created {cofinancer_count} placeholder cofinancers")
+            
+            # If no cofinancers found and count is 0, this is an error state
+            if cofinancer_count == 0 and not cofinancers:
+                logging.info("[validate_order_type] No cofinancers found and count is 0 - will trigger validation error")
+            
             for key in cofinancer_keys:
                 if key in self.session_state:
                     cofinancers = self.session_state.get(key, [])
@@ -821,15 +890,34 @@ class ValidationManager:
                 for prefix in prefixes:
                     i = 0
                     while True:
-                        name_key = f'{prefix}.cofinancers.{i}.name'
-                        if name_key not in self.session_state:
+                        # Try new field names first
+                        name_key = f'{prefix}.cofinancers.{i}.cofinancerName'
+                        old_name_key = f'{prefix}.cofinancers.{i}.name'
+                        
+                        if name_key not in self.session_state and old_name_key not in self.session_state:
                             break
                         
-                        name_value = self.session_state.get(f'{prefix}.cofinancers.{i}.name', '')
-                        program_value = self.session_state.get(f'{prefix}.cofinancers.{i}.program', '')
-                        logging.info(f"[validate_order_type] Found cofinancer {i}: name={name_value}, program={program_value}")
+                        # Use new field names if available
+                        if name_key in self.session_state:
+                            name_value = self.session_state.get(f'{prefix}.cofinancers.{i}.cofinancerName', '')
+                            street_value = self.session_state.get(f'{prefix}.cofinancers.{i}.cofinancerStreetAddress', '')
+                            postal_value = self.session_state.get(f'{prefix}.cofinancers.{i}.cofinancerPostalCode', '')
+                            program_value = self.session_state.get(f'{prefix}.cofinancers.{i}.programName', '')
+                            logging.info(f"[validate_order_type] Found new structure cofinancer {i}: name={name_value}, street={street_value}, postal={postal_value}, program={program_value}")
+                        else:
+                            # Fallback to old field names
+                            name_value = self.session_state.get(f'{prefix}.cofinancers.{i}.name', '')
+                            street_value = ''
+                            postal_value = ''
+                            program_value = self.session_state.get(f'{prefix}.cofinancers.{i}.program', '')
+                            logging.info(f"[validate_order_type] Found old structure cofinancer {i}: name={name_value}, program={program_value}")
                         
                         cofinancer = {
+                            'cofinancerName': name_value,
+                            'cofinancerStreetAddress': street_value,
+                            'cofinancerPostalCode': postal_value,
+                            'programName': program_value,
+                            # Keep old keys for backward compatibility
                             'name': name_value,
                             'program': program_value
                         }
@@ -851,47 +939,92 @@ class ValidationManager:
                 # We have placeholder objects, check individual fields
                 for idx in range(len(cofinancers)):
                     # Try to find the actual values in session state
-                    name = None
-                    program = None
+                    # Check for new field structure with split address
+                    cofinancer_name = None
+                    street_address = None
+                    postal_code = None
+                    program_name = None
                     
                     # Try different key patterns
                     for prefix in ['general.orderType', 'orderType', 'lot_0.orderType']:
-                        name_key = f'{prefix}.cofinancers.{idx}.name'
-                        program_key = f'{prefix}.cofinancers.{idx}.program'
+                        # New field structure
+                        name_key = f'{prefix}.cofinancers.{idx}.cofinancerName'
+                        street_key = f'{prefix}.cofinancers.{idx}.cofinancerStreetAddress'
+                        postal_key = f'{prefix}.cofinancers.{idx}.cofinancerPostalCode'
+                        program_key = f'{prefix}.cofinancers.{idx}.programName'
                         
+                        # Check for new structure first
                         if name_key in self.session_state:
-                            name = self.session_state.get(name_key, '')
-                            program = self.session_state.get(program_key, '')
-                            logging.info(f"[validate_order_type] Found cofinancer {idx} at {prefix}: name={name}, program={program}")
+                            cofinancer_name = self.session_state.get(name_key, '')
+                            street_address = self.session_state.get(street_key, '')
+                            postal_code = self.session_state.get(postal_key, '')
+                            program_name = self.session_state.get(program_key, '')
+                            logging.info(f"[validate_order_type] Found new structure cofinancer {idx} at {prefix}: name={cofinancer_name}, street={street_address}, postal={postal_code}, program={program_name}")
+                            break
+                        
+                        # Fallback to old structure
+                        old_name_key = f'{prefix}.cofinancers.{idx}.name'
+                        old_program_key = f'{prefix}.cofinancers.{idx}.program'
+                        
+                        if old_name_key in self.session_state:
+                            cofinancer_name = self.session_state.get(old_name_key, '')
+                            program_name = self.session_state.get(old_program_key, '')
+                            logging.info(f"[validate_order_type] Found old structure cofinancer {idx} at {prefix}: name={cofinancer_name}, program={program_name}")
                             break
                     
-                    if name and program:
-                        if name.strip() and program.strip():
+                    # Validate required fields
+                    if cofinancer_name and cofinancer_name.strip():
+                        # If name is present, validate other required fields
+                        if street_address and street_address.strip() and postal_code and postal_code.strip() and program_name and program_name.strip():
                             has_valid_cofinancer = True
-                    elif name or program:  # Partially filled
-                        if not name or not name.strip():
-                            errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv in naslov sofinancerja")
-                        if not program or not program.strip():
-                            errors.append(f"Sofinancer {idx+1}: Vnesite naziv, področje in oznako programa/projekta")
+                        else:
+                            # Report specific missing fields
+                            if not street_address or not street_address.strip():
+                                errors.append(f"Sofinancer {idx+1}: Vnesite naslov (ulica/cesta in hišna številka)")
+                            if not postal_code or not postal_code.strip():
+                                errors.append(f"Sofinancer {idx+1}: Vnesite poštno številko in kraj")
+                            if not program_name or not program_name.strip():
+                                errors.append(f"Sofinancer {idx+1}: Vnesite naziv programa/projekta")
+                    elif street_address or postal_code or program_name:
+                        # If any field is filled but name is missing
+                        errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv sofinancerja")
             else:
                 # Normal validation for properly structured cofinancers
                 for idx, cofinancer in enumerate(cofinancers):
                     if isinstance(cofinancer, dict):
-                        name = cofinancer.get('name', '').strip()
-                        program = cofinancer.get('program', '').strip()
+                        # Check for new field structure first
+                        cofinancer_name = cofinancer.get('cofinancerName', '').strip()
+                        street_address = cofinancer.get('cofinancerStreetAddress', '').strip()
+                        postal_code = cofinancer.get('cofinancerPostalCode', '').strip()
+                        program_name = cofinancer.get('programName', '').strip()
                         
-                        if name and program:
-                            has_valid_cofinancer = True
-                        elif name or program:  # Partially filled
-                            if not name:
-                                errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv in naslov sofinancerja")
-                            if not program:
-                                errors.append(f"Sofinancer {idx+1}: Vnesite naziv, področje in oznako programa/projekta")
+                        # Fallback to old structure if new fields not found
+                        if not cofinancer_name:
+                            cofinancer_name = cofinancer.get('name', '').strip()
+                        if not program_name:
+                            program_name = cofinancer.get('program', '').strip()
+                        
+                        # Validate required fields
+                        if cofinancer_name:
+                            if street_address and postal_code and program_name:
+                                has_valid_cofinancer = True
+                            else:
+                                # Report specific missing fields
+                                if not street_address:
+                                    errors.append(f"Sofinancer {idx+1}: Vnesite naslov (ulica/cesta in hišna številka)")
+                                if not postal_code:
+                                    errors.append(f"Sofinancer {idx+1}: Vnesite poštno številko in kraj")
+                                if not program_name:
+                                    errors.append(f"Sofinancer {idx+1}: Vnesite naziv programa/projekta")
+                        elif street_address or postal_code or program_name:
+                            errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv sofinancerja")
             
             if not has_valid_cofinancer:
                 errors.append("Pri sofinanciranem naročilu morate vnesti podatke o vsaj enem sofinancerju")
         
-        return len(errors) == 0, errors
+        is_valid = len(errors) == 0
+        logging.info(f"[validate_order_type] Validation complete. is_valid={is_valid}, errors={errors}")
+        return is_valid, errors
     
     def validate_screen_7_technical_specs(self) -> Tuple[bool, List[str]]:
         """

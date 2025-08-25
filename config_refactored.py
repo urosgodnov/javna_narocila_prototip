@@ -145,7 +145,13 @@ def get_lot_navigation_buttons(session_state):
         return [("Potrdi in zaključi", "submit", "primary")]
     
     current_lot_index = session_state.get("current_lot_index", 0)
+    if current_lot_index is None:
+        current_lot_index = 0
+    
     lot_names = session_state.get("lot_names", [])
+    if lot_names is None:
+        lot_names = []
+    
     total_lots = len(lot_names)
     
     # Always have save button

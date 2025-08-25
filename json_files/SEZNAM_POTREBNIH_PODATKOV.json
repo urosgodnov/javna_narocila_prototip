@@ -1058,9 +1058,15 @@
                                 "type": "string",
                                 "title": "Polni naziv sofinancerja"
                             },
-                            "cofinancerAddress": {
+                            "cofinancerStreetAddress": {
                                 "type": "string",
-                                "title": "Naslov sofinancerja"
+                                "title": "Naslov (ulica/cesta in hišna številka)",
+                                "placeholder": "npr. Slovenska cesta 1"
+                            },
+                            "cofinancerPostalCode": {
+                                "type": "string",
+                                "title": "Poštna številka in kraj",
+                                "placeholder": "npr. 1000 Ljubljana"
                             },
                             "programName": {
                                 "type": "string",
@@ -1087,7 +1093,8 @@
                         },
                         "required": [
                             "cofinancerName",
-                            "cofinancerAddress",
+                            "cofinancerStreetAddress",
+                            "cofinancerPostalCode",
                             "programName",
                             "programArea",
                             "programCode"
@@ -1173,9 +1180,15 @@
                                             "type": "string",
                                             "title": "Polni naziv sofinancerja"
                                         },
-                                        "cofinancerAddress": {
+                                        "cofinancerStreetAddress": {
                                             "type": "string",
-                                            "title": "Naslov sofinancerja"
+                                            "title": "Naslov (ulica/cesta in hišna številka)",
+                                            "placeholder": "npr. Slovenska cesta 1"
+                                        },
+                                        "cofinancerPostalCode": {
+                                            "type": "string",
+                                            "title": "Poštna številka in kraj",
+                                            "placeholder": "npr. 1000 Ljubljana"
                                         },
                                         "programName": {
                                             "type": "string",
@@ -1201,8 +1214,12 @@
                                         }
                                     },
                                     "required": [
-                                        "name",
-                                        "program"
+                                        "cofinancerName",
+                                        "cofinancerStreetAddress",
+                                        "cofinancerPostalCode",
+                                        "programName",
+                                        "programArea",
+                                        "programCode"
                                     ]
                                 },
                                 "render_if": {
