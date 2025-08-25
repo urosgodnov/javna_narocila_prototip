@@ -6,6 +6,12 @@
             "title": "Podatki o naročniku",
             "type": "object",
             "properties": {
+                "multipleClientsInfo": {
+                    "type": "object",
+                    "title": "ℹ️ Informacija o več naročnikih",
+                    "properties": {},
+                    "description": "V kolikor je naročnikov več, odkljukajte spodnje polje 'Naročnik je eden' in za vsakega naročnika kliknite na polje 'dodaj naročnika' ter zanj vpišite podatke. V polje 'Naročnik 1' vpišite naročnika, kateremu so ostali naročniki dali pooblastilo za izvedbo oddaje javnega naročila."
+                },
                 "isSingleClient": {
                     "type": "boolean",
                     "title": "Naročnik je eden",
@@ -19,9 +25,17 @@
                         "value": true
                     }
                 },
-                "singleClientAddress": {
+                "singleClientStreetAddress": {
                     "type": "string",
-                    "title": "Naslov (ulica, hišna številka, poštna številka in kraj)",
+                    "title": "Naslov (ulica/cesta in hišna številka)",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientPostalCode": {
+                    "type": "string",
+                    "title": "Poštna številka in kraj",
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -50,9 +64,13 @@
                                 "type": "string",
                                 "title": "Naziv"
                             },
-                            "address": {
+                            "streetAddress": {
                                 "type": "string",
-                                "title": "Naslov (ulica, hišna številka, poštna številka in kraj)"
+                                "title": "Naslov (ulica/cesta in hišna številka)"
+                            },
+                            "postalCode": {
+                                "type": "string",
+                                "title": "Poštna številka in kraj"
                             },
                             "legalRepresentative": {
                                 "type": "string",
@@ -61,7 +79,8 @@
                         },
                         "required": [
                             "name",
-                            "address",
+                            "streetAddress",
+                            "postalCode",
                             "legalRepresentative"
                         ]
                     }
@@ -128,7 +147,7 @@
                     }
                 }
             },
-            "description": "Pri oddaji javnega naročila se bodo uporabljala določila naslednjih predpisov in drugih dokumentov:\n\n• Zakon o javnem naročanju (ZJN-3, Uradni list RS, št. 91/15 s spremembami)\n• Zakon o pravnem varstvu v postopkih javnega naročanja (ZPVPJN, Uradni list RS, št. 43/2011 s spremembami)\n• Uredba o finančnih zavarovanjih pri javnem naročanju (Uradni list RS, št. 27/16)\n• Uredba o zelenem javnem naročanju (Uradni list RS, št. 51/17 s spremembami)\n• Zakon o integriteti in preprečevanju korupcije (ZIntPK-UPB2, Uradni list RS št. 69/2011 s spremembami)\n• Zakon o varstvu osebnih podatkov (ZVOP-2, Uradni list RS št. 163/22)\n• Zakon o poslovni skrivnosti (ZPosS; Uradni list RS, št. 22/19)\n• Obligacijski zakonik (OZ, Uradni list RS, št. 83/2001 s spremembami)\n• Zakon o javnih financah (ZJF, Uradni list RS, št. 11/11 s spremembami)\n• Zakon o davku na dodano vrednost (ZDDV-1, Uradni list RS, št. 13/11 s spremembami)\n• Zakon o splošnem upravnem postopku\n• Zakon o pravdnem postopek (ZPP-UPB3, Uradni list RS št. 73/2007 s spremembami)\n• Predpisi, ki urejajo področje, ki je predmet javnega naročila\n\nNaročnik bo pri izvajanju postopka javnega naročanja ravnal v skladu z vsemi veljavnimi predpisi in zagotovil transparentnost ter enakopravno obravnavo vseh ponudnikov."
+            "description": "Pri oddaji javnega naročila se bodo uporabljala določila naslednjih predpisov in drugih dokumentov:\n\n• Zakon o javnem naročanju (ZJN-3, Uradni list RS, št. 91/15 s spremembami)\n• Zakon o pravnem varstvu v postopkih javnega naročanju (ZPVPJN, Uradni list RS, št. 43/2011 s spremembami)\n• Uredba o finančnih zavarovanjih pri javnem naročanju (Uradni list RS, št. 27/16)\n• Uredba o zelenem javnem naročanju (Uradni list RS, št. 51/17 s spremembami), v kolikor je njena uporaba glede na predmet javnega naročila obvezna\n• Zakon o integriteti in preprečevanju korupcije (ZIntPK-UPB2, Uradni list RS št. 69/2011 s spremembami)\n• Zakon o varstvu osebnih podatkov (ZVOP-2, Uradni list RS št. 163/22)\n• Zakon o poslovni skrivnosti (ZPosS; Uradni list RS, št. 22/19)\n• Obligacijski zakonik (OZ, Uradni list RS, št. 83/2001 s spremembami)\n• Zakon o javnih financah (ZJF, Uradni list RS, št. 11/11 s spremembami)\n• Zakon o davku na dodano vrednost (ZDDV-1, Uradni list RS, št. 13/11 s spremembami)\n• Zakon o splošnem upravnem postopku (ZUP, Uradni list RS št. 80/99 s spremembami)\n• Zakon o pravdnem postopek (ZPP-UPB3, Uradni list RS št. 73/2007 s spremembami)\n• Predpisi, ki urejajo področje, ki je predmet javnega naročila\n\nNaročnik bo pri izvajanju postopka javnega naročanja ravnal v skladu z vsemi veljavnimi predpisi in zagotovil transparentnost ter enakopravno obravnavo vseh ponudnikov."
         },
         "submissionProcedure": {
             "title": "Postopek oddaje javnega naročila",
@@ -150,7 +169,7 @@
                 },
                 "justification": {
                     "type": "string",
-                    "title": "Napišite zakaj želite izvesti ta postopek (neobvezno)",
+                    "title": "Napišite zakaj želite izvesti ta postopek",
                     "description": "Ta podatek ni obvezen za odprti postopek.",
                     "render_if": {
                         "field": "submissionProcedure.procedure",
@@ -166,6 +185,12 @@
             "title": "Informacije o sklopih",
             "type": "object",
             "properties": {
+                "lotsInfoHelp": {
+                    "type": "object",
+                    "title": "ℹ️ Informacija o sklopih",
+                    "properties": {},
+                    "description": "Obkljukajte spodnje polje, če je naročilo razdeljeno na sklope. Sklopi omogočajo razdelitev javnega naročila na več ločenih delov."
+                },
                 "hasLots": {
                     "type": "boolean",
                     "title": "Naročilo je razdeljeno na sklope",
@@ -1029,13 +1054,25 @@
                         "type": "object",
                         "title": "Sofinancer",
                         "properties": {
-                            "name": {
+                            "cofinancerName": {
                                 "type": "string",
-                                "title": "Polni naziv in naslov sofinancerja"
+                                "title": "Polni naziv sofinancerja"
                             },
-                            "program": {
+                            "cofinancerAddress": {
                                 "type": "string",
-                                "title": "Naziv, področje in oznaka programa/projekta"
+                                "title": "Naslov sofinancerja"
+                            },
+                            "programName": {
+                                "type": "string",
+                                "title": "Naziv programa/projekta"
+                            },
+                            "programArea": {
+                                "type": "string",
+                                "title": "Področje programa/projekta"
+                            },
+                            "programCode": {
+                                "type": "string",
+                                "title": "Oznaka programa/projekta"
                             },
                             "logo": {
                                 "type": "string",
@@ -1049,8 +1086,11 @@
                             }
                         },
                         "required": [
-                            "name",
-                            "program"
+                            "cofinancerName",
+                            "cofinancerAddress",
+                            "programName",
+                            "programArea",
+                            "programCode"
                         ]
                     },
                     "render_if": {
@@ -1129,13 +1169,25 @@
                                     "type": "object",
                                     "title": "Sofinancer",
                                     "properties": {
-                                        "name": {
+                                        "cofinancerName": {
                                             "type": "string",
-                                            "title": "Polni naziv in naslov sofinancerja"
+                                            "title": "Polni naziv sofinancerja"
                                         },
-                                        "program": {
+                                        "cofinancerAddress": {
                                             "type": "string",
-                                            "title": "Naziv, področje in oznaka programa/projekta"
+                                            "title": "Naslov sofinancerja"
+                                        },
+                                        "programName": {
+                                            "type": "string",
+                                            "title": "Naziv programa/projekta"
+                                        },
+                                        "programArea": {
+                                            "type": "string",
+                                            "title": "Področje programa/projekta"
+                                        },
+                                        "programCode": {
+                                            "type": "string",
+                                            "title": "Oznaka programa/projekta"
                                         },
                                         "logo": {
                                             "type": "string",

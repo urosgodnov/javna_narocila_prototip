@@ -18,6 +18,53 @@ from utils.field_types import FieldTypeManager, RealTimeValidator
 from utils.ui_components import render_field_with_validation
 
 
+def format_number_with_dots(value):
+    """Format number with dots as thousand separators (Story 3.0.3)."""
+    if value is None or value == "":
+        return ""
+    try:
+        # Handle both int and float values
+        num_value = float(value)
+        if num_value == int(num_value):
+            # No decimals
+            return f"{int(num_value):,}".replace(",", ".")
+        else:
+            # Format with 2 decimals, then replace separators
+            formatted = f"{num_value:,.2f}"
+            # First replace commas (thousands) with dots
+            formatted = formatted.replace(",", ".")
+            # The decimal point stays as is
+            return formatted
+    except (ValueError, TypeError):
+        return str(value)
+
+
+def parse_formatted_number(formatted_str):
+    """Parse formatted number back to float (Story 3.0.3)."""
+    if not formatted_str:
+        return 0
+    try:
+        # Count dots to determine if last one is decimal separator
+        dot_count = formatted_str.count(".")
+        if dot_count > 0:
+            # Split by dots
+            parts = formatted_str.split(".")
+            if len(parts) > 1 and len(parts[-1]) <= 2:
+                # Last part likely decimals if 2 digits or less
+                integer_part = "".join(parts[:-1])
+                decimal_part = parts[-1]
+                cleaned = f"{integer_part}.{decimal_part}"
+            else:
+                # All dots are thousand separators
+                cleaned = formatted_str.replace(".", "")
+        else:
+            cleaned = formatted_str
+        
+        return float(cleaned)
+    except (ValueError, TypeError):
+        return 0
+
+
 def get_social_criteria_specific_labels(criteria_prefix="selectionCriteria"):
     """Get specific labels for selected social criteria sub-options."""
     social_options = {
@@ -354,6 +401,12 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
             lot_index = int(full_key.split('_')[2])
             render_lot_context_step(lot_index)
             continue
+        
+        # Handle lot configuration step (new - only collects lot names)
+        if full_key == 'lotConfiguration':
+            from utils.lot_configuration_renderer import render_lot_configuration
+            render_lot_configuration()
+            continue
             
         label = prop_details.get("title", prop_name)
         help_text = prop_details.get("description")
@@ -604,6 +657,19 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     st.session_state[session_key] = selected_value
                     
             elif "enum" in prop_details:
+                # Story 3.0.2: Add legal article references to procurement procedures
+                procedure_display_map = {
+                    "odprti postopek": "odprti postopek (40. člen ZJN-3)",
+                    "omejeni postopek": "omejeni postopek (41. člen ZJN-3)",
+                    "konkurenčni dialog": "konkurenčni dialog (42. člen ZJN-3)",
+                    "partnerstvo za inovacije": "partnerstvo za inovacije (43. člen ZJN-3)",
+                    "konkurenčni postopek s pogajanji": "konkurenčni postopek s pogajanji (44. člen ZJN-3)",
+                    "postopek s pogajanji z objavo": "postopek s pogajanji z objavo (45. člen ZJN-3)",
+                    "postopek s pogajanji brez predhodne objave": "postopek s pogajanji brez predhodne objave (46. člen ZJN-3)",
+                    "postopek naročila male vrednosti": "postopek naročila male vrednosti (47. člen ZJN-3)",
+                    "vseeno": "vseeno"
+                }
+                
                 # Handle dynamic population for tiebreaker criterion
                 if "tiebreakerCriterion" in full_key:
                     # Get selected criteria labels dynamically
@@ -677,15 +743,33 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 # Use a separate widget key to avoid Streamlit cleaning up our session state
                 widget_key = f"widget_{session_key}"
                 
+                # Apply display mapping for procedures (Story 3.0.2)
+                if "submissionProcedure.procedure" in full_key:
+                    display_options = [procedure_display_map.get(opt, opt) for opt in enum_options]
+                    # Create reverse mapping to get value from display
+                    reverse_map = {procedure_display_map.get(opt, opt): opt for opt in enum_options}
+                else:
+                    display_options = enum_options
+                    reverse_map = {opt: opt for opt in enum_options}
+                
+                # Adjust index for display options
+                if session_value and session_value in enum_options:
+                    display_value = procedure_display_map.get(session_value, session_value) if "submissionProcedure.procedure" in full_key else session_value
+                    if display_value in display_options:
+                        index = display_options.index(display_value)
+                
                 # Special handling for "vseeno" auto-selection in procedure field
-                selected_value = st.selectbox(
+                selected_display = st.selectbox(
                     display_label, 
-                    options=enum_options, 
+                    options=display_options, 
                     index=index,
                     key=widget_key,  # Use separate widget key
                     help=help_text,
                     placeholder=get_text("select_option")
                 )
+                
+                # Convert display back to value
+                selected_value = reverse_map.get(selected_display, selected_display)
                 
                 # Manually sync the widget value back to our persistent session state
                 if selected_value != st.session_state.get(session_key):
@@ -973,27 +1057,63 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     else:
                         st.session_state[session_key] = 0.0
             
-            # Use text input styled as number to remove spinner
-            current_str = str(st.session_state[session_key]) if st.session_state[session_key] != 0.0 else ""
-            widget_key = f"widget_{session_key}_text"
-            number_text = st.text_input(
-                display_label, 
-                value=current_str, 
-                key=widget_key,
-                help=help_text,
-                placeholder="0.00"
-            )
+            # Story 3.0.3: Apply formatting for financial fields
+            financial_fields = ["estimatedValue", "guaranteedFunds", "availableFunds", "averageSalary"]
+            is_financial = any(field in prop_name for field in financial_fields)
             
-            # Convert back to number and store in session state
-            try:
-                if number_text.strip():
-                    number_value = float(number_text.replace(',', '.'))  # Handle both comma and dot
-                else:
-                    number_value = 0.0
-                st.session_state[session_key] = number_value
-            except ValueError:
-                st.warning(f"'{number_text}' ni veljavna številka")
-                st.session_state[session_key] = 0.0
+            if is_financial:
+                # Use formatted display for financial fields
+                current_value = st.session_state.get(session_key, 0)
+                formatted_str = format_number_with_dots(current_value)
+                widget_key = f"widget_{session_key}_formatted"
+                
+                # Create columns for input and EUR symbol
+                col_input, col_symbol = st.columns([5, 1])
+                
+                with col_input:
+                    number_text = st.text_input(
+                        display_label,
+                        value=formatted_str,
+                        key=widget_key,
+                        help=help_text or "Format: 1.000.000",
+                        placeholder="0"
+                    )
+                
+                with col_symbol:
+                    st.markdown("<div style='padding-top: 28px; font-size: 16px; font-weight: 500;'>€</div>", unsafe_allow_html=True)
+                
+                # Parse and store unformatted value
+                try:
+                    if number_text.strip():
+                        number_value = parse_formatted_number(number_text)
+                    else:
+                        number_value = 0.0
+                    st.session_state[session_key] = number_value
+                except ValueError:
+                    st.warning(f"'{number_text}' ni veljavna številka")
+                    st.session_state[session_key] = 0.0
+            else:
+                # Use standard number input for non-financial fields
+                current_str = str(st.session_state[session_key]) if st.session_state[session_key] != 0.0 else ""
+                widget_key = f"widget_{session_key}_text"
+                number_text = st.text_input(
+                    display_label, 
+                    value=current_str, 
+                    key=widget_key,
+                    help=help_text,
+                    placeholder="0.00"
+                )
+                
+                # Convert back to number and store in session state
+                try:
+                    if number_text.strip():
+                        number_value = float(number_text.replace(',', '.'))  # Handle both comma and dot
+                    else:
+                        number_value = 0.0
+                    st.session_state[session_key] = number_value
+                except ValueError:
+                    st.warning(f"'{number_text}' ni veljavna številka")
+                    st.session_state[session_key] = 0.0
 
         elif prop_type == "integer":
             display_label = _format_field_label(label, prop_details, parent_key, prop_name)

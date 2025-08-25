@@ -56,7 +56,8 @@ class ValidationManager:
                 # Collect data for this client
                 client = {
                     'name': self.session_state.get(f'clientInfo.clients.{i}.name', ''),
-                    'address': self.session_state.get(f'clientInfo.clients.{i}.address', ''),
+                    'streetAddress': self.session_state.get(f'clientInfo.clients.{i}.streetAddress', ''),
+                    'postalCode': self.session_state.get(f'clientInfo.clients.{i}.postalCode', ''),
                     'legalRepresentative': self.session_state.get(f'clientInfo.clients.{i}.legalRepresentative', ''),
                     'type': self.session_state.get(f'clientInfo.clients.{i}.type', '')
                 }
@@ -320,7 +321,8 @@ class ValidationManager:
             if is_single_client:
                 critical_fields.extend([
                     'clientInfo.singleClientName',
-                    'clientInfo.singleClientAddress',
+                    'clientInfo.singleClientStreetAddress',
+                    'clientInfo.singleClientPostalCode',
                     'clientInfo.singleClientLegalRepresentative'
                 ])
             
@@ -421,21 +423,25 @@ class ValidationManager:
                 for idx, client in enumerate(clients_array):
                     if isinstance(client, dict):
                         name = client.get('name', '').strip()
-                        address = client.get('address', '').strip()
+                        street_address = client.get('streetAddress', '').strip()
+                        postal_code = client.get('postalCode', '').strip()
                         legal_rep = client.get('legalRepresentative', '').strip()
                         
                         # Check if all required fields are present
                         missing = []
                         if not name:
                             missing.append('naziv')
-                        if not address:
-                            missing.append('naslov')
+                        if not street_address:
+                            missing.append('ulica in hišna številka')
+                        if not postal_code:
+                            missing.append('poštna številka in kraj')
+                        # Legal representative is required for ALL clients
                         if not legal_rep:
                             missing.append('zakoniti zastopnik')
                         
                         if not missing:
                             client_count += 1
-                        elif name or address or legal_rep:  # Partially filled
+                        elif name or street_address or postal_code or legal_rep:  # Partially filled
                             incomplete_clients.append(f"Naročnik {idx+1}: manjka {', '.join(missing)}")
                 
                 if client_count < 2:
@@ -576,11 +582,13 @@ class ValidationManager:
         
         # For multiple customers, the validation is already handled in _validate_multiple_entries()
         # We just need to handle single customer here
-        if self.session_state.get('clientInfo.multipleClients') != 'da':
+        is_single_client = self.session_state.get('clientInfo.isSingleClient', True)
+        if is_single_client:
             # Single customer validation
             required_fields = {
                 'clientInfo.singleClientName': 'Ime naročnika',
-                'clientInfo.singleClientAddress': 'Naslov naročnika', 
+                'clientInfo.singleClientStreetAddress': 'Ulica in hišna številka',
+                'clientInfo.singleClientPostalCode': 'Poštna številka in kraj',
                 'clientInfo.singleClientLegalRepresentative': 'Zakoniti zastopnik (ime in priimek)'
             }
             

@@ -138,6 +138,41 @@ def get_all_draft_metadata():
         cursor.execute('SELECT id, timestamp FROM drafts ORDER BY timestamp DESC')
         return cursor.fetchall()
 
+def get_recent_drafts(limit=5):
+    """Get the most recent draft entries with metadata."""
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, timestamp, form_data_json 
+            FROM drafts 
+            ORDER BY timestamp DESC 
+            LIMIT ?
+        ''', (limit,))
+        
+        results = []
+        for row in cursor.fetchall():
+            draft_id, timestamp, form_data_json = row
+            # Parse JSON to get metadata if available
+            try:
+                data = json.loads(form_data_json)
+                metadata = data.get('_save_metadata', {})
+                results.append({
+                    'id': draft_id,
+                    'created_at': timestamp,
+                    'current_step': metadata.get('current_step', 0),
+                    'save_type': metadata.get('save_type', 'unknown')
+                })
+            except:
+                results.append({
+                    'id': draft_id,
+                    'created_at': timestamp,
+                    'current_step': 0,
+                    'save_type': 'unknown'
+                })
+        
+        return results
+
 def load_draft(draft_id):
     init_db()
     with sqlite3.connect(DATABASE_FILE) as conn:

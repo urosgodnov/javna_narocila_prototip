@@ -95,7 +95,7 @@ def initialize_lot_session_state():
     Initialize lot-related session state variables.
     """
     if "lot_mode" not in st.session_state:
-        st.session_state.lot_mode = "general"
+        st.session_state.lot_mode = "none"  # Changed from "general" to "none" to match config
     
     if "current_lot_index" not in st.session_state:
         st.session_state.current_lot_index = None
@@ -174,33 +174,30 @@ def render_lot_context_step(lot_index):
         lot = lots[lot_index]
         lot_name = lot.get("name", f"Sklop {lot_index + 1}")
         
+        # Use a cleaner, simpler design
         st.markdown(f"""
-        <div class="lot-card" style="background: linear-gradient(135deg, var(--primary-900) 0%, var(--primary-700) 100%); 
-                    color: white; padding: 2rem; border-radius: var(--radius-lg); margin-bottom: 2rem;
-                    box-shadow: var(--shadow-xl); position: relative; overflow: hidden;">
-            <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; 
-                        background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%),
-                                    linear-gradient(-45deg, rgba(255,255,255,0.1) 25%, transparent 25%),
-                                    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.1) 75%),
-                                    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.1) 75%);
-                        background-size: 20px 20px; opacity: 0.3; pointer-events: none;"></div>
-            <div style="position: relative; z-index: 1;">
-                <h2 style="margin: 0 0 1rem 0; font-size: 2rem; font-weight: 700; color: white;">🎯 {lot_name}</h2>
-                <p style="margin: 0 0 0.75rem 0; font-size: 1.125rem; line-height: 1.6; opacity: 0.95;">
-                    Sedaj boste izpolnili podatke za ta sklop. Vsi naslednji koraki se nanašajo na ta sklop.
-                </p>
-                <div style="background: rgba(255,255,255,0.2); padding: 0.75rem 1.25rem; border-radius: var(--radius-md); 
-                           display: inline-block; margin-top: 0.5rem;">
-                    <strong style="font-weight: 600;">Sklop {lot_index + 1} od {len(lots)}</strong>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        ### 📦 Vnos podatkov za sklop
         
-        # Show lot-specific order type if it exists
-        if "orderType" in lot:
-            order_type = lot["orderType"]
-            if order_type:
-                st.info(f"ℹ️ Vrsta naročila za ta sklop: {order_type.get('type', 'Ni določeno')}")
+        ## **{lot_name}**
+        """)
+        
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.info(f"""
+            Sedaj boste izpolnili vse podatke o javnem naročilu za ta sklop.  
+            Vsi naslednji koraki se bodo nanašali izključno na ta sklop.
+            """)
+        
+        with col2:
+            st.metric("Napredek", f"{lot_index + 1}/{len(lots)} sklopov")
+        
+        st.divider()
+        
+        # If this is not the first lot, show what's been completed
+        if lot_index > 0:
+            with st.expander("✅ Dokončani sklopi"):
+                for i in range(lot_index):
+                    completed_lot = lots[i]
+                    st.write(f"• **{completed_lot.get('name', f'Sklop {i+1}')}**")
     else:
         st.error(f"Sklop {lot_index + 1} ni najden.")

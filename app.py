@@ -3,12 +3,18 @@
 import streamlit as st
 import database
 import logging
-from config import get_dynamic_form_steps, SCHEMA_FILE
+from config_refactored import (
+    get_dynamic_form_steps_refactored as get_dynamic_form_steps,
+    is_final_lot_step,
+    get_lot_navigation_buttons,
+    SCHEMA_FILE
+)
 from utils.schema_utils import load_json_schema, get_form_data_from_session, clear_form_data
 from utils.lot_utils import (
     get_current_lot_context, initialize_lot_session_state, 
     migrate_existing_data_to_lot_structure, get_lot_progress_info
 )
+from utils.lot_navigation import handle_lot_action
 from utils.validation_control import (
     should_validate, render_master_validation_toggle, 
     render_step_validation_toggle, get_validation_status_message
@@ -20,6 +26,7 @@ from localization import get_text, format_step_indicator
 from init_database import initialize_cpv_data, check_cpv_data_status
 from utils.optimized_database_logger import configure_optimized_logging as configure_database_logging
 from utils.qdrant_init import init_qdrant_on_startup
+from utils.loading_state import render_loading_indicator, set_loading_state, LOADING_MESSAGES
 
 # Initialize CPV data on startup (outside of Streamlit context)
 def init_app_data():
@@ -48,6 +55,11 @@ init_app_data()
 def main():
     """Main application entry point."""
     st.set_page_config(layout="wide", page_title=get_text("app_title"))
+    
+    # Show loading message on initial startup
+    if 'initialized' not in st.session_state:
+        with st.spinner('Nalagam aplikacijo...'):
+            st.session_state.initialized = True
     
     # Initialize navigation state
     if 'current_page' not in st.session_state:
@@ -86,6 +98,140 @@ def _set_navigation_flags():
         if key.endswith('submissionProcedure.procedure'):
             navigation_key = f"{key}_navigation_flag"
             st.session_state[navigation_key] = True
+
+def save_form_draft(include_files=True, show_success=True, location="navigation"):
+    """Unified function to save current form state as a draft.
+    
+    Args:
+        include_files: Whether to also save uploaded files (default: True)
+        show_success: Whether to show success message (default: True)
+        location: Where the save was triggered from ("navigation" or "sidebar")
+    
+    Returns:
+        draft_id if successful, None otherwise
+    """
+    try:
+        import json
+        import datetime
+        
+        # Get current form data
+        form_data = get_form_data_from_session()
+        
+        # Add metadata
+        form_data['_save_metadata'] = {
+            'saved_at': datetime.datetime.now().isoformat(),
+            'current_step': st.session_state.current_step,
+            'save_type': 'progress',
+            'save_location': location
+        }
+        
+        # Save to database
+        draft_id = database.save_draft(form_data)
+        
+        if draft_id:
+            st.session_state.current_draft_id = draft_id
+            
+            # Handle file uploads if requested
+            files_saved = 0
+            files_removed = 0
+            
+            if include_files:
+                try:
+                    from services.form_document_service import FormDocumentService
+                    from io import BytesIO
+                    
+                    doc_service = FormDocumentService()
+                    
+                    # Process document removals first
+                    for key in list(st.session_state.keys()):
+                        if key.startswith('_remove_document_'):
+                            doc_id = key.replace('_remove_document_', '')
+                            if st.session_state[key]:
+                                try:
+                                    doc_service.delete_document(int(doc_id))
+                                    files_removed += 1
+                                    del st.session_state[key]
+                                except:
+                                    pass
+                    
+                    # Process uploaded files (both old and new format)
+                    # Check for new format (_uploaded_file_*)
+                    for key in list(st.session_state.keys()):
+                        if key.startswith('_uploaded_file_') and st.session_state[key] is not None:
+                            file_obj = st.session_state[key]
+                            field_name = key.replace('_uploaded_file_', '')
+                            
+                            file_content = file_obj.read()
+                            if isinstance(file_content, bytes):
+                                file_obj.seek(0)
+                                
+                                doc_id, is_new = doc_service.save_document(
+                                    form_id=draft_id,
+                                    field_name=field_name,
+                                    file_name=file_obj.name,
+                                    file_content=BytesIO(file_content),
+                                    file_size=len(file_content)
+                                )
+                                
+                                # Trigger AI processing for new documents
+                                if is_new:
+                                    try:
+                                        from services.form_document_processor import trigger_document_processing
+                                        trigger_document_processing(doc_id)
+                                    except ImportError:
+                                        pass
+                                
+                                # Clear from session after saving
+                                del st.session_state[key]
+                                files_saved += 1
+                    
+                    # Check for old format (*_file_info)
+                    file_keys = [k for k in st.session_state.keys() if k.endswith('_file_info')]
+                    for file_key in file_keys:
+                        file_info = st.session_state[file_key]
+                        if file_info and 'content' in file_info:
+                            # Save file to document service
+                            doc_service.save_form_document(
+                                form_id=draft_id,
+                                file_name=file_info['name'],
+                                file_content=file_info['content'],
+                                file_type=file_info.get('type', 'application/octet-stream'),
+                                field_name=file_key.replace('_file_info', '')
+                            )
+                            files_saved += 1
+                            
+                except Exception as e:
+                    logging.warning(f"Could not save files: {e}")
+            
+            # Store in browser storage for recovery
+            st.session_state['last_saved'] = datetime.datetime.now().isoformat()
+            st.session_state['last_saved_id'] = draft_id
+            
+            # Show success message if requested
+            if show_success:
+                messages = [f"✅ Napredek uspešno shranjen! (ID: {draft_id})"]
+                if files_saved > 0:
+                    messages.append(f"📎 {files_saved} datotek shranjenih")
+                if files_removed > 0:
+                    messages.append(f"🗑️ {files_removed} datotek odstranjenih")
+                st.success(" | ".join(messages))
+            
+            return draft_id
+        else:
+            if show_success:
+                st.error("❌ Napaka pri shranjevanju napredka")
+            return None
+            
+    except Exception as e:
+        logging.error(f"Error saving form draft: {e}")
+        if show_success:
+            st.error(f"❌ Napaka pri shranjevanju: {str(e)}")
+        return None
+
+def save_form_progress():
+    """Save current form state to persistent storage without validation.
+    This is a wrapper for backward compatibility."""
+    return save_form_draft(include_files=True, show_success=True, location="navigation")
 
 def validate_step(step_keys, schema):
     """Validate the fields for the current step using centralized validation."""
@@ -133,11 +279,89 @@ def validate_step(step_keys, schema):
 
 def render_main_form():
     """Render the main multi-step form interface with enhanced UX."""
+    # Check for saved progress on startup - only show if we're in edit mode or have a current draft
+    if 'checked_saved_progress' not in st.session_state:
+        st.session_state.checked_saved_progress = True
+        
+        # Only show load prompt if we're editing an existing record or continuing a draft
+        if st.session_state.get('edit_mode', False) or st.session_state.get('current_draft_id'):
+            # Check if there's a recent saved progress
+            recent_drafts = database.get_recent_drafts(limit=1)
+            if recent_drafts:
+                draft = recent_drafts[0]
+                # Show option to load saved progress
+                with st.info("ℹ️ Najden je bil nedavno shranjen napredek"):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"Osnutek ID: {draft['id']} | Shranjen: {draft.get('created_at', 'Neznano')}")
+                    with col2:
+                        if st.button("📂 Naloži", type="primary", key="load_saved_progress"):
+                            with st.spinner(LOADING_MESSAGES['load_draft']):
+                                loaded_data = database.load_draft(draft['id'])
+                                if loaded_data:
+                                    # Flatten nested dictionary to dot-notation for session state
+                                    def flatten_dict(d, parent_key='', sep='.'):
+                                        """Flatten nested dictionary into dot-notation keys."""
+                                        items = []
+                                        for k, v in d.items():
+                                            # Skip metadata fields
+                                            if k.startswith('_'):
+                                                continue
+                                            # Handle special lot structure
+                                            if k == 'lots' and isinstance(v, list):
+                                                # Store lot data in session state
+                                                st.session_state['lots'] = v
+                                                st.session_state['lot_mode'] = 'multiple'
+                                                
+                                                # Extract lot names
+                                                lot_names = [lot.get('name', f'Sklop {i+1}') for i, lot in enumerate(v)]
+                                                st.session_state['lot_names'] = lot_names
+                                                
+                                                # Flatten each lot's data into lot-scoped keys
+                                                for i, lot in enumerate(v):
+                                                    for lot_key, lot_value in lot.items():
+                                                        if lot_key != 'name' and not isinstance(lot_value, dict):
+                                                            items.append((f'lot_{i}.{lot_key}', lot_value))
+                                                        elif isinstance(lot_value, dict):
+                                                            # Recursively flatten nested lot data
+                                                            nested_items = flatten_dict(lot_value, f'lot_{i}.{lot_key}', sep=sep)
+                                                            items.extend(nested_items.items())
+                                                continue
+                                            elif k == 'lot_names':
+                                                st.session_state['lot_names'] = v
+                                                continue
+                                            
+                                            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                                            if isinstance(v, dict):
+                                                items.extend(flatten_dict(v, new_key, sep=sep).items())
+                                            else:
+                                                items.append((new_key, v))
+                                        return dict(items)
+                                    
+                                    # Clear existing form data first
+                                    clear_form_data()
+                                    
+                                    # Flatten and load into session state
+                                    flattened_data = flatten_dict(loaded_data)
+                                    for key, value in flattened_data.items():
+                                        st.session_state[key] = value
+                                    
+                                    st.session_state.current_draft_id = draft['id']
+                                    
+                                    # Restore step if saved
+                                    if '_save_metadata' in loaded_data:
+                                        metadata = loaded_data['_save_metadata']
+                                        if 'current_step' in metadata:
+                                            st.session_state.current_step = metadata['current_step']
+                                    
+                                    st.success("✅ Napredek uspešno naložen!")
+                                    st.rerun()
+    
     # Modern form renderer configuration
     # Set to True to enable modern UI, False to use standard form
     # Can be controlled via environment variable or config
     import os
-    USE_MODERN_FORM = os.environ.get('USE_MODERN_FORM', 'true').lower() == 'true'
+    USE_MODERN_FORM = os.environ.get('USE_MODERN_FORM', 'false').lower() == 'true'
     
     # Try to use modern form renderer if enabled and available
     use_modern_form = False
@@ -244,6 +468,9 @@ def render_main_form():
             if key.startswith('lot_context_'):
                 # Lot context steps don't need schema properties
                 current_step_properties[key] = {"type": "lot_context"}
+            elif key == 'lotConfiguration':
+                # New lot configuration step - only collects lot names
+                current_step_properties[key] = {"type": "lot_configuration"}
             elif key.startswith('lot_'):
                 # Map lot-specific keys back to original schema properties
                 original_key = key.split('_', 2)[2]  # lot_0_orderType -> orderType
@@ -922,16 +1149,19 @@ def add_custom_css():
 
 def render_step_breadcrumbs():
     """Render step navigation breadcrumbs."""
-    from localization import get_step_label
+    from localization import get_dynamic_step_label
     
     # Get dynamic form steps for breadcrumbs
     dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    
+    # Check if lots are enabled
+    has_lots = st.session_state.get("lotsInfo.hasLots", False)
     
     breadcrumbs_html = '<div class="step-breadcrumbs">'
     
     for i, step_keys in enumerate(dynamic_form_steps):
         step_num = i + 1
-        step_label = get_step_label(step_num)
+        step_label = get_dynamic_step_label(step_keys, step_num, has_lots)
         
         if i < st.session_state.current_step:
             css_class = "completed"
@@ -952,7 +1182,7 @@ def render_navigation_buttons_in_form(current_step_keys):
     
     st.markdown('<div class="navigation-buttons">', unsafe_allow_html=True)
     
-    col_nav_left, col_nav_center, col_nav_right = st.columns([1, 2, 1])
+    col_nav_left, col_nav_center, col_nav_right = st.columns([1, 1, 1])
     
     with col_nav_left:
         if st.session_state.current_step > 0:
@@ -1043,97 +1273,199 @@ def render_navigation_buttons(current_step_keys):
     
     st.markdown('<div class="navigation-buttons">', unsafe_allow_html=True)
     
-    col_nav_left, col_nav_center, col_nav_right = st.columns([1, 2, 1])
+    # Check if we're at the final step of a lot
+    is_lot_final = is_final_lot_step(st.session_state, st.session_state.current_step)
     
-    with col_nav_left:
-        if st.session_state.current_step > 0:
-            if st.button(
-                f"← {get_text('back_button')}", 
-                type="secondary",
-                use_container_width=True
-            ):
-                # Set navigation flag for all form fields to prevent auto-selection triggers
-                _set_navigation_flags()
-                st.session_state.current_step -= 1
-                st.rerun()
-
-    with col_nav_right:
-        if st.session_state.current_step < len(dynamic_form_steps) - 1:
-            if st.button(
-                f"{get_text('next_button')} →", 
-                type="primary",
-                use_container_width=True
-            ):
-                import logging
-                logging.info(f"Next button clicked at step {st.session_state.current_step}")
-                # Enhanced validation can be added here
-                validation_passed = validate_step(current_step_keys, st.session_state.schema)
-                logging.info(f"Validation result: {validation_passed}")
-                
-                if validation_passed:
-                    logging.info("Navigation allowed - moving to next step")
+    if is_lot_final:
+        # Special navigation for lot final steps
+        lot_buttons = get_lot_navigation_buttons(st.session_state)
+        
+        if len(lot_buttons) == 1:
+            # Single button - use full width
+            col_nav_left, col_nav_center, col_nav_right = st.columns([1, 1, 1])
+            with col_nav_left:
+                if st.session_state.current_step > 0:
+                    if st.button(
+                        f"← {get_text('back_button')}", 
+                        type="secondary",
+                        use_container_width=True
+                    ):
+                        _set_navigation_flags()
+                        st.session_state.current_step -= 1
+                        st.rerun()
+            
+            with col_nav_right:
+                button_text, action, button_type = lot_buttons[0]
+                if st.button(
+                    button_text,
+                    type=button_type,
+                    use_container_width=True
+                ):
+                    handle_lot_action(action)
+        
+        elif len(lot_buttons) == 2:
+            # Two buttons
+            col_nav_left, col_nav_btn1, col_nav_btn2 = st.columns([1, 1, 1])
+            with col_nav_left:
+                if st.session_state.current_step > 0:
+                    if st.button(
+                        f"← {get_text('back_button')}", 
+                        type="secondary",
+                        use_container_width=True
+                    ):
+                        _set_navigation_flags()
+                        st.session_state.current_step -= 1
+                        st.rerun()
+            
+            with col_nav_btn1:
+                button_text, action, button_type = lot_buttons[0]
+                if st.button(
+                    button_text,
+                    type=button_type,
+                    use_container_width=True,
+                    key=f"lot_btn_0"
+                ):
+                    handle_lot_action(action)
+            
+            with col_nav_btn2:
+                button_text, action, button_type = lot_buttons[1]
+                if st.button(
+                    button_text,
+                    type=button_type,
+                    use_container_width=True,
+                    key=f"lot_btn_1"
+                ):
+                    handle_lot_action(action)
+        
+        else:
+            # Three or more buttons - use expandable layout
+            cols = st.columns(len(lot_buttons) + 1)
+            
+            with cols[0]:
+                if st.session_state.current_step > 0:
+                    if st.button(
+                        f"← {get_text('back_button')}", 
+                        type="secondary",
+                        use_container_width=True
+                    ):
+                        _set_navigation_flags()
+                        st.session_state.current_step -= 1
+                        st.rerun()
+            
+            for i, (button_text, action, button_type) in enumerate(lot_buttons):
+                with cols[i + 1]:
+                    if st.button(
+                        button_text,
+                        type=button_type,
+                        use_container_width=True,
+                        key=f"lot_btn_{i}"
+                    ):
+                        handle_lot_action(action)
+    
+    else:
+        # Standard navigation
+        col_nav_left, col_nav_center, col_nav_right = st.columns([1, 1, 1])
+        
+        with col_nav_left:
+            if st.session_state.current_step > 0:
+                if st.button(
+                    f"← {get_text('back_button')}", 
+                    type="secondary",
+                    use_container_width=True
+                ):
                     # Set navigation flag for all form fields to prevent auto-selection triggers
                     _set_navigation_flags()
-                    st.session_state.current_step += 1
+                    st.session_state.current_step -= 1
                     st.rerun()
-                else:
-                    logging.info("Navigation blocked by validation")
-                    # Store validation error in session state to persist it
-                    st.session_state['navigation_blocked'] = True
-                    st.session_state['navigation_blocked_step'] = st.session_state.current_step
-        else:
-            # Story 25.1: Replace single submit button with Cancel/Confirm buttons on last step
-            col_cancel, col_confirm = st.columns(2)
-            
-            with col_cancel:
+        
+        with col_nav_center:
+            # Save button - available on all steps
+            if st.button(
+                "Shrani", 
+                type="secondary",
+                use_container_width=True,
+                help="Shrani trenutni napredek obrazca"
+            ):
+                with st.spinner(LOADING_MESSAGES['save_progress']):
+                    save_form_progress()
+
+        with col_nav_right:
+            if st.session_state.current_step < len(dynamic_form_steps) - 1:
                 if st.button(
-                    "🚫 Opusti", 
-                    type="secondary",
-                    use_container_width=True,
-                    key="cancel_form"
-                ):
-                    st.session_state.show_cancel_dialog = True
-                    st.rerun()
-            
-            with col_confirm:
-                button_text = "✅ Potrdi" 
-                if st.button(
-                    button_text, 
+                    f"{get_text('next_button')} →", 
                     type="primary",
-                    use_container_width=True,
-                    key="confirm_form"
+                    use_container_width=True
                 ):
-                    if validate_step(current_step_keys, st.session_state.schema):
-                        final_form_data = get_form_data_from_session()
-                        
-                        # Save or update based on edit mode
-                        if st.session_state.edit_mode:
-                            # Update existing procurement
-                            if database.update_procurement(st.session_state.edit_record_id, final_form_data):
-                                st.success(f"✅ Naročilo ID {st.session_state.edit_record_id} uspešno posodobljeno!")
-                                # Clear edit mode and return to dashboard
-                                import time
-                                time.sleep(1)  # Show success message
-                                st.session_state.edit_mode = False
-                                st.session_state.edit_record_id = None
-                                st.session_state.current_page = 'dashboard'
-                                clear_form_data()
-                                st.rerun()
+                    import logging
+                    logging.info(f"Next button clicked at step {st.session_state.current_step}")
+                    # Enhanced validation can be added here
+                    validation_passed = validate_step(current_step_keys, st.session_state.schema)
+                    logging.info(f"Validation result: {validation_passed}")
+                    
+                    if validation_passed:
+                        logging.info("Navigation allowed - moving to next step")
+                        # Set navigation flag for all form fields to prevent auto-selection triggers
+                        _set_navigation_flags()
+                        st.session_state.current_step += 1
+                        st.rerun()
+                    else:
+                        logging.info("Navigation blocked by validation")
+                        # Store validation error in session state to persist it
+                        st.session_state['navigation_blocked'] = True
+                        st.session_state['navigation_blocked_step'] = st.session_state.current_step
+            else:
+                # Story 25.1: Replace single submit button with Cancel/Confirm buttons on last step
+                col_cancel, col_confirm = st.columns(2)
+                
+                with col_cancel:
+                    if st.button(
+                        "🚫 Opusti", 
+                        type="secondary",
+                        use_container_width=True,
+                        key="cancel_form"
+                    ):
+                        st.session_state.show_cancel_dialog = True
+                        st.rerun()
+                
+                with col_confirm:
+                    button_text = "✅ Potrdi" 
+                    if st.button(
+                        button_text, 
+                        type="primary",
+                        use_container_width=True,
+                        key="confirm_form"
+                    ):
+                        if validate_step(current_step_keys, st.session_state.schema):
+                            final_form_data = get_form_data_from_session()
+                            
+                            # Save or update based on edit mode
+                            if st.session_state.edit_mode:
+                                # Update existing procurement
+                                if database.update_procurement(st.session_state.edit_record_id, final_form_data):
+                                    st.success(f"✅ Naročilo ID {st.session_state.edit_record_id} uspešno posodobljeno!")
+                                    # Clear edit mode and return to dashboard
+                                    import time
+                                    time.sleep(1)  # Show success message
+                                    st.session_state.edit_mode = False
+                                    st.session_state.edit_record_id = None
+                                    st.session_state.current_page = 'dashboard'
+                                    clear_form_data()
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Napaka pri posodabljanju naročila")
                             else:
-                                st.error("❌ Napaka pri posodabljanju naročila")
-                        else:
-                            # Create new procurement
-                            new_id = database.create_procurement(final_form_data)
-                            if new_id:
-                                st.success(f"✅ Osnutek uspešno shranjen! ID: {new_id}")
-                                # Return to dashboard
-                                import time
-                                time.sleep(1)  # Show success message
-                                st.session_state.current_page = 'dashboard'
-                                clear_form_data()
-                                st.rerun()
-                            else:
-                                st.error("❌ Napaka pri ustvarjanju naročila")
+                                # Create new procurement
+                                new_id = database.create_procurement(final_form_data)
+                                if new_id:
+                                    st.success(f"✅ Osnutek uspešno shranjen! ID: {new_id}")
+                                    # Return to dashboard
+                                    import time
+                                    time.sleep(1)  # Show success message
+                                    st.session_state.current_page = 'dashboard'
+                                    clear_form_data()
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Napaka pri ustvarjanju naročila")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1151,101 +1483,75 @@ def render_drafts_sidebar(draft_options):
         help="Izberite osnutek, ki ga želite naložiti"
     )
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button(
-            get_text("load_selected_draft"),
-            type="secondary",
-            use_container_width=True
-        ):
-            selected_draft_id = draft_options[selected_draft_label]
-            loaded_data = database.load_draft(selected_draft_id)
-            if loaded_data:
-                st.session_state.update(loaded_data)
-                # Story 28.3: Store form_id for file loading
-                st.session_state.form_id = selected_draft_id
-                st.success(get_text("draft_loaded"))
-                st.rerun()
-            else:
-                st.error(get_text("draft_load_error"))
-
-    with col2:
-        if st.button(
-            get_text("save_draft"),
-            type="primary",
-            use_container_width=True
-        ):
-            form_values = get_form_data_from_session()
-            draft_id = database.save_draft(form_values)
+    # Single button for loading draft - no save button in sidebar
+    if st.button(
+        get_text("load_selected_draft"),
+        type="secondary",
+        use_container_width=True
+    ):
+        selected_draft_id = draft_options[selected_draft_label]
+        loaded_data = database.load_draft(selected_draft_id)
+        if loaded_data:
+            # Flatten nested dictionary to dot-notation for session state
+            def flatten_dict(d, parent_key='', sep='.'):
+                """Flatten nested dictionary into dot-notation keys."""
+                items = []
+                for k, v in d.items():
+                    # Skip metadata fields
+                    if k.startswith('_'):
+                        continue
+                    # Handle special lot structure
+                    if k == 'lots' and isinstance(v, list):
+                        # Store lot data in session state
+                        st.session_state['lots'] = v
+                        st.session_state['lot_mode'] = 'multiple'
+                        
+                        # Extract lot names
+                        lot_names = [lot.get('name', f'Sklop {i+1}') for i, lot in enumerate(v)]
+                        st.session_state['lot_names'] = lot_names
+                        
+                        # Flatten each lot's data into lot-scoped keys
+                        for i, lot in enumerate(v):
+                            for lot_key, lot_value in lot.items():
+                                if lot_key != 'name' and not isinstance(lot_value, dict):
+                                    items.append((f'lot_{i}.{lot_key}', lot_value))
+                                elif isinstance(lot_value, dict):
+                                    # Recursively flatten nested lot data
+                                    nested_items = flatten_dict(lot_value, f'lot_{i}.{lot_key}', sep=sep)
+                                    items.extend(nested_items.items())
+                        continue
+                    elif k == 'lot_names':
+                        st.session_state['lot_names'] = v
+                        continue
+                    
+                    new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                    if isinstance(v, dict):
+                        items.extend(flatten_dict(v, new_key, sep=sep).items())
+                    else:
+                        items.append((new_key, v))
+                return dict(items)
             
-            # Story 28.3: Save uploaded files with the draft
-            try:
-                from services.form_document_service import FormDocumentService
-                from io import BytesIO
-                
-                doc_service = FormDocumentService()
-                files_saved = 0
-                files_removed = 0
-                
-                # Process document removals first
-                for key in list(st.session_state.keys()):
-                    if key.endswith('_remove_doc_id'):
-                        doc_id = st.session_state[key]
-                        if doc_service.delete_document(doc_id, user='current_user'):
-                            files_removed += 1
-                        # Clear removal markers
-                        del st.session_state[key]
-                        remove_key = key.replace('_remove_doc_id', '_remove')
-                        if remove_key in st.session_state:
-                            del st.session_state[remove_key]
-                
-                # Process all file uploads stored in session state
-                for key in list(st.session_state.keys()):
-                    if key.endswith('_file_info'):
-                        file_info = st.session_state[key]
-                        
-                        # Save the document
-                        file_data = BytesIO(file_info['data'])
-                        doc_id, is_new, msg = doc_service.save_document(
-                            file_data=file_data,
-                            form_id=draft_id,
-                            form_type='draft',
-                            field_name=file_info['field'],
-                            original_name=file_info['name'],
-                            mime_type=file_info['type'],
-                            user='current_user'
-                        )
-                        
-                        # Story 28.4: Trigger AI processing for new documents
-                        if is_new:
-                            try:
-                                from services.form_document_processor import trigger_document_processing
-                                trigger_document_processing(doc_id)
-                            except ImportError:
-                                # AI processor not available
-                                pass
-                        
-                        # Clear from session after saving
-                        del st.session_state[key]
-                        files_saved += 1
-                
-                # Build success message
-                messages = [get_text("draft_saved", draft_id=draft_id)]
-                if files_saved > 0:
-                    messages.append(f"{files_saved} file(s) saved")
-                if files_removed > 0:
-                    messages.append(f"{files_removed} file(s) removed")
-                
-                st.success(" - ".join(messages))
-            except ImportError:
-                # FormDocumentService not available - save without files
-                st.success(get_text("draft_saved", draft_id=draft_id))
-            except Exception as e:
-                # Log error but don't fail the draft save
-                st.warning(f"Draft saved but files could not be saved: {str(e)}")
+            # Clear existing form data first
+            clear_form_data()
             
+            # Flatten and load into session state
+            flattened_data = flatten_dict(loaded_data)
+            for key, value in flattened_data.items():
+                st.session_state[key] = value
+            
+            # Restore metadata if present
+            if '_save_metadata' in loaded_data:
+                metadata = loaded_data['_save_metadata']
+                if 'current_step' in metadata:
+                    st.session_state.current_step = metadata['current_step']
+            
+            # Story 28.3: Store form_id for file loading
+            st.session_state.form_id = selected_draft_id
+            st.session_state.current_draft_id = selected_draft_id
+            st.success(get_text("draft_loaded"))
             st.rerun()
+        else:
+            st.error(get_text("draft_load_error"))
 
 if __name__ == "__main__":
     main()

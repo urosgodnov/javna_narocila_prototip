@@ -128,7 +128,7 @@ STEP_LABELS = {
     1: "Podatki o naročniku",
     2: "Osnovni podatki naročila", 
     3: "Pravna podlaga",
-    4: "Postopek in informacije o sklopih",
+    4: "Postopek",
     5: "Konfiguracija sklopov",
     6: "Vrsta naročila",
     7: "Tehnične zahteve",
@@ -191,6 +191,59 @@ def get_step_label(step_number: int) -> str:
         Localized step label
     """
     return STEP_LABELS.get(step_number, f"Korak {step_number}")
+
+def get_dynamic_step_label(step_keys, step_number: int, has_lots: bool = False) -> str:
+    """
+    Get dynamic step label based on actual form configuration.
+    
+    Args:
+        step_keys: Keys for the current step
+        step_number: Step number (1-based)
+        has_lots: Whether lots are enabled
+        
+    Returns:
+        Localized step label
+    """
+    # Map step keys to labels
+    if not step_keys:
+        return f"Korak {step_number}"
+    
+    first_key = step_keys[0]
+    
+    # Handle lot context steps
+    if first_key.startswith('lot_context_'):
+        return f"Sklop {first_key.split('_')[-1]}"
+    
+    # Handle lot-prefixed keys
+    if first_key.startswith('lot_') and '_' in first_key[4:]:
+        # Extract the actual key (e.g., lot_0_orderType -> orderType)
+        actual_key = first_key.split('_', 2)[2]
+        first_key = actual_key
+    
+    # Map keys to step labels
+    key_to_label = {
+        'clientInfo': "Podatki o naročniku",
+        'projectInfo': "Osnovni podatki naročila",
+        'legalBasis': "Pravna podlaga", 
+        'submissionProcedure': "Postopek",
+        'lotsInfo': "Postopek",
+        'lotConfiguration': "Konfiguracija sklopov",
+        'orderType': "Vrsta naročila",
+        'technicalSpecifications': "Tehnične zahteve",
+        'executionDeadline': "Roki izvajanja",
+        'priceInfo': "Informacije o ceni",
+        'inspectionInfo': "Ogledi in pogajanja",
+        'negotiationsInfo': "Ogledi in pogajanja",
+        'participationAndExclusion': "Pogoji za sodelovanje in razlogi za izključitev",
+        'participationConditions': "Pogoji za sodelovanje in razlogi za izključitev",
+        'financialGuarantees': "Zavarovanja in ponudbe",
+        'variantOffers': "Zavarovanja in ponudbe",
+        'selectionCriteria': "Merila izbire",
+        'contractInfo': "Sklepanje pogodbe",
+        'otherInfo': "Sklepanje pogodbe"
+    }
+    
+    return key_to_label.get(first_key, f"Korak {step_number}")
 
 def format_step_indicator(current_step: int, total_steps: int) -> str:
     """

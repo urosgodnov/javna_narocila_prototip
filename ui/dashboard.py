@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import datetime
 import database
 from utils.schema_utils import get_form_data_from_session, clear_form_data
+from utils.loading_state import set_loading_state, LOADING_MESSAGES
 
 def render_dashboard():
     """Render the procurement dashboard with table view."""
@@ -27,12 +28,13 @@ def render_dashboard():
     col1, col2, col3, col4 = st.columns([2, 2, 2, 4])
     with col1:
         if st.button("➕ Novo javno naročilo", type="primary", use_container_width=True):
-            st.session_state.current_page = 'form'
-            st.session_state.edit_mode = False
-            st.session_state.edit_record_id = None
-            st.session_state.current_step = 0  # Reset to first step
-            clear_form_data()  # Clear any existing form data
-            st.rerun()
+            with st.spinner('Pripravljam nov obrazec...'):
+                st.session_state.current_page = 'form'
+                st.session_state.edit_mode = False
+                st.session_state.edit_record_id = None
+                st.session_state.current_step = 0  # Reset to first step
+                clear_form_data()  # Clear any existing form data
+                st.rerun()
     
     with col2:
         if st.button("🔄 Osveži", use_container_width=True):
@@ -185,11 +187,12 @@ def display_procurements_table(procurements):
                 col_yes, col_no = st.columns(2)
                 with col_yes:
                     if st.button("Da, izbriši", type="primary", use_container_width=True):
-                        if database.delete_procurement(selected_id):
-                            st.success("Naročilo uspešno izbrisano")
-                            if f"confirm_delete_{selected_id}" in st.session_state:
-                                del st.session_state[f"confirm_delete_{selected_id}"]
-                            st.rerun()
+                        with st.spinner(LOADING_MESSAGES['delete']):
+                            if database.delete_procurement(selected_id):
+                                st.success("Naročilo uspešno izbrisano")
+                                if f"confirm_delete_{selected_id}" in st.session_state:
+                                    del st.session_state[f"confirm_delete_{selected_id}"]
+                                st.rerun()
                 with col_no:
                     if st.button("Prekliči", use_container_width=True):
                         del st.session_state[f"confirm_delete_{selected_id}"]
@@ -225,10 +228,15 @@ def display_procurements_table(procurements):
 
 def load_procurement_to_form(procurement_id):
     """Load procurement data into form session state."""
+    from utils.data_migration import migrate_form_data
+    
     procurement = database.get_procurement_by_id(procurement_id)
     
     if procurement and procurement.get('form_data'):
         form_data = procurement['form_data']
+        
+        # Apply Epic 3.0 data migrations
+        form_data = migrate_form_data(form_data)
         
         # Clear existing form data first
         clear_form_data()

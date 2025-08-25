@@ -32,6 +32,9 @@ def render_modern_form():
             if key.startswith('lot_context_'):
                 # Lot context steps don't need schema properties
                 current_step_properties[key] = {"type": "lot_context"}
+            elif key == 'lotConfiguration':
+                # New lot configuration step - only collects lot names
+                current_step_properties[key] = {"type": "lot_configuration"}
             elif key.startswith('lot_'):
                 # Map lot-specific keys back to original schema properties
                 original_key = key.split('_', 2)[2]  # lot_0_orderType -> orderType

@@ -8,6 +8,12 @@ import database
 def render_modern_dashboard():
     """Render a beautiful modern dashboard without plotly."""
     
+    # Initialize lot-related session state if not present
+    if "lot_mode" not in st.session_state:
+        st.session_state.lot_mode = "none"  # Changed to match config
+    if "current_lot_index" not in st.session_state:
+        st.session_state.current_lot_index = None
+    
     # Custom CSS for modern styling
     st.markdown("""
     <style>
@@ -563,10 +569,15 @@ def get_status_badge(status):
 
 def load_procurement_to_form(procurement_id):
     """Load procurement data into form session state."""
+    from utils.data_migration import migrate_form_data
+    
     procurement = database.get_procurement_by_id(procurement_id)
     
     if procurement and procurement.get('form_data'):
         form_data = procurement['form_data']
+        
+        # Apply Epic 3.0 data migrations  
+        form_data = migrate_form_data(form_data)
         
         # Clear existing form data first
         from utils.schema_utils import clear_form_data

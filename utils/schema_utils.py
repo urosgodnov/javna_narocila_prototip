@@ -17,20 +17,71 @@ def update_session_state(key, value):
 def get_form_data_from_session():
     """
     Reconstructs the nested form data dictionary from Streamlit's flat session_state.
+    Handles both regular fields and lot-specific fields.
     """
     form_data = {}
     schema_properties = st.session_state.get('schema', {}).get('properties', {})
     if not schema_properties:
         return {}
 
+    # Process regular fields
     for key, value in st.session_state.items():
         top_level_key = key.split('.')[0]
+        
+        # Handle regular schema properties
         if top_level_key in schema_properties:
             parts = key.split('.')
             d = form_data
             for part in parts[:-1]:
                 d = d.setdefault(part, {})
             d[parts[-1]] = value
+        
+        # Handle general lot fields (general.fieldname)
+        elif top_level_key == 'general':
+            parts = key.split('.')
+            if len(parts) > 1:
+                field_parts = parts[1:]  # Remove 'general' prefix
+                d = form_data
+                for part in field_parts[:-1]:
+                    d = d.setdefault(part, {})
+                d[field_parts[-1]] = value
+    
+    # Handle lot-specific data
+    lot_mode = st.session_state.get('lot_mode', 'none')
+    if lot_mode == 'multiple':
+        # Include lot names
+        form_data['lot_names'] = st.session_state.get('lot_names', [])
+        
+        # Include structured lot data
+        lots_data = []
+        lots = st.session_state.get('lots', [])
+        
+        for i, lot in enumerate(lots):
+            lot_data = {'name': lot.get('name', f'Sklop {i+1}')}
+            
+            # Collect all lot-specific fields
+            lot_prefix = f'lot_{i}.'
+            for key, value in st.session_state.items():
+                if key.startswith(lot_prefix):
+                    field_name = key[len(lot_prefix):]
+                    # Build nested structure
+                    parts = field_name.split('.')
+                    d = lot_data
+                    for part in parts[:-1]:
+                        d = d.setdefault(part, {})
+                    d[parts[-1]] = value
+            
+            lots_data.append(lot_data)
+        
+        if lots_data:
+            form_data['lots'] = lots_data
+    
+    # Include lot configuration metadata
+    if 'lotsInfo.hasLots' in st.session_state:
+        if 'lotsInfo' not in form_data:
+            form_data['lotsInfo'] = {}
+        form_data['lotsInfo']['hasLots'] = st.session_state['lotsInfo.hasLots']
+    
     return form_data
 
 
@@ -50,10 +101,17 @@ def clear_form_data():
         # Also remove widget keys
         if key.startswith('widget_'):
             keys_to_remove.append(key)
+        # Remove lot-specific keys
+        if key.startswith('lot_') or key.startswith('general.'):
+            keys_to_remove.append(key)
+        # Remove lot configuration keys
+        if key in ['lot_names', 'lots', 'current_lot_index', 'lot_mode']:
+            keys_to_remove.append(key)
     
     # Remove the identified keys
     for key in keys_to_remove:
-        del st.session_state[key]
+        if key in st.session_state:
+            del st.session_state[key]
     
     # Clear any tracking data
     if '_last_loaded_data' in st.session_state:

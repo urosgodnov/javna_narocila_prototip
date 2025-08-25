@@ -39,6 +39,9 @@ def render_modern_form_fixed():
         for key in current_step_keys:
             if key.startswith('lot_context_'):
                 current_step_properties[key] = {"type": "lot_context"}
+            elif key == 'lotConfiguration':
+                # New lot configuration step - only collects lot names
+                current_step_properties[key] = {"type": "lot_configuration"}
             elif key.startswith('lot_'):
                 original_key = key.split('_', 2)[2]
                 if original_key in st.session_state.schema["properties"]:
