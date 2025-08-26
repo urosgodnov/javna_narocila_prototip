@@ -8,12 +8,26 @@ def handle_lot_action(action):
     Handle lot navigation actions.
     
     Args:
-        action: Action type ('save', 'next_lot', 'new_lot', 'submit')
+        action: Action type ('save', 'start_current_lot', 'next_lot', 'new_lot', 'submit')
     """
     if action == 'save':
         # Save current lot data
         save_current_lot_data()
         st.success("✅ Podatki za trenutni sklop so bili shranjeni.")
+    
+    elif action == 'start_current_lot':
+        # Mark current lot data entry as started and proceed
+        current_lot_index = st.session_state.get('current_lot_index', 0)
+        if current_lot_index is None:
+            current_lot_index = 0
+            st.session_state.current_lot_index = 0
+        
+        st.session_state[f"lot_{current_lot_index}_data_started"] = True
+        st.session_state.current_step += 1
+        lot_names = st.session_state.get('lot_names', [])
+        if current_lot_index < len(lot_names):
+            st.success(f"✅ Začetek vnosa za sklop: {lot_names[current_lot_index]}")
+        st.rerun()
         
     elif action == 'next_lot':
         # Save current lot and move to next
@@ -21,10 +35,17 @@ def handle_lot_action(action):
         
         # Increment lot index
         current_lot_index = st.session_state.get('current_lot_index', 0)
+        if current_lot_index is None:
+            current_lot_index = 0
         lot_names = st.session_state.get('lot_names', [])
         
         if current_lot_index < len(lot_names) - 1:
             st.session_state.current_lot_index = current_lot_index + 1
+            
+            # Reset the data_started flag for the new lot
+            new_lot_index = current_lot_index + 1
+            if f"lot_{new_lot_index}_data_started" in st.session_state:
+                del st.session_state[f"lot_{new_lot_index}_data_started"]
             
             # Find the step for lot configuration
             lot_config_step = find_lot_configuration_step()
@@ -100,6 +121,8 @@ def handle_lot_action(action):
 def save_current_lot_data():
     """Save data for the current lot being edited."""
     current_lot_index = st.session_state.get('current_lot_index', 0)
+    if current_lot_index is None:
+        current_lot_index = 0
     
     if 'lots' not in st.session_state:
         st.session_state.lots = []

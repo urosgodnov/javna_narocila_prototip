@@ -163,29 +163,50 @@ class ValidationManager:
         # This is more reliable than using step numbers which can change
         validator_func = None
         
-        if any('clientInfo' in key for key in step_keys):
+        # Skip validation for lot context steps - they're just informational
+        if any(key.startswith('lot_context_') for key in step_keys):
+            return True, []
+        
+        # Extract base field names from lot-prefixed keys (lot_0_orderType -> orderType)
+        base_keys = []
+        for key in step_keys:
+            if key.startswith('lot_') and '_' in key[4:]:
+                # Extract base name: lot_0_orderType -> orderType
+                base_key = key.split('_', 2)[2] if len(key.split('_')) > 2 else key
+                base_keys.append(base_key)
+            else:
+                base_keys.append(key)
+        
+        # Use base keys for validation matching
+        if any('clientInfo' in key for key in base_keys):
             validator_func = self.validate_screen_1_customers
-        elif any('legalBasis' in key for key in step_keys):
+        elif any('legalBasis' in key for key in base_keys):
             validator_func = self.validate_screen_3_legal_basis
-        elif any('lotsInfo' in key for key in step_keys):
-            validator_func = self.validate_screen_5_lots
-        elif any('orderType' in key for key in step_keys):
+        elif any('lotsInfo' in key for key in base_keys):
+            # Only validate lots if we're on the lot configuration step, not just the checkbox step
+            # lotsInfo.hasLots is on step 4, but lot configuration is step 5
+            if any('lot_' in key or 'lotConfiguration' in key for key in step_keys):
+                validator_func = self.validate_screen_5_lots
+            else:
+                # Step 4 with just the checkbox doesn't need lot count validation
+                validator_func = None
+        elif any('orderType' in key for key in base_keys):
             validator_func = self.validate_order_type
-        elif any('technicalSpecifications' in key for key in step_keys):
+        elif any('technicalSpecifications' in key for key in base_keys):
             validator_func = self.validate_screen_7_technical_specs
-        elif any('executionDeadline' in key for key in step_keys):
+        elif any('executionDeadline' in key for key in base_keys):
             validator_func = self.validate_execution_deadline
-        elif any('priceInfo' in key for key in step_keys):
+        elif any('priceInfo' in key for key in base_keys):
             validator_func = self.validate_price_info
-        elif any('inspectionInfo' in key or 'negotiationsInfo' in key for key in step_keys):
+        elif any('inspectionInfo' in key or 'negotiationsInfo' in key for key in base_keys):
             validator_func = self.validate_inspection_negotiations
-        elif any('participationConditions' in key or 'participationAndExclusion' in key for key in step_keys):
+        elif any('participationConditions' in key or 'participationAndExclusion' in key for key in base_keys):
             validator_func = self.validate_participation_conditions
-        elif any('financialGuarantees' in key or 'variantOffers' in key for key in step_keys):
+        elif any('financialGuarantees' in key or 'variantOffers' in key for key in base_keys):
             validator_func = self.validate_financial_guarantees
-        elif any('selectionCriteria' in key or 'Merila' in key for key in step_keys):
+        elif any('selectionCriteria' in key or 'Merila' in key for key in base_keys):
             validator_func = lambda: self.validate_merila(self._find_selection_criteria_key(step_keys))
-        elif any('contractInfo' in key or 'otherInfo' in key for key in step_keys):
+        elif any('contractInfo' in key or 'otherInfo' in key for key in base_keys):
             validator_func = self.validate_contract_info
         
         # Fallback to step number mapping if no keys matched
@@ -193,7 +214,7 @@ class ValidationManager:
             screen_validators = {
                 0: self.validate_screen_1_customers,
                 2: self.validate_screen_3_legal_basis,
-                4: self.validate_screen_5_lots,
+                4: None,  # Step 4 is just the checkbox, no validation needed
                 5: self.validate_order_type,
                 6: self.validate_screen_7_technical_specs,
                 7: self.validate_execution_deadline,
@@ -311,7 +332,57 @@ class ValidationManager:
             if is_single_client and key == 'clientInfo.clients':
                 continue
             
-            field_value = self.session_state.get(key, '')
+            # Try multiple possible key patterns for general vs lot mode
+            field_value = None
+            
+            # For fields that have different key patterns in lot vs general mode
+            problematic_fields = ['executionDeadline', 'technicalSpecifications', 'priceInfo']
+            
+            if any(field in key for field in problematic_fields):
+                possible_keys = [
+                    key,  # Original key
+                    f'general.{key}',  # General mode prefix
+                    key.replace('general.', ''),  # Remove general prefix if present
+                ]
+                
+                # If in lot mode, also check lot-specific patterns
+                current_lot_index = self.session_state.get('current_lot_index')
+                lots = self.session_state.get('lots', [])
+                
+                if current_lot_index is not None:
+                    # Extract the field part after the section name
+                    # e.g., executionDeadline.type -> type
+                    base_field = key.split('.')[-1] if '.' in key else key
+                    section_name = key.split('.')[0] if '.' in key else key
+                    
+                    possible_keys.extend([
+                        f'lot_{current_lot_index}_{section_name}.{base_field}',  # Underscore pattern
+                        f'lot_{current_lot_index}.{section_name}.{base_field}',  # Dot pattern
+                        f'lot_{current_lot_index}.lot_{current_lot_index}_{section_name}.{base_field}',  # Double prefix pattern
+                        f'{section_name}.{base_field}',  # Direct pattern
+                    ])
+                elif len(lots) == 0:  # General mode without lots
+                    # In general mode, also check without any prefix
+                    section_name = key.split('.')[0] if '.' in key else key
+                    base_field = key.split('.')[-1] if '.' in key else ''
+                    if base_field:
+                        possible_keys.append(f'{section_name}.{base_field}')
+                
+                # Try all possible keys
+                import logging
+                logging.debug(f"[_validate_required_fields] Checking key '{key}', trying patterns: {possible_keys}")
+                for possible_key in possible_keys:
+                    value = self.session_state.get(possible_key)
+                    logging.debug(f"  Trying '{possible_key}': value='{value}'")
+                    if value is not None and value != '':
+                        field_value = value
+                        logging.debug(f"  Found value '{value}' at key '{possible_key}'")
+                        break
+                
+                if field_value is None:
+                    field_value = ''
+            else:
+                field_value = self.session_state.get(key, '')
             
             # Get field schema - handle nested fields
             field_schema = None
@@ -363,8 +434,8 @@ class ValidationManager:
             critical_fields = [
                 'projectInfo.projectName',
                 'projectInfo.cpvCodes',
-                'submissionProcedure.procedure',
-                'contractInfo.type'
+                'submissionProcedure.procedure'
+                # Note: contractInfo.type removed - has specialized validation in validate_contract_info()
             ]
             
             # Add conditional client fields based on mode
@@ -442,7 +513,7 @@ class ValidationManager:
         # List of critical dropdowns that must have valid selection
         critical_dropdowns = [
             ('submissionProcedure.procedure', 'Postopek oddaje javnega naročila'),
-            ('contractInfo.type', 'Vrsta pogodbe'),
+            # ('contractInfo.type', 'Vrsta pogodbe'),  # Removed - has specialized validation
             ('submissionInfo.submissionMethod', 'Način oddaje ponudb'),
             ('tenderInfo.evaluationCriteria', 'Merilo za izbor')
         ]
@@ -763,19 +834,36 @@ class ValidationManager:
         """
         errors = []
         
-        # Check estimated value - try multiple possible keys
+        import logging
+        logging.info("[validate_order_type] === Starting orderType validation ===")
+        
+        # Determine current lot context from session state
+        current_lot_index = self.session_state.get('current_lot_index')
+        lot_mode = self.session_state.get('lot_mode', 'none')
+        
+        logging.info(f"[validate_order_type] Context: lot_mode={lot_mode}, current_lot_index={current_lot_index}")
+        
+        # Check estimated value - try multiple possible keys based on context
         estimated_value = None
         
-        # Try different possible keys where the value might be stored
-        possible_keys = [
-            'general.orderType.estimatedValue',  # General mode key (no lots)
-            'orderType.estimatedValue',           # Direct key (fallback)
-        ]
+        # Build keys based on current context
+        possible_keys = []
         
-        # Add keys for all possible lots
-        lots = self.session_state.get('lots', [])
-        for i in range(len(lots)):
-            possible_keys.append(f'lot_{i}.orderType.estimatedValue')
+        if lot_mode == 'multiple' and current_lot_index is not None:
+            # Check for double-prefixed keys first (form renderer issue)
+            possible_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.estimatedValue')
+            # Then normal lot-prefixed keys
+            possible_keys.append(f'lot_{current_lot_index}.orderType.estimatedValue')
+        elif lot_mode == 'single':
+            # Check for double-prefixed keys first
+            possible_keys.append(f'lot_0.lot_0_orderType.estimatedValue')
+            possible_keys.append(f'lot_0.orderType.estimatedValue')
+        else:
+            # General mode (no lots)
+            possible_keys.append('general.orderType.estimatedValue')
+        
+        # Add fallback keys - but prefer lot-specific keys
+        possible_keys.append('orderType.estimatedValue')
         
         for key in possible_keys:
             if key in self.session_state:
@@ -801,65 +889,97 @@ class ValidationManager:
             except (ValueError, TypeError):
                 errors.append("Ocenjena vrednost javnega naročila mora biti številka")
         
-        # Check cofinancing - try multiple possible keys
+        # Check cofinancing - build keys based on context
         is_cofinanced = False
-        cofinanced_keys = [
-            'general.orderType.isCofinanced',     # General mode key (no lots)
-            'orderType.isCofinanced',              # Direct key (fallback)
-        ]
+        cofinanced_keys = []
         
-        # Add keys for all possible lots
-        for i in range(len(lots)):
-            cofinanced_keys.append(f'lot_{i}.orderType.isCofinanced')
+        if lot_mode == 'multiple' and current_lot_index is not None:
+            # Check for double-prefixed keys first (form renderer issue)
+            cofinanced_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.isCofinanced')
+            # Then normal lot-prefixed keys
+            cofinanced_keys.append(f'lot_{current_lot_index}.orderType.isCofinanced')
+        elif lot_mode == 'single':
+            # Check for double-prefixed keys first
+            cofinanced_keys.append(f'lot_0.lot_0_orderType.isCofinanced')
+            cofinanced_keys.append(f'lot_0.orderType.isCofinanced')
+        else:
+            cofinanced_keys.append('general.orderType.isCofinanced')
+        
+        # Add fallback - but ONLY if we haven't found a lot-specific key
+        # This prevents old values from overriding current lot values
+        fallback_key = 'orderType.isCofinanced'
         
         import logging
         
+        logging.info(f"[validate_order_type] Starting cofinancing check. lot_mode={lot_mode}, current_lot_index={current_lot_index}")
+        logging.info(f"[validate_order_type] Checking keys: {cofinanced_keys}")
+        
+        found_key = False
         for key in cofinanced_keys:
             if key in self.session_state:
+                found_key = True
                 value = self.session_state.get(key, False)
-                logging.info(f"[validate_order_type] Checking {key}: {value} (type: {type(value)})")
+                logging.info(f"[validate_order_type] Found {key}: {value} (type: {type(value)})")
+                # Only set to True if explicitly checked
                 # Handle both boolean and string values
                 if value == True or value == 'true' or value == 'da':
                     is_cofinanced = True
-                    break
+                    logging.info(f"[validate_order_type] Setting is_cofinanced=True based on {key}")
+                else:
+                    logging.info(f"[validate_order_type] Key {key} is False/unchecked, not cofinanced")
+                # If we found the key, stop checking other keys
+                break
         
-        # If checkbox not found but we have cofinancers, assume it's cofinanced
-        if not is_cofinanced:
-            # Check if we have any cofinancer data
-            prefixes = ['general.orderType', 'orderType']
-            # Add lot prefixes
-            for i in range(len(lots)):
-                prefixes.append(f'lot_{i}.orderType')
-            
-            for prefix in prefixes:
-                # Check for array
-                array_key = f'{prefix}.cofinancers'
-                if array_key in self.session_state and self.session_state.get(array_key):
-                    logging.info(f"[validate_order_type] Found cofinancers array at {array_key}, assuming cofinanced")
-                    is_cofinanced = True
-                    break
-                
-                # Check for individual fields
-                name_key = f'{prefix}.cofinancers.0.name'
-                if name_key in self.session_state and self.session_state.get(name_key):
-                    logging.info(f"[validate_order_type] Found cofinancer data at {name_key}, assuming cofinanced")
-                    is_cofinanced = True
-                    break
+        # Only check fallback if no lot-specific key was found
+        if not found_key and fallback_key in self.session_state:
+            value = self.session_state.get(fallback_key, False)
+            logging.info(f"[validate_order_type] No lot key found, checking fallback {fallback_key}: {value}")
+            if value == True or value == 'true' or value == 'da':
+                is_cofinanced = True
+                logging.info(f"[validate_order_type] Setting is_cofinanced=True based on fallback key")
+        
+        if not found_key:
+            logging.info(f"[validate_order_type] No cofinancing key found in session state")
+        
+        # Don't auto-detect cofinancing from field presence - only use the checkbox
+        # This prevents false positives when fields exist but checkbox is unchecked
         
         logging.info(f"[validate_order_type] Final is_cofinanced: {is_cofinanced}")
         
+        # Debug: Print all relevant session state keys for debugging
+        import logging
+        for key in self.session_state.keys() if hasattr(self.session_state, 'keys') else []:
+            if 'isCofinanced' in key or 'cofinancer' in key.lower():
+                value = self.session_state.get(key)
+                logging.info(f"[validate_order_type] DEBUG - Session key '{key}': {value} (type: {type(value)})")
+        
         if is_cofinanced:
-            # Check cofinancers array - try multiple possible keys
+            # Check cofinancers array - build keys based on context
             cofinancers = []
-            cofinancer_keys = [
-                'general.orderType.cofinancers',
-                'orderType.cofinancers',
-                'lot_0.orderType.cofinancers'
-            ]
+            cofinancer_keys = []
+            
+            if lot_mode == 'multiple' and current_lot_index is not None:
+                cofinancer_keys.append(f'lot_{current_lot_index}.orderType.cofinancers')
+            elif lot_mode == 'single':
+                cofinancer_keys.append(f'lot_0.orderType.cofinancers')
+            else:
+                cofinancer_keys.append('general.orderType.cofinancers')
+            
+            # Add fallback
+            cofinancer_keys.append('orderType.cofinancers')
             
             # First check if we have the cofinancer count key
             cofinancer_count = 0
-            count_keys = ['orderType.cofinancerCount', 'general.orderType.cofinancerCount', 'lot_0.orderType.cofinancerCount']
+            count_keys = []
+            
+            if lot_mode == 'multiple' and current_lot_index is not None:
+                count_keys.append(f'lot_{current_lot_index}.orderType.cofinancerCount')
+            elif lot_mode == 'single':
+                count_keys.append(f'lot_0.orderType.cofinancerCount')
+            else:
+                count_keys.append('general.orderType.cofinancerCount')
+            
+            count_keys.append('orderType.cofinancerCount')
             for key in count_keys:
                 if key in self.session_state:
                     cofinancer_count = self.session_state.get(key, 0)
@@ -885,8 +1005,17 @@ class ValidationManager:
             if not cofinancers:
                 logging.info("[validate_order_type] Trying to collect cofinancers from individual fields")
                 collected_cofinancers = []
-                # Try different key patterns
-                prefixes = ['general.orderType', 'orderType', 'lot_0.orderType']
+                # Build prefixes based on context
+                prefixes = []
+                
+                if lot_mode == 'multiple' and current_lot_index is not None:
+                    prefixes.append(f'lot_{current_lot_index}.orderType')
+                elif lot_mode == 'single':
+                    prefixes.append(f'lot_0.orderType')
+                else:
+                    prefixes.append('general.orderType')
+                
+                prefixes.append('orderType')
                 for prefix in prefixes:
                     i = 0
                     while True:
@@ -945,8 +1074,19 @@ class ValidationManager:
                     postal_code = None
                     program_name = None
                     
-                    # Try different key patterns
-                    for prefix in ['general.orderType', 'orderType', 'lot_0.orderType']:
+                    # Build prefixes based on context
+                    prefixes = []
+                    
+                    if lot_mode == 'multiple' and current_lot_index is not None:
+                        prefixes.append(f'lot_{current_lot_index}.orderType')
+                    elif lot_mode == 'single':
+                        prefixes.append(f'lot_0.orderType')
+                    else:
+                        prefixes.append('general.orderType')
+                    
+                    prefixes.append('orderType')
+                    
+                    for prefix in prefixes:
                         # New field structure
                         name_key = f'{prefix}.cofinancers.{idx}.cofinancerName'
                         street_key = f'{prefix}.cofinancers.{idx}.cofinancerStreetAddress'
@@ -1033,39 +1173,85 @@ class ValidationManager:
         - Technical specs field is required
         - If specs exist, minimum 1 document required
         """
+        import logging
         errors = []
         
         # Get lots for dynamic key generation
         lots = self.session_state.get('lots', [])
         
+        # Get current lot index to prioritize lot-specific keys
+        current_lot_index = self.session_state.get('current_lot_index')
+        
         # Try different possible keys for hasSpecifications field
         has_specs = None
-        possible_keys = [
+        possible_keys = []
+        
+        # If we have a current lot index, prioritize that key
+        if current_lot_index is not None:
+            # Check both underscore and dot patterns
+            possible_keys.append(f'lot_{current_lot_index}_technicalSpecifications.hasSpecifications')  # Underscore pattern
+            possible_keys.append(f'lot_{current_lot_index}.technicalSpecifications.hasSpecifications')  # Dot pattern
+            # ALSO CHECK DOUBLE PREFIX PATTERN (what user actually has!)
+            possible_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_technicalSpecifications.hasSpecifications')  # Double prefix
+            # Also check widget keys for current lot
+            possible_keys.append(f'widget_lot_{current_lot_index}_technicalSpecifications.hasSpecifications')  # Widget underscore
+            possible_keys.append(f'widget_lot_{current_lot_index}.technicalSpecifications.hasSpecifications')  # Widget dot
+            # Widget with double prefix
+            possible_keys.append(f'widget_lot_{current_lot_index}.lot_{current_lot_index}_technicalSpecifications.hasSpecifications')  # Widget double prefix
+        
+        # Add general mode keys (but NOT direct key yet - save for last)
+        possible_keys.extend([
             'general.technicalSpecifications.hasSpecifications',  # General mode
-            'technicalSpecifications.hasSpecifications',          # Direct key
-        ]
+            'widget_technicalSpecifications.hasSpecifications',   # Widget key
+        ])
         
-        # Add lot-specific keys
+        # Add other lot-specific keys as fallback
         for i in range(len(lots)):
-            possible_keys.append(f'lot_{i}.technicalSpecifications.hasSpecifications')
+            if current_lot_index is None or i != current_lot_index:
+                possible_keys.append(f'lot_{i}_technicalSpecifications.hasSpecifications')  # Underscore pattern
+                possible_keys.append(f'lot_{i}.technicalSpecifications.hasSpecifications')  # Dot pattern
         
+        # Add direct key as LAST resort (lowest priority)
+        possible_keys.append('technicalSpecifications.hasSpecifications')  # Direct key - lowest priority
+        
+        # Find the value (accept any non-None, non-empty string value)
+        logging.info(f"[validate_technical_specs] Looking for hasSpecifications in keys: {possible_keys}")
         for key in possible_keys:
-            if key in self.session_state:
-                has_specs = self.session_state.get(key)
+            value = self.session_state.get(key)
+            logging.info(f"[validate_technical_specs] Checking key '{key}': value='{value}'")
+            # Accept any value that's not None or empty string (including 'ne', False, etc.)
+            if value is not None and value != '':
+                has_specs = value
+                logging.info(f"[validate_technical_specs] Found value '{value}' at key '{key}'")
                 break
         
-        if not has_specs or has_specs not in ['da', 'ne']:
+        logging.info(f"[validate_technical_specs] Final has_specs value: '{has_specs}'")
+        
+        # Check if we have a valid value
+        if has_specs is None or has_specs == '':
             errors.append("Polje 'Naročnik že ima pripravljene tehnične zahteve / specifikacije' je obvezno")
+        elif has_specs not in ['da', 'ne']:
+            errors.append(f"Neveljavna vrednost '{has_specs}' za polje 'Naročnik že ima pripravljene tehnične zahteve / specifikacije'. Dovoljena vrednost je 'da' ali 'ne'.")
         elif has_specs == 'da':
-            # Check document count - also try multiple keys
+            # Check for uploaded documents - need to check both documentCount and actual uploads
+            has_uploaded_docs = False
+            
+            # First check documentCount if it exists
             doc_count = 0
-            doc_keys = [
+            doc_keys = []
+            
+            # Prioritize current lot if available
+            if current_lot_index is not None:
+                doc_keys.append(f'lot_{current_lot_index}.technicalSpecifications.documentCount')
+            
+            doc_keys.extend([
                 'general.technicalSpecifications.documentCount',
                 'technicalSpecifications.documentCount',
-            ]
+            ])
             
             for i in range(len(lots)):
-                doc_keys.append(f'lot_{i}.technicalSpecifications.documentCount')
+                if current_lot_index is None or i != current_lot_index:
+                    doc_keys.append(f'lot_{i}.technicalSpecifications.documentCount')
             
             for key in doc_keys:
                 if key in self.session_state:
@@ -1078,7 +1264,46 @@ class ValidationManager:
                 except ValueError:
                     doc_count = 0
             
-            if doc_count < 1:
+            # Also check for actual uploaded files in session state
+            # Check for file info keys that indicate uploaded documents
+            for key in self.session_state.keys():
+                if '_file_info' in key and 'technicalSpecifications' in key:
+                    # Found an uploaded technical specification document
+                    has_uploaded_docs = True
+                    break
+            
+            # Check specificationDocuments array for any documents
+            spec_docs_keys = []
+            
+            # Prioritize current lot if available
+            if current_lot_index is not None:
+                spec_docs_keys.append(f'lot_{current_lot_index}.technicalSpecifications.specificationDocuments')
+            
+            spec_docs_keys.extend([
+                'general.technicalSpecifications.specificationDocuments',
+                'technicalSpecifications.specificationDocuments',
+            ])
+            
+            for i in range(len(lots)):
+                if current_lot_index is None or i != current_lot_index:
+                    spec_docs_keys.append(f'lot_{i}.technicalSpecifications.specificationDocuments')
+            
+            for key in spec_docs_keys:
+                if key in self.session_state:
+                    docs = self.session_state.get(key, [])
+                    if docs and len(docs) > 0:
+                        # Check if any document has a file
+                        for idx, doc in enumerate(docs):
+                            # Check for file info in session state
+                            file_key = f"{key}.{idx}.file_file_info"
+                            if file_key in self.session_state:
+                                has_uploaded_docs = True
+                                break
+                    if has_uploaded_docs:
+                        break
+            
+            # Only check for documents if has_specs is 'da'
+            if doc_count < 1 and not has_uploaded_docs:
                 errors.append("Pri obstoječih tehničnih zahtevah morate naložiti najmanj 1 dokument")
         
         return len(errors) == 0, errors
@@ -1096,38 +1321,83 @@ class ValidationManager:
         # Get lots for dynamic key generation
         lots = self.session_state.get('lots', [])
         
+        # Get current lot index to prioritize lot-specific keys
+        current_lot_index = self.session_state.get('current_lot_index')
+        
         # Try different possible keys for type field
         deadline_type = None
-        type_keys = [
+        type_keys = []
+        
+        # If we have a current lot index, prioritize that key (check all patterns)
+        if current_lot_index is not None:
+            type_keys.append(f'lot_{current_lot_index}_executionDeadline.type')  # Underscore pattern
+            type_keys.append(f'lot_{current_lot_index}.executionDeadline.type')  # Dot pattern
+            type_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_executionDeadline.type')  # Double prefix pattern
+        
+        # Add general mode keys
+        type_keys.extend([
             'general.executionDeadline.type',  # General mode
             'executionDeadline.type',           # Direct key
-        ]
+        ])
         
-        # Add lot-specific keys
+        # Add other lot-specific keys as fallback (check all patterns)
         for i in range(len(lots)):
-            type_keys.append(f'lot_{i}.executionDeadline.type')
+            if current_lot_index is None or i != current_lot_index:
+                type_keys.append(f'lot_{i}_executionDeadline.type')  # Underscore pattern
+                type_keys.append(f'lot_{i}.executionDeadline.type')  # Dot pattern
+                type_keys.append(f'lot_{i}.lot_{i}_executionDeadline.type')  # Double prefix pattern
         
+        # Find the deadline type value (only accept non-empty values)
         for key in type_keys:
-            if key in self.session_state:
-                deadline_type = self.session_state.get(key)
+            value = self.session_state.get(key)
+            if value and value.strip():  # Only accept non-empty values
+                deadline_type = value
                 break
         
         if not deadline_type or deadline_type == '':
             errors.append("Prosimo izberite način določitve roka izvedbe")
             return len(errors) == 0, errors
         
-        # Get the prefix where we found the type
+        # Get the prefix where we found the type (use the same order as above)
         prefix = None
         for key in type_keys:
-            if key in self.session_state and self.session_state.get(key) == deadline_type:
+            value = self.session_state.get(key)
+            if value and value.strip() and value == deadline_type:
                 prefix = key.replace('.type', '')
                 break
         
         # Validate based on selected type
         if deadline_type == 'datumsko':
-            # Check start and end dates
-            start_date = self.session_state.get(f'{prefix}.startDate')
-            end_date = self.session_state.get(f'{prefix}.endDate')
+            # Check start and end dates - try multiple key patterns
+            start_date = None
+            end_date = None
+            
+            # Try different key patterns for dates
+            if prefix:
+                # Try with the found prefix first
+                start_date = self.session_state.get(f'{prefix}.startDate')
+                end_date = self.session_state.get(f'{prefix}.endDate')
+            
+            # If not found, try other patterns
+            if not start_date:
+                # Try current lot patterns
+                if current_lot_index is not None:
+                    start_date = (self.session_state.get(f'lot_{current_lot_index}_executionDeadline.startDate') or
+                                 self.session_state.get(f'lot_{current_lot_index}.executionDeadline.startDate') or
+                                 self.session_state.get(f'lot_{current_lot_index}.lot_{current_lot_index}_executionDeadline.startDate'))
+                # Try direct key
+                if not start_date:
+                    start_date = self.session_state.get('executionDeadline.startDate')
+            
+            if not end_date:
+                # Try current lot patterns
+                if current_lot_index is not None:
+                    end_date = (self.session_state.get(f'lot_{current_lot_index}_executionDeadline.endDate') or
+                               self.session_state.get(f'lot_{current_lot_index}.executionDeadline.endDate') or
+                               self.session_state.get(f'lot_{current_lot_index}.lot_{current_lot_index}_executionDeadline.endDate'))
+                # Try direct key
+                if not end_date:
+                    end_date = self.session_state.get('executionDeadline.endDate')
             
             if not start_date:
                 errors.append("Datum začetka je obvezen pri datumskem roku")
@@ -1191,29 +1461,66 @@ class ValidationManager:
         # Get lots for dynamic key generation
         lots = self.session_state.get('lots', [])
         
+        # Get current lot index to determine which key to check
+        current_lot_index = self.session_state.get('current_lot_index')
+        
         # Try different possible keys for price clause
         price_clause = None
-        clause_keys = [
-            'general.priceInfo.priceClause',  # General mode
-            'priceInfo.priceClause',           # Direct key
-        ]
+        clause_keys = []
         
-        # Add lot-specific keys
+        # If we have a current lot index, prioritize that key
+        if current_lot_index is not None:
+            clause_keys.extend([
+                f'lot_{current_lot_index}_priceInfo.priceClause',  # Underscore pattern
+                f'lot_{current_lot_index}.priceInfo.priceClause',   # Dot pattern
+                f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.priceClause',  # Double prefix (what user has)
+            ])
+        
+        # Add general mode key
+        clause_keys.append('general.priceInfo.priceClause')  # General mode
+        
+        # Add all lot-specific keys
         for i in range(len(lots)):
-            clause_keys.append(f'lot_{i}.priceInfo.priceClause')
+            if current_lot_index is None or i != current_lot_index:
+                clause_keys.extend([
+                    f'lot_{i}_priceInfo.priceClause',  # Underscore pattern
+                    f'lot_{i}.priceInfo.priceClause',   # Dot pattern
+                    f'lot_{i}.lot_{i}_priceInfo.priceClause',  # Double prefix
+                ])
+        
+        # Add direct key as LAST resort (lowest priority)
+        clause_keys.append('priceInfo.priceClause')  # Direct key - lowest priority
         
         prefix = None
+        found_keys = []  # Debug: track which keys exist
         for key in clause_keys:
             if key in self.session_state:
+                found_keys.append(f"{key}: {self.session_state.get(key)}")
                 price_clause = self.session_state.get(key)
-                prefix = key.replace('.priceClause', '')
-                break
+                if price_clause:  # Only use non-empty values
+                    # Remove the field name to get the prefix
+                    if '.priceClause' in key:
+                        prefix = key.replace('.priceClause', '')
+                    else:
+                        # Likely doesn't have the suffix, use the key as is
+                        prefix = key
+                    break
+        
+        # Debug output for price clause validation
+        if self.session_state.get('debug_price_validation', False):
+            import streamlit as st
+            st.write(f"🔍 Price clause validation debug:")
+            st.write(f"  - Current lot index: {current_lot_index}")
+            st.write(f"  - Keys checked: {clause_keys[:3]}")  # Show first 3 keys
+            st.write(f"  - Found keys: {found_keys}")
+            st.write(f"  - Selected price_clause: {price_clause}")
+            st.write(f"  - Prefix: {prefix}")
         
         if not price_clause or price_clause == '':
             errors.append("Katero cenovno klavzulo bi želeli imeti v pogodbi je obvezno")
         elif price_clause == 'drugo':
             # Check for other description
-            other_desc = self.session_state.get(f'{prefix}.priceClauseOther', '').strip()
+            other_desc = self.session_state.get(f'{prefix}.otherPriceClause', '').strip()
             if not other_desc:
                 errors.append("Pri izbiri 'drugo' morate vnesti opis cenovne klavzule")
         
@@ -1231,6 +1538,111 @@ class ValidationManager:
             if not doc_uploaded and not has_file_info:
                 errors.append("Pri pripravljenem ponudbenem predračunu morate naložiti dokument")
         
+        # Check valorization period if valorization is selected
+        price_adjustment = None
+        adjustment_keys = []
+        
+        # Try different keys for price adjustment preference
+        if current_lot_index is not None:
+            adjustment_keys.extend([
+                f'lot_{current_lot_index}_priceInfo.priceAdjustmentPreference',
+                f'lot_{current_lot_index}.priceInfo.priceAdjustmentPreference',
+                f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.priceAdjustmentPreference'
+            ])
+        
+        adjustment_keys.extend([
+            'general.priceInfo.priceAdjustmentPreference',
+            'priceInfo.priceAdjustmentPreference',
+        ])
+        
+        # Also check for keys without the full path
+        if current_lot_index is not None:
+            adjustment_keys.append(f'lot_{current_lot_index}_priceAdjustmentPreference')
+        adjustment_keys.append('priceAdjustmentPreference')
+        
+        # Find the price adjustment preference
+        for key in adjustment_keys:
+            value = self.session_state.get(key)
+            if value is not None and value != '':
+                price_adjustment = value
+                break
+        
+        # Check valorization period - the actual structure is priceInfo.valorization.type and priceInfo.valorization.years/months/days
+        period_type = None
+        period_type_keys = []
+        
+        # Build keys to check for period type
+        if current_lot_index is not None:
+            period_type_keys.extend([
+                f'lot_{current_lot_index}_priceInfo.valorization.type',
+                f'lot_{current_lot_index}.priceInfo.valorization.type',
+                f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.valorization.type'
+            ])
+        
+        period_type_keys.extend([
+            'general.priceInfo.valorization.type',
+            'priceInfo.valorization.type',
+            'widget_priceInfo.valorization.type',  # Widget keys might exist
+        ])
+        
+        # Check for the period type value
+        for key in period_type_keys:
+            value = self.session_state.get(key)
+            if value and value in ['v letih', 'v mesecih', 'v dnevih']:
+                period_type = value
+                break
+        
+        # If a period type is selected, validate that the corresponding value is filled
+        if period_type:
+            period_value = None
+            period_value_keys = []
+            
+            if period_type == 'v letih':
+                field_suffix = 'years'
+                error_msg = "Pri izbiri 'v letih' morate vnesti število let"
+            elif period_type == 'v mesecih':
+                field_suffix = 'months'
+                error_msg = "Pri izbiri 'v mesecih' morate vnesti število mesecev"
+            elif period_type == 'v dnevih':
+                field_suffix = 'days'
+                error_msg = "Pri izbiri 'v dnevih' morate vnesti število dni"
+            else:
+                field_suffix = None
+                error_msg = None
+            
+            if field_suffix:
+                # Build keys to check for the period value
+                if current_lot_index is not None:
+                    period_value_keys.extend([
+                        f'lot_{current_lot_index}_priceInfo.valorization.{field_suffix}',
+                        f'lot_{current_lot_index}.priceInfo.valorization.{field_suffix}',
+                        f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.valorization.{field_suffix}'
+                    ])
+                
+                period_value_keys.extend([
+                    f'general.priceInfo.valorization.{field_suffix}',
+                    f'priceInfo.valorization.{field_suffix}',
+                    f'widget_priceInfo.valorization.{field_suffix}',  # Widget keys might exist
+                ])
+                
+                # Check if value exists
+                for key in period_value_keys:
+                    value = self.session_state.get(key)
+                    if value is not None and value != '' and value != 0:
+                        period_value = value
+                        break
+                
+                if not period_value:
+                    errors.append(error_msg)
+                else:
+                    # Validate the value is a positive integer
+                    try:
+                        period_int = int(period_value)
+                        if period_int <= 0:
+                            errors.append(f"Število {field_suffix[:-1] if field_suffix == 'days' else field_suffix} mora biti pozitivno")
+                    except (ValueError, TypeError):
+                        errors.append(f"Število {field_suffix[:-1] if field_suffix == 'days' else field_suffix} mora biti veljavno celo število")
+        
         return len(errors) == 0, errors
     
     def validate_inspection_negotiations(self) -> Tuple[bool, List[str]]:
@@ -1247,13 +1659,31 @@ class ValidationManager:
         
         # Check inspection info - correct field name is hasInspection
         organized_visit = None
-        inspection_keys = [
-            'general.inspectionInfo.hasInspection',
-            'inspectionInfo.hasInspection',
-        ]
+        current_lot_index = self.session_state.get('current_lot_index')
+        inspection_keys = []
         
+        # Prioritize current lot if available (with double prefix pattern)
+        if current_lot_index is not None:
+            inspection_keys.extend([
+                f'lot_{current_lot_index}_inspectionInfo.hasInspection',  # Underscore pattern
+                f'lot_{current_lot_index}.inspectionInfo.hasInspection',   # Dot pattern
+                f'lot_{current_lot_index}.lot_{current_lot_index}_inspectionInfo.hasInspection',  # Double prefix (what user has)
+            ])
+        
+        # Add general mode key
+        inspection_keys.append('general.inspectionInfo.hasInspection')
+        
+        # Add all lot-specific keys
         for i in range(len(lots)):
-            inspection_keys.append(f'lot_{i}.inspectionInfo.hasInspection')
+            if current_lot_index is None or i != current_lot_index:
+                inspection_keys.extend([
+                    f'lot_{i}_inspectionInfo.hasInspection',   # Underscore pattern
+                    f'lot_{i}.inspectionInfo.hasInspection',    # Dot pattern
+                    f'lot_{i}.lot_{i}_inspectionInfo.hasInspection',  # Double prefix
+                ])
+        
+        # Add direct key as LAST resort (lowest priority)
+        inspection_keys.append('inspectionInfo.hasInspection')  # Direct key - lowest priority
         
         inspection_prefix = None
         for key in inspection_keys:
@@ -1261,6 +1691,7 @@ class ValidationManager:
                 organized_visit = self.session_state.get(key)
                 inspection_prefix = key.replace('.hasInspection', '')
                 break
+        
         
         if organized_visit == True or organized_visit == 'true':
             # Check for inspection dates array or individual fields
@@ -1303,13 +1734,30 @@ class ValidationManager:
         
         # Check negotiations - correct field name is hasNegotiations
         include_negotiations = None
-        negotiation_keys = [
-            'general.negotiationsInfo.hasNegotiations',
-            'negotiationsInfo.hasNegotiations',
-        ]
+        negotiation_keys = []
         
+        # Prioritize current lot if available (with double prefix pattern)
+        if current_lot_index is not None:
+            negotiation_keys.extend([
+                f'lot_{current_lot_index}_negotiationsInfo.hasNegotiations',  # Underscore pattern
+                f'lot_{current_lot_index}.negotiationsInfo.hasNegotiations',   # Dot pattern
+                f'lot_{current_lot_index}.lot_{current_lot_index}_negotiationsInfo.hasNegotiations',  # Double prefix
+            ])
+        
+        # Add general mode key
+        negotiation_keys.append('general.negotiationsInfo.hasNegotiations')
+        
+        # Add all lot-specific keys
         for i in range(len(lots)):
-            negotiation_keys.append(f'lot_{i}.negotiationsInfo.hasNegotiations')
+            if current_lot_index is None or i != current_lot_index:
+                negotiation_keys.extend([
+                    f'lot_{i}_negotiationsInfo.hasNegotiations',   # Underscore pattern
+                    f'lot_{i}.negotiationsInfo.hasNegotiations',    # Dot pattern
+                    f'lot_{i}.lot_{i}_negotiationsInfo.hasNegotiations',  # Double prefix
+                ])
+        
+        # Add direct key as LAST resort (lowest priority)
+        negotiation_keys.append('negotiationsInfo.hasNegotiations')  # Direct key - lowest priority
         
         negotiation_prefix = None
         for key in negotiation_keys:
@@ -1338,7 +1786,7 @@ class ValidationManager:
             if has_wishes == True or has_wishes == 'true':
                 wishes_text = self.session_state.get(f'{negotiation_prefix}.specialNegotiationWishes', '').strip()
                 if not wishes_text:
-                    errors.append("Pri posebnih željah v zvezi s pogajanji morate vnesti besedilo")
+                    errors.append("Opišite vaše posebne želje v zvezi s pogajanji")
         
         return len(errors) == 0, errors
     
@@ -1354,20 +1802,39 @@ class ValidationManager:
         # Get lots for dynamic key generation
         lots = self.session_state.get('lots', [])
         
+        # Get current lot index to prioritize lot-specific keys
+        current_lot_index = self.session_state.get('current_lot_index')
+        
         # Check exclusion reasons - using correct field name from schema
         exclusion_type = None
-        exclusion_keys = [
+        exclusion_keys = []
+        
+        # Prioritize current lot if available
+        if current_lot_index is not None:
+            exclusion_keys.extend([
+                f'lot_{current_lot_index}_participationAndExclusion.exclusionReasonsSelection',  # Underscore pattern
+                f'lot_{current_lot_index}.participationAndExclusion.exclusionReasonsSelection',  # Dot pattern
+                f'lot_{current_lot_index}.lot_{current_lot_index}_participationAndExclusion.exclusionReasonsSelection'  # Double prefix pattern
+            ])
+        
+        exclusion_keys.extend([
             'general.participationAndExclusion.exclusionReasonsSelection',
             'participationAndExclusion.exclusionReasonsSelection',
-        ]
+        ])
         
         for i in range(len(lots)):
-            exclusion_keys.append(f'lot_{i}.participationAndExclusion.exclusionReasonsSelection')
+            if current_lot_index is None or i != current_lot_index:
+                exclusion_keys.extend([
+                    f'lot_{i}_participationAndExclusion.exclusionReasonsSelection',  # Underscore pattern
+                    f'lot_{i}.participationAndExclusion.exclusionReasonsSelection',  # Dot pattern
+                    f'lot_{i}.lot_{i}_participationAndExclusion.exclusionReasonsSelection'  # Double prefix pattern
+                ])
         
         exclusion_prefix = None
         for key in exclusion_keys:
-            if key in self.session_state:
-                exclusion_type = self.session_state.get(key)
+            value = self.session_state.get(key)
+            if value:  # Accept any truthy value
+                exclusion_type = value
                 exclusion_prefix = key.replace('.exclusionReasonsSelection', '')
                 break
         
@@ -1395,16 +1862,56 @@ class ValidationManager:
             
             if selected_count < 1:
                 errors.append("Pri specifičnih razlogih morate izbrati najmanj eno možnost")
+            
+            # Check conditional description fields for selected exclusion reasons
+            for reason in specific_reasons:
+                if self.session_state.get(f'{exclusion_prefix}.{reason}'):
+                    # Check for corresponding description fields based on reason type
+                    if reason == 'exclusionReason_c':  # Professional misconduct
+                        desc_field = 'professionalMisconductDetails'
+                        desc = self.session_state.get(f'{exclusion_prefix}.{desc_field}', '').strip()
+                        if not desc:
+                            errors.append("Pri izbiri 'hujša kršitev poklicnih pravil' morate vnesti opis kršitve")
+                    
+                    elif reason == 'exclusionReason_f':  # Contract deficiencies
+                        # Check both possible description fields for this reason
+                        desc_field1 = 'contractDeficienciesDetails'
+                        desc_field2 = 'comparableSanctionsDetails'
+                        desc1 = self.session_state.get(f'{exclusion_prefix}.{desc_field1}', '').strip()
+                        desc2 = self.session_state.get(f'{exclusion_prefix}.{desc_field2}', '').strip()
+                        if not desc1 and not desc2:
+                            errors.append("Pri izbiri razloga za izključitev morate vnesti opis pomanjkljivosti")
+                    
+                    elif reason == 'exclusionReason_h':  # Other reasons
+                        desc_field = 'otherExclusionDetails'
+                        desc = self.session_state.get(f'{exclusion_prefix}.{desc_field}', '').strip()
+                        if not desc:
+                            errors.append("Pri izbiri 'drugo' morate vnesti opis razloga za izključitev")
         
         # Check participation conditions - using correct field name from schema
         condition_type = None
-        condition_keys = [
+        condition_keys = []
+        
+        # Prioritize current lot if available
+        if current_lot_index is not None:
+            condition_keys.extend([
+                f'lot_{current_lot_index}_participationConditions.participationSelection',  # Underscore pattern
+                f'lot_{current_lot_index}.participationConditions.participationSelection',  # Dot pattern
+                f'lot_{current_lot_index}.lot_{current_lot_index}_participationConditions.participationSelection'  # Double prefix pattern
+            ])
+        
+        condition_keys.extend([
             'general.participationConditions.participationSelection',
             'participationConditions.participationSelection',
-        ]
+        ])
         
         for i in range(len(lots)):
-            condition_keys.append(f'lot_{i}.participationConditions.participationSelection')
+            if current_lot_index is None or i != current_lot_index:
+                condition_keys.extend([
+                    f'lot_{i}_participationConditions.participationSelection',  # Underscore pattern
+                    f'lot_{i}.participationConditions.participationSelection',  # Dot pattern
+                    f'lot_{i}.lot_{i}_participationConditions.participationSelection'  # Double prefix pattern
+                ])
         
         condition_prefix = None
         for key in condition_keys:
@@ -1462,7 +1969,16 @@ class ValidationManager:
                 if field == 'professionalAI':
                     continue  # AI field doesn't need description
                 if self.session_state.get(f'{condition_prefix}.professionalActivitySection.{field}'):
-                    detail_field = field + 'Details'
+                    # Special field name mappings for license and membership
+                    if field == 'specificLicense':
+                        detail_field = 'licenseDetails'
+                    elif field == 'organizationMembership':
+                        detail_field = 'membershipDetails'
+                    elif field == 'professionalOther':
+                        detail_field = 'professionalOtherDetails'
+                    else:
+                        detail_field = field + 'Details'
+                    
                     desc = self.session_state.get(f'{condition_prefix}.professionalActivitySection.{detail_field}', '').strip()
                     if not desc:
                         errors.append(f"Vnesite opis za izbrano polje v sekciji 'Ustreznost za opravljanje poklicne dejavnosti'")
@@ -1505,20 +2021,39 @@ class ValidationManager:
         # Get lots for dynamic key generation
         lots = self.session_state.get('lots', [])
         
+        # Get current lot index to prioritize lot-specific keys
+        current_lot_index = self.session_state.get('current_lot_index')
+        
         # Check financial guarantees - using correct field name from schema
         guarantees_required = None
-        guarantee_keys = [
+        guarantee_keys = []
+        
+        # Prioritize current lot if available
+        if current_lot_index is not None:
+            guarantee_keys.extend([
+                f'lot_{current_lot_index}_financialGuarantees.requiresFinancialGuarantees',  # Underscore pattern
+                f'lot_{current_lot_index}.financialGuarantees.requiresFinancialGuarantees',  # Dot pattern
+                f'lot_{current_lot_index}.lot_{current_lot_index}_financialGuarantees.requiresFinancialGuarantees'  # Double prefix pattern
+            ])
+        
+        guarantee_keys.extend([
             'general.financialGuarantees.requiresFinancialGuarantees',
             'financialGuarantees.requiresFinancialGuarantees',
-        ]
+        ])
         
         for i in range(len(lots)):
-            guarantee_keys.append(f'lot_{i}.financialGuarantees.requiresFinancialGuarantees')
+            if current_lot_index is None or i != current_lot_index:
+                guarantee_keys.extend([
+                    f'lot_{i}_financialGuarantees.requiresFinancialGuarantees',  # Underscore pattern
+                    f'lot_{i}.financialGuarantees.requiresFinancialGuarantees',  # Dot pattern
+                    f'lot_{i}.lot_{i}_financialGuarantees.requiresFinancialGuarantees'  # Double prefix pattern
+                ])
         
         guarantee_prefix = None
         for key in guarantee_keys:
-            if key in self.session_state:
-                guarantees_required = self.session_state.get(key)
+            value = self.session_state.get(key)
+            if value is not None:  # Accept boolean false as a valid value
+                guarantees_required = value
                 guarantee_prefix = key.replace('.requiresFinancialGuarantees', '')
                 break
         
@@ -1556,6 +2091,11 @@ class ValidationManager:
                                 field_value = field_value.strip()
                             if not field_value:
                                 errors.append(f"{field_label} je obvezno za denarni depozit ({g_label})")
+                    elif instrument == 'drugo':
+                        # Check for other details when "drugo" is selected
+                        other_details = self.session_state.get(f'{guarantee_prefix}.{g_type}.otherDetails', '').strip()
+                        if not other_details:
+                            errors.append(f"Pri izbiri 'drugo' morate vnesti opis instrumenta za {g_label}")
                     
                     # Check amount field (it's directly under the guarantee type)
                     amount = self.session_state.get(f'{guarantee_prefix}.{g_type}.amount', '')
@@ -1577,18 +2117,34 @@ class ValidationManager:
         
         # Check variant offers - using correct field name from schema
         variants_allowed = None
-        variant_keys = [
+        variant_keys = []
+        
+        # Prioritize current lot if available
+        if current_lot_index is not None:
+            variant_keys.extend([
+                f'lot_{current_lot_index}_variantOffers.allowVariants',  # Underscore pattern
+                f'lot_{current_lot_index}.variantOffers.allowVariants',  # Dot pattern
+                f'lot_{current_lot_index}.lot_{current_lot_index}_variantOffers.allowVariants'  # Double prefix pattern
+            ])
+        
+        variant_keys.extend([
             'general.variantOffers.allowVariants',
             'variantOffers.allowVariants',
-        ]
+        ])
         
         for i in range(len(lots)):
-            variant_keys.append(f'lot_{i}.variantOffers.allowVariants')
+            if current_lot_index is None or i != current_lot_index:
+                variant_keys.extend([
+                    f'lot_{i}_variantOffers.allowVariants',  # Underscore pattern
+                    f'lot_{i}.variantOffers.allowVariants',  # Dot pattern
+                    f'lot_{i}.lot_{i}_variantOffers.allowVariants'  # Double prefix pattern
+                ])
         
         variant_prefix = None
         for key in variant_keys:
-            if key in self.session_state:
-                variants_allowed = self.session_state.get(key)
+            value = self.session_state.get(key)
+            if value is not None:  # Accept boolean false as a valid value
+                variants_allowed = value
                 variant_prefix = key.replace('.allowVariants', '')
                 break
         
@@ -1615,8 +2171,40 @@ class ValidationManager:
         """
         errors = []
         
-        # Contract info is not lot-specific, it's global
-        contract_type = self.session_state.get('contractInfo.type')
+        # Contract info pattern matching like other fields
+        # Check multiple possible key patterns including lot-specific
+        contract_type = None
+        contract_type_keys = []
+        
+        # Get lot info
+        current_lot_index = self.session_state.get('current_lot_index')
+        lots = self.session_state.get('lots', [])
+        
+        # If we have a current lot index, prioritize that key (check all patterns)
+        if current_lot_index is not None:
+            contract_type_keys.append(f'lot_{current_lot_index}_contractInfo.type')  # Underscore pattern
+            contract_type_keys.append(f'lot_{current_lot_index}.contractInfo.type')  # Dot pattern
+            contract_type_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_contractInfo.type')  # Double prefix pattern
+        
+        # Add general mode and direct keys
+        contract_type_keys.extend([
+            'general.contractInfo.type',        # General mode
+            'contractInfo.type',                # Direct key
+            'widget_contractInfo.type',         # Widget key
+        ])
+        
+        # Add other lot-specific keys as fallback (check all patterns)
+        for i in range(len(lots)):
+            if current_lot_index is None or i != current_lot_index:
+                contract_type_keys.append(f'lot_{i}_contractInfo.type')  # Underscore pattern
+                contract_type_keys.append(f'lot_{i}.contractInfo.type')  # Dot pattern
+                contract_type_keys.append(f'lot_{i}.lot_{i}_contractInfo.type')  # Double prefix pattern
+        
+        for key in contract_type_keys:
+            value = self.session_state.get(key)
+            if value is not None and value != "":
+                contract_type = value
+                break
         
         # Debug logging to understand what's happening
         import logging
@@ -1693,6 +2281,22 @@ class ValidationManager:
             if not duration:
                 errors.append("Navedite trajanje podaljšanja pogodbe")
         
+        # Check internal rules document
+        has_internal_rules = self.session_state.get('contractInfo.hasInternalRules')
+        
+        # Handle both cases - 'DA'/'da' and 'NE'/'ne'
+        if has_internal_rules and has_internal_rules.lower() == 'da':
+            # Check if document is uploaded
+            doc_field = 'contractInfo.internalRulesDocument'
+            doc_uploaded = self.session_state.get(doc_field)
+            
+            # Also check for file info in session (recently uploaded but not saved)
+            file_info_key = f'{doc_field}_file_info'
+            has_file_info = file_info_key in self.session_state
+            
+            if not doc_uploaded and not has_file_info:
+                errors.append("Pri internih pravilih morate naložiti dokument")
+        
         return len(errors) == 0, errors
     
     def validate_merila(self, step_key: str = 'selectionCriteria') -> Tuple[bool, List[str]]:
@@ -1742,8 +2346,17 @@ class ValidationManager:
                 ratio_keys = [
                     f"{step_key}.{criterion}Ratio",
                     f"general.{step_key}.{criterion}Ratio",
-                    f"lot_1_{step_key}.{criterion}Ratio",
                 ]
+                
+                # Add lot-specific ratio keys based on current lot index
+                current_lot_index = self.session_state.get('current_lot_index')
+                if current_lot_index is not None:
+                    ratio_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{criterion}Ratio")  # Underscore pattern
+                    ratio_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{criterion}Ratio")  # Dot pattern
+                    ratio_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{criterion}Ratio")  # Double prefix pattern
+                
+                # Also check hardcoded lot_1 for backwards compatibility
+                ratio_keys.append(f"lot_1_{step_key}.{criterion}Ratio")
                 
                 # Handle special case for social criteria - sum all sub-criteria points
                 if criterion == 'socialCriteria':
@@ -1764,6 +2377,13 @@ class ValidationManager:
                             f"general.{step_key}.{ratio_field}",
                             f"lot_1_{step_key}.{ratio_field}",
                         ]
+                        
+                        # Add lot-specific keys based on current lot index
+                        current_lot_index = self.session_state.get('current_lot_index')
+                        if current_lot_index is not None:
+                            ratio_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{ratio_field}")  # Underscore pattern
+                            ratio_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{ratio_field}")  # Dot pattern
+                            ratio_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{ratio_field}")  # Double prefix pattern
                         
                         for key in ratio_keys:
                             test_value = self.session_state.get(key, None)
@@ -1829,23 +2449,115 @@ class ValidationManager:
         
         # Rule 4: Other criteria custom description validation
         if criteria_selected.get('otherCriteriaCustom'):
-            description = self.session_state.get(f"{step_key}.otherCriteriaDescription", '').strip()
+            # Try different possible key patterns for the description
+            desc_keys = [
+                f"{step_key}.otherCriteriaDescription",
+                f"general.{step_key}.otherCriteriaDescription",
+            ]
+            
+            # Add lot-specific keys based on current lot index
+            current_lot_index = self.session_state.get('current_lot_index')
+            if current_lot_index is not None:
+                desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.otherCriteriaDescription")  # Underscore pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.{step_key}.otherCriteriaDescription")  # Dot pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.otherCriteriaDescription")  # Double prefix pattern
+            
+            # Also check hardcoded lot_1 for backwards compatibility
+            desc_keys.append(f"lot_1_{step_key}.otherCriteriaDescription")
+            
+            description = ""
+            for key in desc_keys:
+                test_value = self.session_state.get(key, '').strip()
+                if test_value:
+                    description = test_value
+                    break
+            
             if not description:
                 errors.append("Pri drugih merilih morate navesti opis")
         
         # Rule 5: Additional technical requirements description validation
         if criteria_selected.get('additionalTechnicalRequirements'):
-            description = self.session_state.get(f"{step_key}.technicalRequirementsDescription", '').strip()
+            # Try different possible key patterns for the description
+            desc_keys = [
+                f"{step_key}.technicalRequirementsDescription",
+                f"general.{step_key}.technicalRequirementsDescription",
+            ]
+            
+            # Add lot-specific keys based on current lot index
+            current_lot_index = self.session_state.get('current_lot_index')
+            if current_lot_index is not None:
+                desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.technicalRequirementsDescription")  # Underscore pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.{step_key}.technicalRequirementsDescription")  # Dot pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.technicalRequirementsDescription")  # Double prefix pattern
+            
+            # Also check hardcoded lot_1 for backwards compatibility
+            desc_keys.append(f"lot_1_{step_key}.technicalRequirementsDescription")
+            
+            description = ""
+            for key in desc_keys:
+                test_value = self.session_state.get(key, '').strip()
+                if test_value:
+                    description = test_value
+                    break
+            
             if not description:
                 errors.append("Pri dodatnih tehničnih zahtevah morate navesti opis")
         
         # Rule 6: Cost efficiency description validation
         if criteria_selected.get('costEfficiency'):
-            description = self.session_state.get(f"{step_key}.costEfficiencyDescription", '').strip()
+            # Try different possible key patterns for the description
+            desc_keys = [
+                f"{step_key}.costEfficiencyDescription",
+                f"general.{step_key}.costEfficiencyDescription",
+            ]
+            
+            # Add lot-specific keys based on current lot index
+            current_lot_index = self.session_state.get('current_lot_index')
+            if current_lot_index is not None:
+                desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.costEfficiencyDescription")  # Underscore pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.{step_key}.costEfficiencyDescription")  # Dot pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.costEfficiencyDescription")  # Double prefix pattern
+            
+            # Also check hardcoded lot_1 for backwards compatibility
+            desc_keys.append(f"lot_1_{step_key}.costEfficiencyDescription")
+            
+            description = ""
+            for key in desc_keys:
+                test_value = self.session_state.get(key, '').strip()
+                if test_value:
+                    description = test_value
+                    break
+            
             if not description:
                 errors.append("Pri stroškovni učinkovitosti morate navesti konkretizacijo")
         
-        # Rule 7: CPV validation (includes price-only validation)
+        # Rule 7: Shorter deadline minimum validation
+        if criteria_selected.get('shorterDeadline'):
+            # Check for minimum deadline in various key patterns
+            minimum_deadline = None
+            possible_keys = [
+                f"{step_key}.shorterDeadlineMinimum",
+                f"general.{step_key}.shorterDeadlineMinimum",
+                f"lot_1_{step_key}.shorterDeadlineMinimum",
+            ]
+            
+            # Handle lot-specific keys
+            current_lot_index = self.session_state.get('current_lot_index')
+            if current_lot_index is not None:
+                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.shorterDeadlineMinimum")
+                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.shorterDeadlineMinimum")
+                possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.shorterDeadlineMinimum")
+            
+            for key in possible_keys:
+                value = self.session_state.get(key, '').strip()
+                if value:
+                    minimum_deadline = value
+                    break
+            
+            if not minimum_deadline:
+                errors.append("Pri krajšem roku izvedbe morate navesti minimalni sprejemljivi rok")
+        
+        # Rule 8: CPV validation (includes price-only validation)
         cpv_errors, cpv_warnings = self._validate_cpv_requirements(criteria_selected)
         errors.extend(cpv_errors)
         warnings.extend(cpv_warnings)
@@ -1886,13 +2598,24 @@ class ValidationManager:
         # Debug logging
         import logging
         
+        # Get current lot index for proper key checking
+        current_lot_index = self.session_state.get('current_lot_index')
+        
         for criterion in criteria:
             # Try different possible key patterns
             possible_keys = [
                 f"{step_key}.{criterion}",  # Standard: selectionCriteria.price
                 f"general.{step_key}.{criterion}",  # General lot: general.selectionCriteria.price
-                f"lot_1_{step_key}.{criterion}",  # Specific lot: lot_1_selectionCriteria.price
             ]
+            
+            # Add lot-specific keys based on current lot index
+            if current_lot_index is not None:
+                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{criterion}")  # Underscore pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{criterion}")  # Dot pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{criterion}")  # Double prefix pattern
+            
+            # Also check hardcoded lot_1 for backwards compatibility
+            possible_keys.append(f"lot_1_{step_key}.{criterion}")
             
             # Also check if step_key already has a prefix
             if 'general.' in step_key:
@@ -2000,6 +2723,9 @@ class ValidationManager:
             'socialCriteriaOtherRatio'
         ]
         
+        # Get current lot index for proper key checking
+        current_lot_index = self.session_state.get('current_lot_index')
+        
         for option in social_options:
             # Try different key patterns for the checkbox
             possible_keys = [
@@ -2007,6 +2733,12 @@ class ValidationManager:
                 f"general.{step_key}.socialCriteriaOptions.{option}",
                 f"lot_1_{step_key}.socialCriteriaOptions.{option}",
             ]
+            
+            # Add lot-specific keys based on current lot index
+            if current_lot_index is not None:
+                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.socialCriteriaOptions.{option}")  # Underscore pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.socialCriteriaOptions.{option}")  # Dot pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.socialCriteriaOptions.{option}")  # Double prefix pattern
             
             for key in possible_keys:
                 value = self.session_state.get(key, None)
@@ -2024,6 +2756,12 @@ class ValidationManager:
                 f"general.{step_key}.{ratio_field}",
                 f"lot_1_{step_key}.{ratio_field}",
             ]
+            
+            # Add lot-specific keys based on current lot index
+            if current_lot_index is not None:
+                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{ratio_field}")  # Underscore pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{ratio_field}")  # Dot pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{ratio_field}")  # Double prefix pattern
             
             for key in possible_keys:
                 value = self.session_state.get(key, None)

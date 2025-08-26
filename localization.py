@@ -212,7 +212,12 @@ def get_dynamic_step_label(step_keys, step_number: int, has_lots: bool = False) 
     
     # Handle lot context steps
     if first_key.startswith('lot_context_'):
-        return f"Sklop {first_key.split('_')[-1]}"
+        import streamlit as st
+        lot_index = int(first_key.split('_')[-1])
+        lot_names = st.session_state.get('lot_names', [])
+        if lot_index < len(lot_names):
+            return f"Sklop: {lot_names[lot_index]}"
+        return f"Sklop {lot_index + 1}"
     
     # Handle lot-prefixed keys
     if first_key.startswith('lot_') and '_' in first_key[4:]:
@@ -256,4 +261,6 @@ def format_step_indicator(current_step: int, total_steps: int) -> str:
     Returns:
         Formatted step indicator
     """
-    return f"{get_text('step')} {current_step + 1} {get_text('of_total')} {total_steps}"
+    # Handle case where current step exceeds total (can happen with dynamic lot steps)
+    display_total = max(total_steps, current_step + 1)
+    return f"{get_text('step')} {current_step + 1} {get_text('of_total')} {display_total}"

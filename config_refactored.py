@@ -159,11 +159,18 @@ def get_lot_navigation_buttons(session_state):
     
     if current_lot_index < total_lots - 1:
         # More configured lots to fill
+        # When we're starting a lot section, show the current lot name, not the next
+        current_lot_name = lot_names[current_lot_index] if current_lot_index < len(lot_names) else f"Sklop {current_lot_index + 1}"
         next_lot_name = lot_names[current_lot_index + 1]
-        buttons.append((f"Nadaljuj s: {next_lot_name}", "next_lot", "primary"))
-    
-    # Option to add new lot
-    buttons.append(("Nov sklop", "new_lot", "secondary"))
+        
+        # Check if we're at the beginning of a lot's data entry
+        # This happens right after lot configuration or after completing a previous lot
+        if not session_state.get(f"lot_{current_lot_index}_data_started", False):
+            # Show we're starting the current lot
+            buttons.append((f"Začni vnos: {current_lot_name}", "start_current_lot", "primary"))
+        else:
+            # We're in the middle of a lot, show next lot button
+            buttons.append((f"Nadaljuj s: {next_lot_name}", "next_lot", "primary"))
     
     # Option to finish
     if current_lot_index == total_lots - 1:

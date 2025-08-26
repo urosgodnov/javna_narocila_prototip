@@ -474,11 +474,13 @@
                 "hasInspection": {
                     "type": "boolean",
                     "title": "Ali naročnik organizira ogled lokacije?",
+                    "description": "✓ Označeno: Naročnik bo organiziral ogled lokacije za ponudnike. Prikazala se bodo dodatna polja za vnos terminov, lokacije in drugih podrobnosti ogleda.\n✗ Neoznačeno: Naročnik ne organizira ogleda lokacije. Ponudniki oddajo ponudbe brez predhodnega ogleda.",
                     "default": false
                 },
                 "isInspectionMandatory": {
                     "type": "boolean",
                     "title": "Ali je ogled obvezen za vse ponudnike?",
+                    "description": "✓ Označeno: Ogled je obvezen - samo ponudniki, ki se udeležijo ogleda, lahko oddajo ponudbo.\n✗ Neoznačeno: Ogled je neobvezen - ponudniki se lahko odločijo, ali se bodo udeležili ogleda ali ne.",
                     "default": false,
                     "render_if": {
                         "field": "inspectionInfo.hasInspection",
@@ -526,6 +528,7 @@
                 "isOfferAfterInspectionOnly": {
                     "type": "boolean",
                     "title": "Ponudniki lahko sestavijo ponudbo šele po opravljenem ogledu lokacije na kraju samem",
+                    "description": "✓ Označeno: Ponudba je možna SAMO po ogledu - naročnik mora v razpisni dokumentaciji jasno zapisati to zahtevo in podaljšati roke za oddajo ponudb.\n✗ Neoznačeno: Ponudniki lahko oddajo ponudbo tudi brez ogleda lokacije, na lastno odgovornost glede lokalnih razmer.",
                     "default": false,
                     "render_if": {
                         "field": "inspectionInfo.hasInspection",
@@ -990,6 +993,32 @@
                     "required_if": {
                         "field": "contractInfo.canBeExtended",
                         "value": "da"
+                    }
+                },
+                "sectionC_title": {
+                    "type": "string",
+                    "default": "C. INTERNA PRAVILA",
+                    "title": "C. INTERNA PRAVILA",
+                    "readonly": true
+                },
+                "hasInternalRules": {
+                    "type": "string",
+                    "title": "Ali imate interna pravila, ki jih je potrebno upoštevati pri pripravi javnega naročila?",
+                    "description": "✓ DA: Naložiti boste morali dokument z internimi pravili.\n✗ NE: Ni potrebe po nalaganju dokumentov internih pravil.",
+                    "enum": [
+                        "DA",
+                        "NE"
+                    ],
+                    "default": "NE"
+                },
+                "internalRulesDocument": {
+                    "type": "string",
+                    "format": "file",
+                    "title": "Prosimo naložite dokument interna pravila",
+                    "description": "Naložite dokument z internimi pravili vaše organizacije, ki se nanašajo na javna naročila.",
+                    "render_if": {
+                        "field": "contractInfo.hasInternalRules",
+                        "value": "DA"
                     }
                 }
             }

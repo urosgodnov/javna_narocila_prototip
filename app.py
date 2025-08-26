@@ -9,7 +9,7 @@ from config_refactored import (
     get_lot_navigation_buttons,
     SCHEMA_FILE
 )
-from utils.schema_utils import load_json_schema, get_form_data_from_session, clear_form_data
+from utils.schema_utils import load_json_schema, get_form_data_from_session, clear_form_data, resolve_schema_ref
 from utils.lot_utils import (
     get_current_lot_context, initialize_lot_session_state, 
     migrate_existing_data_to_lot_structure, get_lot_progress_info
@@ -125,11 +125,29 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
             'save_location': location
         }
         
-        # Save to database
-        draft_id = database.save_draft(form_data)
+        # Check if we're already working on a draft
+        if 'current_draft_id' in st.session_state and st.session_state.current_draft_id:
+            # Check if we're in edit mode for an existing procurement
+            if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
+                # Update the existing procurement, not the draft
+                draft_id = st.session_state.edit_record_id
+                success = database.update_procurement(draft_id, form_data)
+                if not success:
+                    draft_id = None
+            else:
+                # Update existing draft
+                draft_id = st.session_state.current_draft_id
+                success = database.update_procurement(draft_id, form_data)
+                if not success:
+                    # If update fails (draft was deleted?), create new one
+                    draft_id = database.save_draft(form_data)
+                    st.session_state.current_draft_id = draft_id
+        else:
+            # Create new draft
+            draft_id = database.save_draft(form_data)
+            st.session_state.current_draft_id = draft_id
         
         if draft_id:
-            st.session_state.current_draft_id = draft_id
             
             # Handle file uploads if requested
             files_saved = 0
@@ -189,15 +207,27 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
                     file_keys = [k for k in st.session_state.keys() if k.endswith('_file_info')]
                     for file_key in file_keys:
                         file_info = st.session_state[file_key]
-                        if file_info and 'content' in file_info:
+                        # Check for either 'data' (new format) or 'content' (old format)
+                        file_data = file_info.get('data') if file_info else None
+                        if not file_data:
+                            file_data = file_info.get('content') if file_info else None
+                            
+                        if file_info and file_data:
+                            # Extract field name from the key
+                            field_name = file_key.replace('_file_info', '')
+                            
                             # Save file to document service
-                            doc_service.save_form_document(
+                            doc_id, is_new = doc_service.save_document(
                                 form_id=draft_id,
+                                form_type='draft',
+                                field_name=field_name,
                                 file_name=file_info['name'],
-                                file_content=file_info['content'],
-                                file_type=file_info.get('type', 'application/octet-stream'),
-                                field_name=file_key.replace('_file_info', '')
+                                file_content=BytesIO(file_data) if isinstance(file_data, bytes) else file_data,
+                                file_size=file_info.get('size', len(file_data) if isinstance(file_data, bytes) else 0)
                             )
+                            
+                            # Clear from session after successful save
+                            del st.session_state[file_key]
                             files_saved += 1
                             
                 except Exception as e:
@@ -447,13 +477,26 @@ def render_main_form():
         """, unsafe_allow_html=True)
 
         # Enhanced Progress Bar with step labels
-        progress_percentage = current_step_num / total_steps
-        st.progress(progress_percentage, text=f"{get_text('progress')}: {current_step_num}/{total_steps}")
+        # Ensure progress percentage is between 0 and 1
+        progress_percentage = min(1.0, current_step_num / total_steps)
+        # Show accurate step count even if it exceeds expected total
+        st.progress(progress_percentage, text=f"{get_text('progress')}: {current_step_num}/{max(total_steps, current_step_num)}")
         
         # Step navigation breadcrumbs
         render_step_breadcrumbs()
 
         # Get properties for the current step and render the form
+        # Protect against IndexError if current_step is out of range
+        if st.session_state.current_step < 0:
+            st.error(f"Step index {st.session_state.current_step} is negative. Resetting to step 0.")
+            st.session_state.current_step = 0
+            st.rerun()
+        elif st.session_state.current_step >= len(dynamic_form_steps):
+            st.error(f"Step index {st.session_state.current_step} is out of range. Maximum step is {len(dynamic_form_steps) - 1}.")
+            st.write(f"Debug: dynamic_form_steps has {len(dynamic_form_steps)} steps: {[i for i in range(len(dynamic_form_steps))]}")
+            st.session_state.current_step = len(dynamic_form_steps) - 1  # Reset to last valid step
+            st.rerun()
+            
         current_step_keys = dynamic_form_steps[st.session_state.current_step]
         
         # Get lot context for current step
@@ -475,18 +518,64 @@ def render_main_form():
                 # Map lot-specific keys back to original schema properties
                 original_key = key.split('_', 2)[2]  # lot_0_orderType -> orderType
                 if original_key in st.session_state.schema["properties"]:
-                    # Copy the schema property but remove render_if conditions for lot-specific fields
+                    # Copy the schema property 
                     prop_copy = st.session_state.schema["properties"][original_key].copy()
-                    if "render_if" in prop_copy:
-                        del prop_copy["render_if"]  # Lot logic handles visibility
+                    
+                    # If this property has a $ref, resolve it and merge properties
+                    if "$ref" in prop_copy:
+                        ref_definition = resolve_schema_ref(st.session_state.schema, prop_copy["$ref"])
+                        if ref_definition and "properties" in ref_definition:
+                            # Merge the referenced properties into prop_copy
+                            prop_copy["properties"] = ref_definition["properties"]
+                            # Ensure type is set to object
+                            prop_copy["type"] = "object"
+                            # Remove the $ref since we've resolved it
+                            del prop_copy["$ref"]
+                            
+                            # Special debug for orderType
+                            if original_key == "orderType":
+                                st.write(f"🔍 OrderType after resolution in lot mode:")
+                                st.write(f"  - Has $ref: {'$ref' in prop_copy}")
+                                st.write(f"  - Has properties: {'properties' in prop_copy}")
+                                st.write(f"  - Number of properties: {len(prop_copy.get('properties', {}))}")
+                                st.write(f"  - Type field: {prop_copy.get('type')}")
+                    
+                    # For orderType specifically, remove render_if condition in lot mode
+                    # The render_if condition checks hasLots==false which prevents rendering in lot mode
+                    if original_key == "orderType":
+                        if "render_if" in prop_copy:
+                            del prop_copy["render_if"]
+                    
+                    # Don't remove render_if conditions for other fields - they're needed for nested field visibility
+                    # The form renderer will handle lot scoping for the conditions
                     current_step_properties[key] = prop_copy
             else:
                 # Regular properties
                 if key in st.session_state.schema["properties"]:
                     prop_copy = st.session_state.schema["properties"][key].copy()
                     
-                    # For orderType in general mode, remove render_if condition
-                    if key == "orderType" and lot_context and lot_context['mode'] == 'general':
+                    # If this property has a $ref, resolve it and merge properties
+                    if "$ref" in prop_copy:
+                        ref_definition = resolve_schema_ref(st.session_state.schema, prop_copy["$ref"])
+                        if ref_definition and "properties" in ref_definition:
+                            # Merge the referenced properties into prop_copy
+                            prop_copy["properties"] = ref_definition["properties"]
+                            # Ensure type is set to object
+                            prop_copy["type"] = "object"
+                            # Remove the $ref since we've resolved it
+                            del prop_copy["$ref"]
+                            
+                            # Special debug for orderType
+                            if key == "orderType":
+                                st.write(f"🔍 OrderType after resolution in regular mode:")
+                                st.write(f"  - Has $ref: {'$ref' in prop_copy}")
+                                st.write(f"  - Has properties: {'properties' in prop_copy}")
+                                st.write(f"  - Number of properties: {len(prop_copy.get('properties', {}))}")
+                                st.write(f"  - Type field: {prop_copy.get('type')}")
+                    
+                    # For orderType in lot mode or general mode, remove render_if condition
+                    # The render_if condition checks hasLots==false which prevents rendering in lot mode
+                    if key == "orderType":
                         if "render_if" in prop_copy:
                             del prop_copy["render_if"]
                     
@@ -498,6 +587,47 @@ def render_main_form():
             st.write(f"**Current Step:** {st.session_state.current_step + 1} of {len(dynamic_form_steps)}")
             st.write(f"**Step Keys:** {current_step_keys}")
             st.write(f"**Current Step Properties Keys:** {list(current_step_properties.keys())}")
+            
+            # Check if we're on priceInfo step for debugging validation
+            price_info_keys = [k for k in current_step_keys if 'priceInfo' in k]
+            if price_info_keys:
+                st.checkbox("🔍 Debug price validation", key="debug_price_validation")
+                if st.session_state.get('debug_price_validation'):
+                    st.write(f"✓ This is a priceInfo step: {price_info_keys}")
+                    st.write("**Session state keys for price clause:**")
+                    for key in st.session_state:
+                        if 'priceInfo' in key and 'priceClause' in key:
+                            st.write(f"  - {key}: {st.session_state[key]}")
+                    st.write(f"**Current lot index:** {st.session_state.get('current_lot_index', 'Not set')}")
+            
+            # Check if we're on orderType or lot_*_orderType step
+            order_type_keys = [k for k in current_step_keys if 'orderType' in k]
+            if order_type_keys:
+                st.success(f"✓ This is an orderType step: {order_type_keys}")
+                for order_key in order_type_keys:
+                    if order_key in current_step_properties:
+                        order_props = current_step_properties[order_key]
+                        st.write(f"**{order_key} structure:**")
+                        st.write(f"  - Has $ref: {'$ref' in order_props}")
+                        st.write(f"  - Has type: {'type' in order_props}")
+                        if 'type' in order_props:
+                            st.write(f"  - Type value: {order_props['type']}")
+                        st.write(f"  - Has properties: {'properties' in order_props}")
+                        if 'properties' in order_props:
+                            prop_count = len(order_props['properties'])
+                            st.write(f"  - Number of properties: {prop_count}")
+                            if prop_count > 0:
+                                st.write("  - First 5 properties:")
+                                for prop_name in list(order_props['properties'].keys())[:5]:
+                                    st.write(f"    • {prop_name}")
+                        else:
+                            st.error(f"✗ {order_key} has no properties!")
+                        
+                        # Show full structure for debugging
+                        with st.expander("Full orderType structure"):
+                            st.json({k: v for k, v in order_props.items() if k != 'properties'})
+                    else:
+                        st.error(f"✗ {order_key} NOT in current_step_properties!")
             
             # Check if we're on contractInfo step
             if 'contractInfo' in current_step_keys:

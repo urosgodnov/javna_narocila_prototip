@@ -203,7 +203,9 @@ def display_criteria_ratios_total(parent_key="", lot_context=None):
 def _get_default_value(full_key, prop_details, lot_context=None):
     """Get appropriate default value for form field."""
     # Apply lot scoping if context is provided, but respect global fields
-    global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo', 'participationAndExclusion', 'participationConditions', 'financialGuarantees']
+    # Global fields are those that are shared across all lots
+    global_fields = ['clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 
+                    'lotsInfo', 'lots', 'lotConfiguration']
     is_global_field = any(full_key.startswith(gf) for gf in global_fields)
     
     if is_global_field:
@@ -283,22 +285,47 @@ def _check_single_condition(render_if, parent_key="", lot_context=None, session_
     # Resolve the actual session key considering lot context
     if condition_field:
         # Check if this is a global field that shouldn't be scoped
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo', 'participationAndExclusion', 'participationConditions', 'financialGuarantees']
+        # Global fields are those that are shared across all lots
+        global_fields = ['clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 
+                        'lotsInfo', 'lots', 'lotConfiguration']
         is_global_field = any(condition_field.startswith(gf) for gf in global_fields)
         
         if is_global_field:
             actual_session_key = condition_field
+            current_field_value = st.session_state.get(actual_session_key)
         elif session_key_prefix:
             # If we have a session key prefix (from lot scoping), use it
             actual_session_key = f"{session_key_prefix}.{condition_field}"
+            current_field_value = st.session_state.get(actual_session_key)
         elif lot_context and lot_context['mode'] == 'lots' and lot_context['lot_index'] is not None:
-            actual_session_key = get_lot_scoped_key(condition_field, lot_context['lot_index'])
+            # Try multiple possible key formats due to double-prefixing issues
+            lot_index = lot_context['lot_index']
+            possible_keys = [
+                # Double-prefixed format (what form renderer creates)
+                # e.g., technicalSpecifications.hasSpecifications -> lot_0.lot_0_technicalSpecifications.hasSpecifications
+                f"lot_{lot_index}.lot_{lot_index}_{condition_field.replace('.', '.')}",
+                # Normal lot-scoped format
+                get_lot_scoped_key(condition_field, lot_index),
+                # Fallback to original field
+                condition_field
+            ]
+            # Try each key format until we find one that exists
+            current_field_value = None
+            for key in possible_keys:
+                if key in st.session_state:
+                    current_field_value = st.session_state.get(key)
+                    actual_session_key = key
+                    break
+            else:
+                # If no key found, use the normal scoped key
+                actual_session_key = get_lot_scoped_key(condition_field, lot_index)
+                current_field_value = st.session_state.get(actual_session_key)
         elif lot_context and lot_context['mode'] == 'general':
             actual_session_key = get_lot_scoped_key(condition_field, None)
+            current_field_value = st.session_state.get(actual_session_key)
         else:
             actual_session_key = condition_field
-        
-        current_field_value = st.session_state.get(actual_session_key)
+            current_field_value = st.session_state.get(actual_session_key)
     else:
         current_field_value = None
     
@@ -415,7 +442,9 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
         
         # Create the session state key (scoped for lots)
         # Some fields should never be lot-scoped as they control global form behavior
-        global_fields = ['lotsInfo', 'lots', 'clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'contractInfo', 'otherInfo', 'executionDeadline', 'priceInfo', 'negotiationsInfo', 'inspectionInfo', 'participationAndExclusion', 'participationConditions', 'financialGuarantees']
+        # Global fields are those that are shared across all lots
+        global_fields = ['clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 
+                        'lotsInfo', 'lots', 'lotConfiguration']
         is_global_field = any(full_key.startswith(gf) for gf in global_fields)
         
         if is_global_field:
@@ -864,10 +893,21 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 # Check if we have existing documents for this field
                 existing_doc = None
                 remove_key = f"{session_key}_remove"
+                file_info_key = f"{session_key}_file_info"
                 
                 # Check if file was marked for removal
                 if remove_key not in st.session_state or not st.session_state[remove_key]:
-                    if 'form_id' in st.session_state and st.session_state.form_id:
+                    # First check if we have a file in session state (recently uploaded)
+                    if file_info_key in st.session_state:
+                        # We have a recently uploaded file in session
+                        file_info = st.session_state[file_info_key]
+                        existing_doc = {
+                            'original_name': file_info['name'],
+                            'file_size': file_info['size'],
+                            'from_session': True  # Mark as from session, not database
+                        }
+                    # If no file in session, check database
+                    elif 'form_id' in st.session_state and st.session_state.form_id:
                         try:
                             from services.form_document_service import FormDocumentService
                             doc_service = FormDocumentService()
@@ -891,8 +931,13 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                         if st.button("Remove", key=f"remove_{session_key}"):
                             # Mark for removal in session state
                             st.session_state[remove_key] = True
-                            # Store document ID for removal on save
-                            st.session_state[f"{session_key}_remove_doc_id"] = existing_doc['id']
+                            # If it's from session, remove the file info
+                            if existing_doc.get('from_session'):
+                                if file_info_key in st.session_state:
+                                    del st.session_state[file_info_key]
+                            else:
+                                # Store document ID for removal on save (for database files)
+                                st.session_state[f"{session_key}_remove_doc_id"] = existing_doc['id']
                             st.rerun()
                 
                 # Show file uploader (for new upload or replacement)
@@ -1059,7 +1104,14 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
             
             # Story 3.0.3: Apply formatting for financial fields
             financial_fields = ["estimatedValue", "guaranteedFunds", "availableFunds", "averageSalary"]
-            is_financial = any(field in prop_name for field in financial_fields)
+            
+            # Check if this is a guarantee amount field from financialGuarantees section
+            guarantee_amount_field = (prop_name == "amount" and 
+                                    parent_key and 
+                                    any(guarantee_type in parent_key for guarantee_type in 
+                                        ["fzSeriousness", "fzPerformance", "fzWarranty"]))
+            
+            is_financial = any(field in prop_name for field in financial_fields) or guarantee_amount_field
             
             if is_financial:
                 # Use formatted display for financial fields
@@ -1173,7 +1225,17 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     st.session_state[session_key] = False
             
             widget_key = f"widget_{session_key}"
-            checkbox_value = st.checkbox(display_label, value=st.session_state[session_key], key=widget_key, help=help_text)
+            
+            # For checkboxes with detailed descriptions containing ✓/✗, show info box instead of help tooltip
+            if help_text and ('✓' in help_text or '✗' in help_text):
+                # Render checkbox without help parameter
+                checkbox_value = st.checkbox(display_label, value=st.session_state[session_key], key=widget_key)
+                # Display help text as info box below checkbox for consistency
+                with st.expander("ℹ️ Kaj pomeni označitev?", expanded=False):
+                    st.info(help_text)
+            else:
+                # Regular checkbox with tooltip help for simple descriptions
+                checkbox_value = st.checkbox(display_label, value=st.session_state[session_key], key=widget_key, help=help_text)
             
             # Sync widget value back to session state
             if checkbox_value != st.session_state.get(session_key):

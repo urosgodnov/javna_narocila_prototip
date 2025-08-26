@@ -241,6 +241,9 @@ def load_procurement_to_form(procurement_id):
         # Clear existing form data first
         clear_form_data()
         
+        # Set the current draft ID for this session
+        st.session_state.current_draft_id = procurement_id
+        
         # Load all form data into session state
         def flatten_dict(d, parent_key='', sep='.'):
             """Flatten nested dictionary into dot-notation keys."""
