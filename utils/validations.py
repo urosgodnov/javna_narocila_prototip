@@ -159,6 +159,36 @@ class ValidationManager:
         # Store step number for other methods to use
         self.current_step_number = step_number
         
+        # Extract current lot index from step_keys if present
+        # This is more reliable than session state which might be outdated
+        detected_lot_index = None
+        for key in step_keys:
+            if key.startswith('lot_'):
+                # Extract lot index from pattern like lot_0.orderType
+                # Split by underscore first to get "lot_0"
+                if '_' in key:
+                    parts = key.split('_')
+                    if len(parts) >= 2:
+                        # Get the number part (could be "0.orderType" or just "0")
+                        lot_part = parts[1].split('.')[0] if '.' in parts[1] else parts[1]
+                        if lot_part.isdigit():
+                            detected_lot_index = int(lot_part)
+                            break
+        
+        # Store original lot index for restoration later
+        original_lot_index = self.session_state.get('current_lot_index')
+        
+        # Debug logging
+        import logging
+        logging.info(f"[validate_step] Step keys received: {step_keys}")
+        logging.info(f"[validate_step] Detected lot index: {detected_lot_index}, Original lot index: {original_lot_index}")
+        
+        # Update session state with detected lot index for validators to use
+        if detected_lot_index is not None:
+            logging.info(f"[validate_step] Updating current_lot_index from {original_lot_index} to {detected_lot_index}")
+            # Temporarily override current_lot_index for this validation
+            self.session_state['current_lot_index'] = detected_lot_index
+        
         # Collect array data from individual fields
         self._collect_array_data()
         
@@ -168,14 +198,17 @@ class ValidationManager:
         
         # Skip validation for lot context steps - they're just informational
         if any(key.startswith('lot_context_') for key in step_keys):
+            # Restore original lot index if we changed it
+            if detected_lot_index is not None and 'original_lot_index' in locals():
+                self.session_state['current_lot_index'] = original_lot_index
             return True, []
         
-        # Extract base field names from lot-prefixed keys (lot_0_orderType -> orderType)
+        # Extract base field names from lot-prefixed keys (lot_0.orderType -> orderType)
         base_keys = []
         for key in step_keys:
-            if key.startswith('lot_') and '_' in key[4:]:
-                # Extract base name: lot_0_orderType -> orderType
-                base_key = key.split('_', 2)[2] if len(key.split('_')) > 2 else key
+            if key.startswith('lot_') and '.' in key:
+                # Extract base name: lot_0.orderType -> orderType
+                base_key = key.split('.', 1)[1] if '.' in key else key
                 base_keys.append(base_key)
             else:
                 base_keys.append(key)
@@ -253,6 +286,13 @@ class ValidationManager:
         is_valid = len(self.errors) == 0
         import logging
         logging.info(f"[ValidationManager.validate_step] Final validation result: is_valid={is_valid}, errors={self.errors}")
+        
+        # Restore original lot index if we changed it
+        if detected_lot_index is not None:
+            self.session_state['current_lot_index'] = original_lot_index
+            import logging
+            logging.info(f"[validate_step] Restored original lot index to {original_lot_index}")
+            
         return is_valid, self.errors
     
     def _expand_step_keys(self, step_keys: List[str]) -> List[str]:
@@ -363,7 +403,7 @@ class ValidationManager:
                     possible_keys.extend([
                         f'lot_{current_lot_index}_{section_name}.{base_field}',  # Underscore pattern
                         f'lot_{current_lot_index}.{section_name}.{base_field}',  # Dot pattern
-                        f'lot_{current_lot_index}.lot_{current_lot_index}_{section_name}.{base_field}',  # Double prefix pattern
+                        f'lot_{current_lot_index}.{section_name}.{base_field}',  # Double prefix pattern
                         f'{section_name}.{base_field}',  # Direct pattern
                     ])
                 elif len(lots) == 0:  # General mode without lots
@@ -877,17 +917,21 @@ class ValidationManager:
         # Check estimated value - try multiple possible keys based on context
         estimated_value = None
         
+        # Debug: Log all keys containing estimatedValue
+        logging.info("[validate_order_type] === Searching for estimatedValue ===")
+        estimated_keys = [k for k in self.session_state.keys() if 'estimatedValue' in k]
+        for k in estimated_keys:
+            v = self.session_state.get(k)
+            logging.info(f"  Found in session: {k} = {v}")
+        
         # Build keys based on current context
         possible_keys = []
         
         if lot_mode == 'multiple' and current_lot_index is not None:
-            # Check for double-prefixed keys first (form renderer issue)
-            possible_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.estimatedValue')
-            # Then normal lot-prefixed keys
+            # Use dot notation only
             possible_keys.append(f'lot_{current_lot_index}.orderType.estimatedValue')
         elif lot_mode == 'single':
-            # Check for double-prefixed keys first
-            possible_keys.append(f'lot_0.lot_0_orderType.estimatedValue')
+            # Use dot notation only
             possible_keys.append(f'lot_0.orderType.estimatedValue')
         else:
             # General mode (no lots)
@@ -895,6 +939,8 @@ class ValidationManager:
         
         # Add fallback keys - but prefer lot-specific keys
         possible_keys.append('orderType.estimatedValue')
+        
+        logging.info(f"[validate_order_type] Looking for estimatedValue with keys: {possible_keys}")
         
         for key in possible_keys:
             if key in self.session_state:
@@ -926,12 +972,11 @@ class ValidationManager:
         
         if lot_mode == 'multiple' and current_lot_index is not None:
             # Check for double-prefixed keys first (form renderer issue)
-            cofinanced_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.isCofinanced')
+            cofinanced_keys.append(f'lot_{current_lot_index}.orderType.isCofinanced')
             # Then normal lot-prefixed keys
             cofinanced_keys.append(f'lot_{current_lot_index}.orderType.isCofinanced')
         elif lot_mode == 'single':
             # Check for double-prefixed keys first
-            cofinanced_keys.append(f'lot_0.lot_0_orderType.isCofinanced')
             cofinanced_keys.append(f'lot_0.orderType.isCofinanced')
         else:
             cofinanced_keys.append('general.orderType.isCofinanced')
@@ -991,11 +1036,11 @@ class ValidationManager:
             
             if lot_mode == 'multiple' and current_lot_index is not None:
                 # Check for double-prefixed keys first (form renderer bug)
-                cofinancer_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.cofinancers')
+                cofinancer_keys.append(f'lot_{current_lot_index}.orderType.cofinancers')
                 cofinancer_keys.append(f'lot_{current_lot_index}.orderType.cofinancers')
             elif lot_mode == 'single':
                 # Check for double-prefixed keys first (form renderer bug)
-                cofinancer_keys.append(f'lot_0.lot_0_orderType.cofinancers')
+                cofinancer_keys.append(f'lot_0.orderType.cofinancers')
                 cofinancer_keys.append(f'lot_0.orderType.cofinancers')
             elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
                 # For general step or when lot_mode is 'none', check general prefix
@@ -1012,11 +1057,11 @@ class ValidationManager:
             
             if lot_mode == 'multiple' and current_lot_index is not None:
                 # Check for double-prefixed keys first (form renderer bug)
-                count_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.cofinancerCount')
+                count_keys.append(f'lot_{current_lot_index}.orderType.cofinancerCount')
                 count_keys.append(f'lot_{current_lot_index}.orderType.cofinancerCount')
             elif lot_mode == 'single':
                 # Check for double-prefixed keys first (form renderer bug)
-                count_keys.append(f'lot_0.lot_0_orderType.cofinancerCount')
+                count_keys.append(f'lot_0.orderType.cofinancerCount')
                 count_keys.append(f'lot_0.orderType.cofinancerCount')
             elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
                 # For general step or when lot_mode is 'none', check general prefix
@@ -1055,11 +1100,11 @@ class ValidationManager:
                 
                 if lot_mode == 'multiple' and current_lot_index is not None:
                     # Check for double-prefixed keys first (form renderer bug)
-                    prefixes.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType')
+                    prefixes.append(f'lot_{current_lot_index}.orderType')
                     prefixes.append(f'lot_{current_lot_index}.orderType')
                 elif lot_mode == 'single':
                     # Check for double-prefixed keys first (form renderer bug)
-                    prefixes.append(f'lot_0.lot_0_orderType')
+                    prefixes.append(f'lot_0.orderType')
                     prefixes.append(f'lot_0.orderType')
                 elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
                     # For general step or when lot_mode is 'none', check general prefix first
@@ -1136,12 +1181,12 @@ class ValidationManager:
                         prefixes.append('orderType')
                     elif lot_mode == 'multiple' and current_lot_index is not None:
                         # Check for double-prefixed keys first (form renderer bug)
-                        prefixes.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType')
+                        prefixes.append(f'lot_{current_lot_index}.orderType')
                         prefixes.append(f'lot_{current_lot_index}.orderType')
                         prefixes.append('orderType')
                     elif lot_mode == 'single':
                         # Check for double-prefixed keys first (form renderer bug)
-                        prefixes.append(f'lot_0.lot_0_orderType')
+                        prefixes.append(f'lot_0.orderType')
                         prefixes.append(f'lot_0.orderType')
                         prefixes.append('orderType')
                     else:
@@ -1256,7 +1301,7 @@ class ValidationManager:
             possible_keys.append(f'lot_{current_lot_index}_technicalSpecifications.hasSpecifications')  # Underscore pattern
             possible_keys.append(f'lot_{current_lot_index}.technicalSpecifications.hasSpecifications')  # Dot pattern
             # ALSO CHECK DOUBLE PREFIX PATTERN (what user actually has!)
-            possible_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_technicalSpecifications.hasSpecifications')  # Double prefix
+            possible_keys.append(f'lot_{current_lot_index}.technicalSpecifications.hasSpecifications')  # Double prefix
             # Also check widget keys for current lot
             possible_keys.append(f'widget_lot_{current_lot_index}_technicalSpecifications.hasSpecifications')  # Widget underscore
             possible_keys.append(f'widget_lot_{current_lot_index}.technicalSpecifications.hasSpecifications')  # Widget dot
@@ -1396,7 +1441,7 @@ class ValidationManager:
         if current_lot_index is not None:
             type_keys.append(f'lot_{current_lot_index}_executionDeadline.type')  # Underscore pattern
             type_keys.append(f'lot_{current_lot_index}.executionDeadline.type')  # Dot pattern
-            type_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_executionDeadline.type')  # Double prefix pattern
+            type_keys.append(f'lot_{current_lot_index}.executionDeadline.type')  # Double prefix pattern
         
         # Add general mode keys
         type_keys.extend([
@@ -1409,7 +1454,7 @@ class ValidationManager:
             if current_lot_index is None or i != current_lot_index:
                 type_keys.append(f'lot_{i}_executionDeadline.type')  # Underscore pattern
                 type_keys.append(f'lot_{i}.executionDeadline.type')  # Dot pattern
-                type_keys.append(f'lot_{i}.lot_{i}_executionDeadline.type')  # Double prefix pattern
+                type_keys.append(f'lot_{i}.executionDeadline.type')  # Double prefix pattern
         
         # Find the deadline type value (only accept non-empty values)
         for key in type_keys:
@@ -1448,7 +1493,7 @@ class ValidationManager:
                 if current_lot_index is not None:
                     start_date = (self.session_state.get(f'lot_{current_lot_index}_executionDeadline.startDate') or
                                  self.session_state.get(f'lot_{current_lot_index}.executionDeadline.startDate') or
-                                 self.session_state.get(f'lot_{current_lot_index}.lot_{current_lot_index}_executionDeadline.startDate'))
+                                 self.session_state.get(f'lot_{current_lot_index}.executionDeadline.startDate'))
                 # Try direct key
                 if not start_date:
                     start_date = self.session_state.get('executionDeadline.startDate')
@@ -1458,7 +1503,7 @@ class ValidationManager:
                 if current_lot_index is not None:
                     end_date = (self.session_state.get(f'lot_{current_lot_index}_executionDeadline.endDate') or
                                self.session_state.get(f'lot_{current_lot_index}.executionDeadline.endDate') or
-                               self.session_state.get(f'lot_{current_lot_index}.lot_{current_lot_index}_executionDeadline.endDate'))
+                               self.session_state.get(f'lot_{current_lot_index}.executionDeadline.endDate'))
                 # Try direct key
                 if not end_date:
                     end_date = self.session_state.get('executionDeadline.endDate')
@@ -1537,7 +1582,7 @@ class ValidationManager:
             clause_keys.extend([
                 f'lot_{current_lot_index}_priceInfo.priceClause',  # Underscore pattern
                 f'lot_{current_lot_index}.priceInfo.priceClause',   # Dot pattern
-                f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.priceClause',  # Double prefix (what user has)
+                f'lot_{current_lot_index}.priceInfo.priceClause',  # Double prefix (what user has)
             ])
         
         # Add general mode key
@@ -1549,7 +1594,7 @@ class ValidationManager:
                 clause_keys.extend([
                     f'lot_{i}_priceInfo.priceClause',  # Underscore pattern
                     f'lot_{i}.priceInfo.priceClause',   # Dot pattern
-                    f'lot_{i}.lot_{i}_priceInfo.priceClause',  # Double prefix
+                    f'lot_{i}.priceInfo.priceClause',  # Double prefix
                 ])
         
         # Add direct key as LAST resort (lowest priority)
@@ -1611,7 +1656,7 @@ class ValidationManager:
             adjustment_keys.extend([
                 f'lot_{current_lot_index}_priceInfo.priceAdjustmentPreference',
                 f'lot_{current_lot_index}.priceInfo.priceAdjustmentPreference',
-                f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.priceAdjustmentPreference'
+                f'lot_{current_lot_index}.priceInfo.priceAdjustmentPreference'
             ])
         
         adjustment_keys.extend([
@@ -1640,7 +1685,7 @@ class ValidationManager:
             period_type_keys.extend([
                 f'lot_{current_lot_index}_priceInfo.valorization.type',
                 f'lot_{current_lot_index}.priceInfo.valorization.type',
-                f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.valorization.type'
+                f'lot_{current_lot_index}.priceInfo.valorization.type'
             ])
         
         period_type_keys.extend([
@@ -1680,7 +1725,7 @@ class ValidationManager:
                     period_value_keys.extend([
                         f'lot_{current_lot_index}_priceInfo.valorization.{field_suffix}',
                         f'lot_{current_lot_index}.priceInfo.valorization.{field_suffix}',
-                        f'lot_{current_lot_index}.lot_{current_lot_index}_priceInfo.valorization.{field_suffix}'
+                        f'lot_{current_lot_index}.priceInfo.valorization.{field_suffix}'
                     ])
                 
                 period_value_keys.extend([
@@ -1731,7 +1776,7 @@ class ValidationManager:
             inspection_keys.extend([
                 f'lot_{current_lot_index}_inspectionInfo.hasInspection',  # Underscore pattern
                 f'lot_{current_lot_index}.inspectionInfo.hasInspection',   # Dot pattern
-                f'lot_{current_lot_index}.lot_{current_lot_index}_inspectionInfo.hasInspection',  # Double prefix (what user has)
+                f'lot_{current_lot_index}.inspectionInfo.hasInspection',  # Double prefix (what user has)
             ])
         
         # Add general mode key
@@ -1743,7 +1788,7 @@ class ValidationManager:
                 inspection_keys.extend([
                     f'lot_{i}_inspectionInfo.hasInspection',   # Underscore pattern
                     f'lot_{i}.inspectionInfo.hasInspection',    # Dot pattern
-                    f'lot_{i}.lot_{i}_inspectionInfo.hasInspection',  # Double prefix
+                    f'lot_{i}.inspectionInfo.hasInspection',  # Double prefix
                 ])
         
         # Add direct key as LAST resort (lowest priority)
@@ -1805,7 +1850,7 @@ class ValidationManager:
             negotiation_keys.extend([
                 f'lot_{current_lot_index}_negotiationsInfo.hasNegotiations',  # Underscore pattern
                 f'lot_{current_lot_index}.negotiationsInfo.hasNegotiations',   # Dot pattern
-                f'lot_{current_lot_index}.lot_{current_lot_index}_negotiationsInfo.hasNegotiations',  # Double prefix
+                f'lot_{current_lot_index}.negotiationsInfo.hasNegotiations',  # Double prefix
             ])
         
         # Add general mode key
@@ -1817,7 +1862,7 @@ class ValidationManager:
                 negotiation_keys.extend([
                     f'lot_{i}_negotiationsInfo.hasNegotiations',   # Underscore pattern
                     f'lot_{i}.negotiationsInfo.hasNegotiations',    # Dot pattern
-                    f'lot_{i}.lot_{i}_negotiationsInfo.hasNegotiations',  # Double prefix
+                    f'lot_{i}.negotiationsInfo.hasNegotiations',  # Double prefix
                 ])
         
         # Add direct key as LAST resort (lowest priority)
@@ -1878,7 +1923,7 @@ class ValidationManager:
             exclusion_keys.extend([
                 f'lot_{current_lot_index}_participationAndExclusion.exclusionReasonsSelection',  # Underscore pattern
                 f'lot_{current_lot_index}.participationAndExclusion.exclusionReasonsSelection',  # Dot pattern
-                f'lot_{current_lot_index}.lot_{current_lot_index}_participationAndExclusion.exclusionReasonsSelection'  # Double prefix pattern
+                f'lot_{current_lot_index}.participationAndExclusion.exclusionReasonsSelection'  # Double prefix pattern
             ])
         
         exclusion_keys.extend([
@@ -1891,7 +1936,7 @@ class ValidationManager:
                 exclusion_keys.extend([
                     f'lot_{i}_participationAndExclusion.exclusionReasonsSelection',  # Underscore pattern
                     f'lot_{i}.participationAndExclusion.exclusionReasonsSelection',  # Dot pattern
-                    f'lot_{i}.lot_{i}_participationAndExclusion.exclusionReasonsSelection'  # Double prefix pattern
+                    f'lot_{i}.participationAndExclusion.exclusionReasonsSelection'  # Double prefix pattern
                 ])
         
         exclusion_prefix = None
@@ -1961,7 +2006,7 @@ class ValidationManager:
             condition_keys.extend([
                 f'lot_{current_lot_index}_participationConditions.participationSelection',  # Underscore pattern
                 f'lot_{current_lot_index}.participationConditions.participationSelection',  # Dot pattern
-                f'lot_{current_lot_index}.lot_{current_lot_index}_participationConditions.participationSelection'  # Double prefix pattern
+                f'lot_{current_lot_index}.participationConditions.participationSelection'  # Double prefix pattern
             ])
         
         condition_keys.extend([
@@ -1974,7 +2019,7 @@ class ValidationManager:
                 condition_keys.extend([
                     f'lot_{i}_participationConditions.participationSelection',  # Underscore pattern
                     f'lot_{i}.participationConditions.participationSelection',  # Dot pattern
-                    f'lot_{i}.lot_{i}_participationConditions.participationSelection'  # Double prefix pattern
+                    f'lot_{i}.participationConditions.participationSelection'  # Double prefix pattern
                 ])
         
         condition_prefix = None
@@ -2097,7 +2142,7 @@ class ValidationManager:
             guarantee_keys.extend([
                 f'lot_{current_lot_index}_financialGuarantees.requiresFinancialGuarantees',  # Underscore pattern
                 f'lot_{current_lot_index}.financialGuarantees.requiresFinancialGuarantees',  # Dot pattern
-                f'lot_{current_lot_index}.lot_{current_lot_index}_financialGuarantees.requiresFinancialGuarantees'  # Double prefix pattern
+                f'lot_{current_lot_index}.financialGuarantees.requiresFinancialGuarantees'  # Double prefix pattern
             ])
         
         guarantee_keys.extend([
@@ -2110,7 +2155,7 @@ class ValidationManager:
                 guarantee_keys.extend([
                     f'lot_{i}_financialGuarantees.requiresFinancialGuarantees',  # Underscore pattern
                     f'lot_{i}.financialGuarantees.requiresFinancialGuarantees',  # Dot pattern
-                    f'lot_{i}.lot_{i}_financialGuarantees.requiresFinancialGuarantees'  # Double prefix pattern
+                    f'lot_{i}.financialGuarantees.requiresFinancialGuarantees'  # Double prefix pattern
                 ])
         
         guarantee_prefix = None
@@ -2188,7 +2233,7 @@ class ValidationManager:
             variant_keys.extend([
                 f'lot_{current_lot_index}_variantOffers.allowVariants',  # Underscore pattern
                 f'lot_{current_lot_index}.variantOffers.allowVariants',  # Dot pattern
-                f'lot_{current_lot_index}.lot_{current_lot_index}_variantOffers.allowVariants'  # Double prefix pattern
+                f'lot_{current_lot_index}.variantOffers.allowVariants'  # Double prefix pattern
             ])
         
         variant_keys.extend([
@@ -2201,7 +2246,7 @@ class ValidationManager:
                 variant_keys.extend([
                     f'lot_{i}_variantOffers.allowVariants',  # Underscore pattern
                     f'lot_{i}.variantOffers.allowVariants',  # Dot pattern
-                    f'lot_{i}.lot_{i}_variantOffers.allowVariants'  # Double prefix pattern
+                    f'lot_{i}.variantOffers.allowVariants'  # Double prefix pattern
                 ])
         
         variant_prefix = None
@@ -2248,7 +2293,7 @@ class ValidationManager:
         if current_lot_index is not None:
             contract_type_keys.append(f'lot_{current_lot_index}_contractInfo.type')  # Underscore pattern
             contract_type_keys.append(f'lot_{current_lot_index}.contractInfo.type')  # Dot pattern
-            contract_type_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_contractInfo.type')  # Double prefix pattern
+            contract_type_keys.append(f'lot_{current_lot_index}.contractInfo.type')  # Double prefix pattern
         
         # Add general mode and direct keys with proper priority
         if current_lot_index is None:
@@ -2272,7 +2317,7 @@ class ValidationManager:
             if current_lot_index is None or i != current_lot_index:
                 contract_type_keys.append(f'lot_{i}_contractInfo.type')  # Underscore pattern
                 contract_type_keys.append(f'lot_{i}.contractInfo.type')  # Dot pattern
-                contract_type_keys.append(f'lot_{i}.lot_{i}_contractInfo.type')  # Double prefix pattern
+                contract_type_keys.append(f'lot_{i}.contractInfo.type')  # Double prefix pattern
         
         for key in contract_type_keys:
             value = self.session_state.get(key)
@@ -2728,8 +2773,8 @@ class ValidationManager:
                     ratio_keys.insert(0, f"widget_lot_{current_lot_index}.{step_key}.{ratio_field_name}")  # Widget with dot
                 
                 # Also check hardcoded lot_1 for backwards compatibility
-                ratio_keys.append(f"lot_1_{step_key}.{ratio_field_name}")
-                ratio_keys.append(f"widget_lot_1_{step_key}.{ratio_field_name}")
+                ratio_keys.append(f"lot_1.{step_key}.{ratio_field_name}")
+                ratio_keys.append(f"widget_lot_1.{step_key}.{ratio_field_name}")
                 
                 # Handle special case for social criteria - sum all sub-criteria points
                 if criterion == 'socialCriteria':
@@ -2758,8 +2803,8 @@ class ValidationManager:
                                 f"{step_key}.{ratio_field}",
                                 f"general.{step_key}.{ratio_field}",
                                 f"widget_{step_key}.{ratio_field}",  # Widget key
-                                f"lot_1_{step_key}.{ratio_field}",
-                                f"widget_lot_1_{step_key}.{ratio_field}",
+                                f"lot_1.{step_key}.{ratio_field}",
+                                f"widget_lot_1.{step_key}.{ratio_field}",
                             ]
                         
                         # Add lot-specific keys based on current lot index
@@ -2868,8 +2913,8 @@ class ValidationManager:
                 desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.otherCriteriaDescription")  # Double prefix pattern
             
             # Also check hardcoded lot_1 for backwards compatibility
-            desc_keys.append(f"lot_1_{step_key}.otherCriteriaCustomDescription")
-            desc_keys.append(f"lot_1_{step_key}.otherCriteriaDescription")
+            desc_keys.append(f"lot_1.{step_key}.otherCriteriaCustomDescription")
+            desc_keys.append(f"lot_1.{step_key}.otherCriteriaDescription")
             
             description = ""
             for key in desc_keys:
@@ -2903,7 +2948,7 @@ class ValidationManager:
                 desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.technicalRequirementsDescription")  # Double prefix pattern
             
             # Also check hardcoded lot_1 for backwards compatibility
-            desc_keys.append(f"lot_1_{step_key}.technicalRequirementsDescription")
+            desc_keys.append(f"lot_1.{step_key}.technicalRequirementsDescription")
             
             description = ""
             for key in desc_keys:
@@ -2931,7 +2976,7 @@ class ValidationManager:
                 desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.costEfficiencyDescription")  # Double prefix pattern
             
             # Also check hardcoded lot_1 for backwards compatibility
-            desc_keys.append(f"lot_1_{step_key}.costEfficiencyDescription")
+            desc_keys.append(f"lot_1.{step_key}.costEfficiencyDescription")
             
             description = ""
             for key in desc_keys:
@@ -2950,7 +2995,7 @@ class ValidationManager:
             possible_keys = [
                 f"{step_key}.shorterDeadlineMinimum",
                 f"general.{step_key}.shorterDeadlineMinimum",
-                f"lot_1_{step_key}.shorterDeadlineMinimum",
+                f"lot_1.{step_key}.shorterDeadlineMinimum",
             ]
             
             # Handle lot-specific keys
@@ -3028,7 +3073,7 @@ class ValidationManager:
                 possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{criterion}")  # Double prefix pattern
             
             # Also check hardcoded lot_1 for backwards compatibility
-            possible_keys.append(f"lot_1_{step_key}.{criterion}")
+            possible_keys.append(f"lot_1.{step_key}.{criterion}")
             
             # Also check if step_key already has a prefix
             if 'general.' in step_key:
@@ -3174,8 +3219,8 @@ class ValidationManager:
                     f"{step_key}.{ratio_field}",
                     f"general.{step_key}.{ratio_field}",
                     f"widget_{step_key}.{ratio_field}",
-                    f"lot_1_{step_key}.{ratio_field}",
-                    f"widget_lot_1_{step_key}.{ratio_field}",
+                    f"lot_1.{step_key}.{ratio_field}",
+                    f"widget_lot_1.{step_key}.{ratio_field}",
                 ]
             
             # Add lot-specific keys based on current lot index
@@ -3247,8 +3292,8 @@ class ValidationManager:
                     f"{step_key}.socialCriteriaOptions.{option}",
                     f"general.{step_key}.socialCriteriaOptions.{option}",
                     f"widget_{step_key}.socialCriteriaOptions.{option}",
-                    f"lot_1_{step_key}.socialCriteriaOptions.{option}",
-                    f"widget_lot_1_{step_key}.socialCriteriaOptions.{option}",
+                    f"lot_1.{step_key}.socialCriteriaOptions.{option}",
+                    f"widget_lot_1.{step_key}.socialCriteriaOptions.{option}",
                 ]
             
             
@@ -3278,7 +3323,7 @@ class ValidationManager:
                             desc_keys = [
                                 f"{step_key}.socialCriteriaOptions.otherSocialDescription",
                                 f"general.{step_key}.socialCriteriaOptions.otherSocialDescription",
-                                f"lot_1_{step_key}.socialCriteriaOptions.otherSocialDescription",
+                                f"lot_1.{step_key}.socialCriteriaOptions.otherSocialDescription",
                             ]
                             if current_lot_index is not None:
                                 desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.socialCriteriaOptions.otherSocialDescription")

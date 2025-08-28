@@ -669,28 +669,68 @@ def render_compact_progress_indicator():
     
     # Progress metrics
     completed_count = sum(1 for v in completed.values() if v)
-    # Ensure progress stays within valid range
+    # Calculate real progress based on completed steps
     if total > 0:
-        progress_percent = min(100, max(0, int(((current + 1) / total) * 100)))
+        # Use completed steps for progress calculation if available
+        if completed_count > 0:
+            progress_percent = min(100, max(0, int((completed_count / total) * 100)))
+        else:
+            progress_percent = min(100, max(0, int(((current + 1) / total) * 100)))
     else:
         progress_percent = 0
     
     # Current step info
     current_name = step_names[current] if current < len(step_names) else f"Korak {current+1}"
     
+    # Group steps by lot for better display
+    lot_groups = {}
+    general_steps = []
+    
+    for i, step_fields in enumerate(steps):
+        if step_fields and len(step_fields) > 0:
+            first_field = step_fields[0]
+            if first_field.startswith('lot_'):
+                # Extract lot index
+                if first_field.startswith('lot_context_'):
+                    lot_idx = int(first_field.split('_')[-1])
+                elif '_' in first_field:
+                    parts = first_field.split('_')
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        lot_idx = int(parts[1])
+                    else:
+                        lot_idx = -1
+                else:
+                    lot_idx = -1
+                    
+                if lot_idx >= 0:
+                    if lot_idx not in lot_groups:
+                        lot_groups[lot_idx] = []
+                    lot_groups[lot_idx].append(i)
+            else:
+                general_steps.append(i)
+    
     # Render compact view
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.markdown(f"**Korak {current + 1} od {total}**: {current_name}")
+        st.markdown(f"**Trenutni korak {current + 1} od {total}**: {current_name}")
         st.progress(progress_percent / 100)
         
         # Show step status summary
         status_text = []
         if completed_count > 0:
             status_text.append(f"✅ Dokončani: {completed_count}")
+        
+        # Show lot-specific progress if in multiple lot mode
+        if lot_groups:
+            for lot_idx in sorted(lot_groups.keys()):
+                lot_steps = lot_groups[lot_idx]
+                lot_completed = sum(1 for step_idx in lot_steps if completed.get(step_idx, False))
+                lot_name = st.session_state.get('lot_names', [f'Sklop {lot_idx+1}'])[lot_idx] if lot_idx < len(st.session_state.get('lot_names', [])) else f'Sklop {lot_idx+1}'
+                status_text.append(f"📦 {lot_name}: {lot_completed}/{len(lot_steps)}")
+        
         if current < total - 1:
-            remaining = total - current - 1
+            remaining = total - completed_count
             status_text.append(f"⏳ Preostali: {remaining}")
         
         if status_text:
@@ -1102,7 +1142,8 @@ def render_main_form():
                 current_step_properties[key] = {"type": "lot_configuration"}
             elif key.startswith('lot_'):
                 # Map lot-specific keys back to original schema properties
-                original_key = key.split('_', 2)[2]  # lot_0_orderType -> orderType
+                # Use dot notation: lot_0.orderType -> orderType
+                original_key = key.split('.', 1)[1] if '.' in key else key
                 if original_key in st.session_state.schema["properties"]:
                     # Copy the schema property 
                     prop_copy = st.session_state.schema["properties"][original_key].copy()
@@ -2029,16 +2070,39 @@ def render_lot_header():
 
 def calculate_lot_progress(lot_index):
     """Calculate completion percentage for a specific lot."""
-    # This would need to be implemented based on your step completion tracking
-    # For now, returning a placeholder value
-    completed_steps = st.session_state.get('lot_completed_steps', {}).get(lot_index, {})
-    if not completed_steps:
+    from config import LOT_SPECIFIC_STEPS, get_dynamic_form_steps
+    
+    # Get all steps for the form
+    steps = get_dynamic_form_steps(st.session_state)
+    completed_steps = st.session_state.get('completed_steps', {})
+    
+    # Count lot-specific steps
+    lot_step_count = 0
+    lot_completed = 0
+    
+    for i, step_fields in enumerate(steps):
+        # Check if this step belongs to the specific lot
+        if step_fields and len(step_fields) > 0:
+            first_field = step_fields[0]
+            # Check if it's a lot-specific step for this lot index
+            if first_field.startswith(f'lot_{lot_index}_') or first_field == f'lot_context_{lot_index}':
+                lot_step_count += 1
+                if completed_steps.get(i, False):
+                    lot_completed += 1
+    
+    # If no lot-specific steps found, check general lot progress
+    if lot_step_count == 0:
+        # For single lot or general mode
+        total_lot_steps = len(LOT_SPECIFIC_STEPS)
+        lot_completed = sum(1 for i, step in enumerate(steps) 
+                          if any(field in str(step) for field in ['orderType', 'technicalSpecifications', 'executionDeadline']) 
+                          and completed_steps.get(i, False))
+        lot_step_count = total_lot_steps
+    
+    if lot_step_count == 0:
         return 0
     
-    # Count completed steps for this lot
-    total_lot_steps = 10  # Adjust based on your actual lot-specific steps
-    completed_count = sum(1 for v in completed_steps.values() if v)
-    return int((completed_count / total_lot_steps) * 100)
+    return min(100, int((lot_completed / lot_step_count) * 100))
 
 def switch_to_lot(lot_index):
     """Switch to a different lot with validation."""
@@ -2369,8 +2433,26 @@ def render_navigation_buttons(current_step_keys):
 
         with col_nav_right:
             if st.session_state.current_step < len(dynamic_form_steps) - 1:
+                # Check if we're on a lot_context step - beginning of a new lot
+                current_step_fields = dynamic_form_steps[st.session_state.current_step]
+                if current_step_fields and len(current_step_fields) > 0:
+                    first_field = current_step_fields[0]
+                    if first_field.startswith('lot_context_'):
+                        # We're at the beginning of a lot - show lot name in button
+                        lot_idx = int(first_field.split('_')[-1])
+                        lot_names = st.session_state.get('lot_names', [])
+                        if lot_idx < len(lot_names):
+                            lot_name = lot_names[lot_idx]
+                            button_text = f"Začni vnos: {lot_name} →"
+                        else:
+                            button_text = f"{get_text('next_button')} →"
+                    else:
+                        button_text = f"{get_text('next_button')} →"
+                else:
+                    button_text = f"{get_text('next_button')} →"
+                    
                 if st.button(
-                    f"{get_text('next_button')} →", 
+                    button_text, 
                     type="primary",
                     use_container_width=True
                 ):
@@ -2501,7 +2583,9 @@ def render_drafts_sidebar(draft_options):
                         # Flatten each lot's data into lot-scoped keys
                         for i, lot in enumerate(v):
                             for lot_key, lot_value in lot.items():
-                                if lot_key != 'name' and not isinstance(lot_value, dict):
+                                if lot_key == 'name':
+                                    continue  # Skip name as it's already in lot_names
+                                elif not isinstance(lot_value, dict):
                                     # Store with regular prefix
                                     items.append((f'lot_{i}.{lot_key}', lot_value))
                                     # Also store with double prefix for compatibility
@@ -2512,7 +2596,20 @@ def render_drafts_sidebar(draft_options):
                                     nested_items = flatten_dict(lot_value, f'lot_{i}.{lot_key}', sep=sep)
                                     items.extend(nested_items.items())
                                     # Also handle double-prefix pattern for nested fields
-                                    if lot_key == 'orderType' or lot_key in ['technicalSpecifications', 'executionDeadline']:
+                                    # Include all nested orderType fields (customers, cofinancers, etc.)
+                                    if lot_key == 'orderType':
+                                        double_nested = flatten_dict(lot_value, f'lot_{i}.lot_{i}_{lot_key}', sep=sep)
+                                        items.extend(double_nested.items())
+                                        # Also handle without double prefix for nested fields
+                                        for nested_key, nested_value in lot_value.items():
+                                            if isinstance(nested_value, list):
+                                                # Handle arrays like customers, cofinancers
+                                                st.session_state[f'lot_{i}.{lot_key}.{nested_key}'] = nested_value
+                                            elif isinstance(nested_value, dict):
+                                                # Further nested objects
+                                                nested_flat = flatten_dict(nested_value, f'lot_{i}.{lot_key}.{nested_key}', sep=sep)
+                                                items.extend(nested_flat.items())
+                                    elif lot_key in ['technicalSpecifications', 'executionDeadline']:
                                         double_nested = flatten_dict(lot_value, f'lot_{i}.lot_{i}_{lot_key}', sep=sep)
                                         items.extend(double_nested.items())
                         continue
@@ -2566,12 +2663,42 @@ def render_drafts_sidebar(draft_options):
                 # Check if step has any data
                 has_data = False
                 for key in step_keys:
-                    # Check various key patterns
-                    if has_lots:
-                        # Lot mode - check lot-specific keys
-                        if st.session_state.get(key):
+                    # Handle lot context steps (always mark as completed if lot exists)
+                    if key.startswith('lot_context_'):
+                        lot_idx = int(key.split('_')[-1])
+                        if lot_idx < len(st.session_state.get('lot_names', [])):
                             has_data = True
                             break
+                    
+                    # Check various key patterns
+                    if has_lots:
+                        # Lot mode - check lot-specific keys with different patterns
+                        patterns_to_check = [
+                            key,  # Direct key
+                            f'{key}.',  # Key prefix for nested fields
+                        ]
+                        
+                        # For lot-specific fields, also check without lot_ prefix
+                        if key.startswith('lot_'):
+                            # Extract base field name
+                            parts = key.split('_', 2)
+                            if len(parts) >= 3:
+                                lot_idx = parts[1]
+                                field_name = parts[2]
+                                patterns_to_check.extend([
+                                    f'lot_{lot_idx}.{field_name}',
+                                    f'lot_{lot_idx}.lot_{lot_idx}_{field_name}',
+                                ])
+                        
+                        for pattern in patterns_to_check:
+                            for session_key in st.session_state.keys():
+                                if session_key == pattern or session_key.startswith(f'{pattern}.'):
+                                    value = st.session_state.get(session_key)
+                                    if value and value not in [False, '', 0, []]:
+                                        has_data = True
+                                        break
+                            if has_data:
+                                break
                     else:
                         # General mode - check with general. prefix
                         check_keys = [

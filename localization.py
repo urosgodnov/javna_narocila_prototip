@@ -220,9 +220,9 @@ def get_dynamic_step_label(step_keys, step_number: int, has_lots: bool = False) 
         return f"Sklop {lot_index + 1}"
     
     # Handle lot-prefixed keys
-    if first_key.startswith('lot_') and '_' in first_key[4:]:
-        # Extract the actual key (e.g., lot_0_orderType -> orderType)
-        actual_key = first_key.split('_', 2)[2]
+    if first_key.startswith('lot_') and '.' in first_key:
+        # Extract the actual key (e.g., lot_0.orderType -> orderType)
+        actual_key = first_key.split('.', 1)[1]
         first_key = actual_key
     
     # Map keys to step labels

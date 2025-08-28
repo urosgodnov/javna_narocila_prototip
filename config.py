@@ -136,8 +136,8 @@ def get_dynamic_form_steps(session_state):
             
             # Add all procurement steps for this lot
             for step in LOT_SPECIFIC_STEPS:
-                # Prefix each field with lot index
-                lot_step = [f"lot_{i}_{field}" for field in step]
+                # Prefix each field with lot index using dot notation for consistency
+                lot_step = [f"lot_{i}.{field}" for field in step]
                 steps.append(lot_step)
     
     # Always add final steps at the end
