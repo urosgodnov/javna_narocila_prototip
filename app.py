@@ -53,91 +53,302 @@ def init_app_data():
 init_app_data()
 
 def show_login_form():
-    """Display organization login form (Story 3)."""
+    """Display minimalistic and elegant organization login form."""
     import hashlib
     
     # Check if already logged in
     if st.session_state.get('authenticated', False):
         return True
     
-    # Center the login form
-    col1, col2, col3 = st.columns([1, 2, 1])
+    # Ultra-minimalistic, narrow, monochrome CSS
+    st.markdown("""
+    <style>
+    /* Narrow Minimalistic Form */
+    h3 {
+        text-align: center;
+        color: #000;
+        font-weight: 300;
+        font-size: 1.4rem;
+        margin-bottom: 0.25rem;
+        letter-spacing: 3px;
+    }
+    
+    .subtitle {
+        text-align: center;
+        color: #999;
+        font-size: 0.8rem;
+        margin-bottom: 3rem;
+        font-weight: 300;
+        letter-spacing: 1px;
+    }
+    
+    /* Minimal inputs */
+    .stSelectbox > label, .stTextInput > label {
+        color: #666 !important;
+        font-weight: 400 !important;
+        font-size: 11px !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px !important;
+    }
+    
+    .stSelectbox > div > div, .stTextInput > div > div > input {
+        background: white !important;  /* White background for better text visibility */
+        border: none !important;
+        border-bottom: 1px solid #e0e0e0 !important;
+        border-radius: 0 !important;
+        padding: 0.5rem 0 !important;
+        font-size: 14px !important;
+        color: #000 !important;  /* Black text for visibility */
+    }
+    
+    /* Force all dropdown text elements to be black and visible */
+    .stSelectbox > div > div > div {
+        color: #000 !important;
+        opacity: 1 !important;
+    }
+    
+    .stSelectbox > div > div > div > div {
+        color: #000 !important;
+        opacity: 1 !important;
+    }
+    
+    .stSelectbox span {
+        color: #000 !important;
+        opacity: 1 !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Target selectbox value directly with all possible selectors */
+    [data-baseweb="select"] {
+        color: #000 !important;
+    }
+    
+    [data-baseweb="select"] > div {
+        color: #000 !important;
+    }
+    
+    /* Target the actual value display */
+    .css-81oif8, .css-1uccc91-singleValue {
+        color: #000 !important;
+        opacity: 1 !important;
+    }
+    
+    /* Make sure placeholder and value are visible */
+    div[data-baseweb="select"] div {
+        color: #000 !important;
+        opacity: 1 !important;
+    }
+    
+    /* Aggressive approach - make ALL text in selectbox black */
+    .stSelectbox * {
+        color: #000 !important;
+        opacity: 1 !important;
+    }
+    
+    /* Specific targeting of the value container */
+    .stSelectbox [role="button"] {
+        color: #000 !important;
+        font-weight: 500 !important;
+    }
+    
+    .stSelectbox [aria-selected="true"] {
+        color: #000 !important;
+        font-weight: 500 !important;
+    }
+    
+    .stSelectbox > div > div:focus, .stTextInput > div > div > input:focus {
+        border-bottom: 1px solid #666 !important;
+        box-shadow: none !important;
+    }
+    
+    /* Minimal button - work with what Streamlit allows */
+    .stButton > button {
+        background: transparent !important;
+        color: #000 !important;
+        border: 2px solid #000 !important;
+        border-radius: 0 !important;
+        padding: 0.75rem !important;
+        font-weight: 500 !important;
+        font-size: 12px !important;
+        letter-spacing: 2px !important;
+        text-transform: uppercase !important;
+        width: 100% !important;
+        margin-top: 2rem !important;
+        transition: all 0.2s !important;
+    }
+    
+    .stButton > button:hover {
+        background: #000 !important;
+        color: #fff !important;
+        border-color: #000 !important;
+    }
+    
+    .stButton > button:active {
+        background: #333 !important;
+        color: #fff !important;
+    }
+    
+    .stButton > button:focus {
+        outline: none !important;
+        box-shadow: none !important;
+    }
+    
+    /* Alternative: just make text black and bold */
+    .stButton > button p {
+        color: #000 !important;
+        font-weight: 600 !important;
+    }
+    
+    /* Minimal messages - no red! */
+    .stSuccess > div {
+        background: transparent !important;
+        border: none !important;
+        border-left: 2px solid #666 !important;
+        color: #666 !important;
+        border-radius: 0 !important;
+        padding-left: 1rem !important;
+        font-size: 12px !important;
+    }
+    
+    .stError > div {
+        background: transparent !important;
+        border: none !important;
+        border-left: 2px solid #666 !important;
+        color: #666 !important;
+        border-radius: 0 !important;
+        padding-left: 1rem !important;
+        font-size: 12px !important;
+    }
+    
+    /* Even error alerts should be minimal */
+    .stAlert > div {
+        background: transparent !important;
+        color: #666 !important;
+        border: none !important;
+        padding: 0 !important;
+    }
+    
+    /* Override all Streamlit alert colors to monochrome */
+    [data-testid="stAlert"] {
+        background-color: transparent !important;
+        color: #666 !important;
+    }
+    
+    /* Specifically target error alerts to remove red */
+    .element-container:has(.stError) svg {
+        display: none !important;  /* Hide error icon */
+    }
+    
+    .stError {
+        color: #666 !important;
+    }
+    
+    /* Hide Streamlit elements */
+    #MainMenu, footer, header {
+        display: none !important;
+    }
+    
+    .stDeployButton {
+        display: none !important;
+    }
+    </style>
+    
+    <script>
+    // Style button with border since background doesn't work
+    function styleButton() {
+        const buttons = document.querySelectorAll('.stButton button');
+        buttons.forEach(btn => {
+            // Create outlined button style
+            btn.style.setProperty('border', '2px solid #000', 'important');
+            btn.style.setProperty('color', '#000', 'important');
+            btn.style.setProperty('border-radius', '0', 'important');
+            btn.style.setProperty('font-weight', '600', 'important');
+            
+            // Try to make text black
+            const text = btn.querySelector('p');
+            if (text) {
+                text.style.setProperty('color', '#000', 'important');
+                text.style.setProperty('font-weight', '600', 'important');
+            }
+        });
+    }
+    
+    // Run immediately
+    styleButton();
+    
+    // Run on load
+    window.addEventListener('load', styleButton);
+    
+    // Run periodically
+    setInterval(styleButton, 100);
+    
+    // Watch for DOM changes
+    const observer = new MutationObserver(styleButton);
+    observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Use narrow columns to center and constrain width
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
     with col2:
-        # Title with JANA AI on top
-        st.markdown("""
-        <div style='text-align: center;'>
-            <h1 style='color: #ff7f0e; font-weight: bold; margin-bottom: 0; font-size: 2.5em;'>
-                JANA AI
-            </h1>
-            <h2 style='color: #1f77b4; margin-top: 0;'>
-                <span style='font-size: 1.2em;'>JA</span>vna 
-                <span style='font-size: 1.2em;'>NA</span>ročila
-            </h2>
-        </div>
-        """, unsafe_allow_html=True)
+        # Minimalistic title
+        st.markdown("### JANA AI")
+        st.markdown('<p class="subtitle">javna naročila</p>', unsafe_allow_html=True)
         
-        st.markdown("---")
-        
-        # Organization selection
-        orgs = database.get_all_organizations()
-        org_names = [org['name'] for org in orgs]
-        
-        # Ensure demo_organizacija is in the list
-        if 'demo_organizacija' not in org_names:
+        with st.form("login_form", clear_on_submit=False):
+            # Ensure demo_organizacija exists in database
             database.ensure_demo_organization_exists()
-            orgs = database.get_all_organizations()
-            org_names = [org['name'] for org in orgs]
-        
-        selected_org = st.selectbox(
-            "Izberite organizacijo",
-            options=org_names,
-            index=org_names.index("demo_organizacija") if "demo_organizacija" in org_names else 0,
-            key="login_org"
-        )
-        
-        # Password input
-        password = st.text_input(
-            "Geslo organizacije",
-            type="password",
-            key="login_password",
-            placeholder="Vnesite geslo (pustite prazno za demo)"
-        )
-        
-        # Login button
-        if st.button("🔐 Prijava", use_container_width=True, type="primary"):
-            # Authenticate organization
-            org = database.get_organization_by_name(selected_org)
-            if not org:
-                st.error("Organizacija ne obstaja!")
-            else:
-                # Allow empty password for demo
-                if selected_org == "demo_organizacija" and password == "":
-                    st.session_state.authenticated = True
-                    st.session_state.organization = selected_org
-                    st.success("Uspešna prijava!")
-                    st.rerun()
-                # Check hashed password
-                elif org.get('password_hash'):
-                    password_hash = hashlib.sha256(password.encode()).hexdigest()
-                    if password_hash == org['password_hash']:
+            
+            # Organization text input - default to demo
+            organizacija = st.text_input(
+                "Organizacija",
+                value="demo_organizacija",
+                placeholder="Ime organizacije",
+                help="Vnesite ime vaše organizacije"
+            )
+            
+            # Password field
+            geslo = st.text_input(
+                "Geslo",
+                type="password",
+                placeholder="Pustite prazno za demo"
+            )
+            
+            # Submit button - no type="primary" to avoid red color
+            submitted = st.form_submit_button("Prijava", use_container_width=True)
+            
+            if submitted:
+                # Get organization from database
+                org = database.get_organization_by_name(organizacija)
+                if not org:
+                    st.error("Organizacija ne obstaja!")
+                else:
+                    # Demo organization - allow empty password
+                    if organizacija == "demo_organizacija" and geslo == "":
                         st.session_state.authenticated = True
-                        st.session_state.organization = selected_org
+                        st.session_state.organization = organizacija
+                        st.success("Uspešna prijava!")
+                        st.rerun()
+                    # Check password hash if exists
+                    elif org.get('password_hash'):
+                        password_hash = hashlib.sha256(geslo.encode()).hexdigest()
+                        if password_hash == org['password_hash']:
+                            st.session_state.authenticated = True
+                            st.session_state.organization = organizacija
+                            st.success("Uspešna prijava!")
+                            st.rerun()
+                        else:
+                            st.error("Napačno geslo!")
+                    # No password set - allow empty password
+                    elif not org.get('password_hash') and not geslo:
+                        st.session_state.authenticated = True
+                        st.session_state.organization = organizacija
                         st.success("Uspešna prijava!")
                         st.rerun()
                     else:
-                        st.error("Napačno geslo!")
-                # No password set but password provided
-                elif not org.get('password_hash') and password:
-                    st.error("Ta organizacija nima nastavljenega gesla!")
-                # No password set and no password provided
-                elif not org.get('password_hash') and not password:
-                    st.session_state.authenticated = True
-                    st.session_state.organization = selected_org
-                    st.success("Uspešna prijava!")
-                    st.rerun()
+                        st.error("Napačni podatki za prijavo!")
         
-        # Demo info
-        st.info("ℹ️ Demo organizacija nima nastavljenega gesla - pustite prazno")
     
     return False
 
