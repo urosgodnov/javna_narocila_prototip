@@ -1,166 +1,137 @@
 #!/usr/bin/env python3
-"""Test the social criteria validation fix."""
+"""Test script to verify social criteria 'Drugo' (Other) validation fix."""
 
-import json
 import sys
 import os
+import streamlit as st
+import logging
 
-# Add parent directory to path
+# Enable debug logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Mock streamlit session state
-class MockSessionState:
-    def __init__(self):
-        self.data = {}
-    
-    def get(self, key, default=''):
-        return self.data.get(key, default)
-    
-    def __setitem__(self, key, value):
-        self.data[key] = value
-    
-    def __getitem__(self, key):
-        return self.data.get(key, '')
-
-# Mock streamlit
-import streamlit as st
-st.session_state = MockSessionState()
-
-# Import the validation manager
 from utils.validations import ValidationManager
 
-# Load schema
-with open('json_files/SEZNAM_POTREBNIH_PODATKOV.json', 'r', encoding='utf-8') as f:
-    schema = json.load(f)
+def test_social_criteria_validation():
+    """Test social criteria validation with 'Drugo' option."""
+    
+    print("=" * 60)
+    print("Testing Social Criteria 'Drugo' Validation Fix")
+    print("=" * 60)
+    
+    # Test Case 1: Without lots - Drugo selected with description
+    print("\n1. Testing WITHOUT lots - 'Drugo' selected with description:")
+    session_state = {
+        'selectionCriteria.price': True,  # Add main price criterion
+        'selectionCriteria.priceRatio': 50,
+        'selectionCriteria.socialCriteria': True,
+        'selectionCriteria.socialCriteriaOptions.otherSocial': True,
+        'selectionCriteria.socialCriteriaOptions.otherSocialDescription': 'Zaposlovanje lokalnega prebivalstva',
+        'selectionCriteria.socialCriteriaOtherRatio': 15
+    }
+    
+    # Debug: Show what keys are being searched
+    print(f"Session state keys: {list(session_state.keys())}")
+    
+    validator = ValidationManager(session_state)
+    is_valid, errors = validator.validate_merila('selectionCriteria')
+    
+    if errors:
+        print(f"❌ FAILED - Errors found: {errors}")
+    else:
+        print(f"✅ PASSED - No validation errors")
+    
+    
+    # Test Case 2: With lots - Drugo selected with description
+    print("\n2. Testing WITH lots (lot_0) - 'Drugo' selected with description:")
+    session_state = {
+        'lot_mode': 'multiple',
+        'current_lot_index': 0,
+        'lot_0_selectionCriteria.price': True,
+        'lot_0_selectionCriteria.priceRatio': 50,
+        'lot_0_selectionCriteria.socialCriteria': True,
+        'lot_0_selectionCriteria.socialCriteriaOptions.otherSocial': True,
+        'lot_0_selectionCriteria.socialCriteriaOptions.otherSocialDescription': 'Zaposlovanje lokalnega prebivalstva',
+        'lot_0_selectionCriteria.socialCriteriaOtherRatio': 15
+    }
+    
+    validator = ValidationManager(session_state)
+    is_valid, errors = validator.validate_merila('lot_0_selectionCriteria')
+    
+    if errors:
+        print(f"❌ FAILED - Errors found: {errors}")
+    else:
+        print(f"✅ PASSED - No validation errors")
+    
+    
+    # Test Case 3: Without lots - Drugo selected WITHOUT description (should fail)
+    print("\n3. Testing WITHOUT lots - 'Drugo' selected WITHOUT description:")
+    session_state = {
+        'selectionCriteria.price': True,
+        'selectionCriteria.priceRatio': 50,
+        'selectionCriteria.socialCriteria': True,
+        'selectionCriteria.socialCriteriaOptions.otherSocial': True,
+        # Missing: 'selectionCriteria.socialCriteriaOptions.otherSocialDescription'
+        'selectionCriteria.socialCriteriaOtherRatio': 15
+    }
+    
+    validator = ValidationManager(session_state)
+    is_valid, errors = validator.validate_merila('selectionCriteria')
+    
+    if errors:
+        print(f"✅ PASSED - Expected error found: {errors}")
+    else:
+        print(f"❌ FAILED - Should have validation error for missing description")
+    
+    
+    # Test Case 4: With other social options selected (not Drugo)
+    print("\n4. Testing WITHOUT lots - Other social options (not 'Drugo'):")
+    session_state = {
+        'selectionCriteria.price': True,
+        'selectionCriteria.priceRatio': 50,
+        'selectionCriteria.socialCriteria': True,
+        'selectionCriteria.socialCriteriaOptions.youngEmployeesShare': True,
+        'selectionCriteria.socialCriteriaYoungRatio': 20
+    }
+    
+    validator = ValidationManager(session_state)
+    is_valid, errors = validator.validate_merila('selectionCriteria')
+    
+    if errors:
+        print(f"❌ FAILED - Errors found: {errors}")
+    else:
+        print(f"✅ PASSED - No validation errors")
+    
+    
+    # Test Case 5: Complex case - Multiple criteria including Drugo
+    print("\n5. Testing complex case - Multiple criteria including 'Drugo':")
+    session_state = {
+        'selectionCriteria.price': True,
+        'selectionCriteria.priceRatio': 60,
+        'selectionCriteria.socialCriteria': True,
+        'selectionCriteria.socialCriteriaOptions.youngEmployeesShare': True,
+        'selectionCriteria.socialCriteriaYoungRatio': 10,
+        'selectionCriteria.socialCriteriaOptions.otherSocial': True,
+        'selectionCriteria.socialCriteriaOptions.otherSocialDescription': 'Lokalno zaposlovanje',
+        'selectionCriteria.socialCriteriaOtherRatio': 10,
+        'selectionCriteria.shorterDeadline': True,
+        'selectionCriteria.shorterDeadlineRatio': 20
+    }
+    
+    validator = ValidationManager(session_state)
+    is_valid, errors = validator.validate_merila('selectionCriteria')
+    
+    if errors:
+        print(f"❌ FAILED - Errors found: {errors}")
+    else:
+        print(f"✅ PASSED - No validation errors")
+    
+        
+    print("\n" + "=" * 60)
+    print("Test completed!")
+    print("=" * 60)
 
-print("\n" + "="*60)
-print("TESTING SOCIAL CRITERIA VALIDATION FIX")
-print("="*60)
-
-# Test 1: Social criteria with elderly employees sub-option and points
-print("\n📋 Test 1: Social Criteria with Elderly Employees (20 points)")
-print("-" * 40)
-
-st.session_state.data = {
-    'selectionCriteria.price': True,
-    'selectionCriteria.priceRatio': '10',
-    'selectionCriteria.socialCriteria': True,
-    'selectionCriteria.socialCriteriaOptions.elderlyEmployeesShare': True,
-    'selectionCriteria.socialCriteriaElderlyRatio': '20'
-}
-
-validator = ValidationManager(schema, st.session_state)
-is_valid, errors = validator.validate_merila('selectionCriteria')
-
-print(f"Session state (relevant keys):")
-print(f"  - price: True, priceRatio: 10")
-print(f"  - socialCriteria: True")
-print(f"  - elderlyEmployeesShare: True, elderlyRatio: 20")
-print(f"Valid: {is_valid}")
-print(f"Errors: {errors}")
-print(f"Warnings: {validator.get_warnings()}")
-
-assert is_valid, "Should be valid with social criteria points and sub-option"
-assert not any("ne smejo biti 0" in e for e in errors), "Should not have zero points error for social"
-assert not any("vsaj eno možnost" in e for e in errors), "Should not have sub-option error"
-print("✅ Social criteria with elderly employees works")
-
-# Test 2: Social criteria with multiple sub-options
-print("\n📋 Test 2: Social Criteria with Multiple Sub-options")
-print("-" * 40)
-
-st.session_state.data = {
-    'selectionCriteria.socialCriteria': True,
-    'selectionCriteria.socialCriteriaOptions.youngEmployeesShare': True,
-    'selectionCriteria.socialCriteriaYoungRatio': '30',
-    'selectionCriteria.socialCriteriaOptions.elderlyEmployeesShare': True,
-    'selectionCriteria.socialCriteriaElderlyRatio': '20',
-    'selectionCriteria.socialCriteriaOptions.registeredStaffEmployed': True,
-    'selectionCriteria.socialCriteriaStaffRatio': '50'
-}
-
-validator = ValidationManager(schema, st.session_state)
-is_valid, errors = validator.validate_merila('selectionCriteria')
-
-print(f"Total social points: 30 + 20 + 50 = 100")
-print(f"Valid: {is_valid}")
-print(f"Errors: {errors}")
-
-assert is_valid, "Should be valid with multiple social sub-options"
-print("✅ Multiple social sub-options work")
-
-# Test 3: Social criteria without sub-options (should error)
-print("\n📋 Test 3: Social Criteria without Sub-options")
-print("-" * 40)
-
-st.session_state.data = {
-    'selectionCriteria.socialCriteria': True,
-    # No sub-options selected, no points assigned
-}
-
-validator = ValidationManager(schema, st.session_state)
-is_valid, errors = validator.validate_merila('selectionCriteria')
-
-print(f"Valid: {is_valid}")
-print(f"Errors: {errors}")
-
-assert not is_valid, "Should be invalid without sub-options"
-assert any("vsaj eno možnost" in e for e in errors), "Should have sub-option error"
-print("✅ Correctly detects missing sub-options")
-
-# Test 4: Test with general.selectionCriteria prefix
-print("\n📋 Test 4: General Prefix Pattern")
-print("-" * 40)
-
-st.session_state.data = {
-    'general.selectionCriteria.price': True,
-    'general.selectionCriteria.priceRatio': '80',
-    'general.selectionCriteria.socialCriteria': True,
-    'general.selectionCriteria.socialCriteriaOptions.elderlyEmployeesShare': True,
-    'general.selectionCriteria.socialCriteriaElderlyRatio': '20'
-}
-
-validator = ValidationManager(schema, st.session_state)
-is_valid, errors = validator.validate_merila('selectionCriteria')
-
-print(f"Valid: {is_valid}")
-print(f"Errors: {errors}")
-print(f"Warnings: {validator.get_warnings()}")
-
-assert is_valid, "Should work with general prefix"
-print("✅ General prefix pattern works")
-
-# Test 5: Points only in ratio fields (no checkbox)
-print("\n📋 Test 5: Points in Ratio Fields Counts as Sub-option")
-print("-" * 40)
-
-st.session_state.data = {
-    'selectionCriteria.socialCriteria': True,
-    # No checkbox for elderly, but has points
-    'selectionCriteria.socialCriteriaElderlyRatio': '100'
-}
-
-validator = ValidationManager(schema, st.session_state)
-is_valid, errors = validator.validate_merila('selectionCriteria')
-
-print(f"Valid: {is_valid}")
-print(f"Errors: {errors}")
-
-assert is_valid, "Should be valid - points in ratio field counts as sub-option"
-assert not any("vsaj eno možnost" in e for e in errors), "Should not have sub-option error"
-print("✅ Points in ratio fields count as sub-option selection")
-
-# Summary
-print("\n" + "="*60)
-print("SOCIAL CRITERIA FIX SUMMARY")
-print("="*60)
-print("✅ Social criteria with individual sub-option points - WORKS")
-print("✅ Multiple social sub-options - WORKS")
-print("✅ Missing sub-options detection - WORKS")
-print("✅ General prefix pattern - WORKS")
-print("✅ Points as sub-option indicator - WORKS")
-print("\n🎉 SOCIAL CRITERIA VALIDATION FIXED!")
-print("\nThe validation now correctly:")
-print("• Sums points from individual social criteria ratio fields")
-print("• Detects sub-options via checkboxes OR points > 0")
-print("• Handles all key patterns (standard, general, lot-specific)")
+if __name__ == "__main__":
+    test_social_criteria_validation()

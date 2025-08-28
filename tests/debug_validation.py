@@ -1,79 +1,76 @@
 #!/usr/bin/env python3
-"""Debug script to understand validation key issues."""
+"""Debug script to check actual session state during validation."""
 
-import json
+import streamlit as st
 import sys
 import os
-
-# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Mock streamlit session state
-class MockSessionState:
-    def __init__(self):
-        self.data = {}
-    
-    def get(self, key, default=''):
-        result = self.data.get(key, default)
-        print(f"  Session get: '{key}' -> '{result}'")
-        return result
-    
-    def __setitem__(self, key, value):
-        self.data[key] = value
-    
-    def __getitem__(self, key):
-        return self.data.get(key, '')
-
-# Mock streamlit
-import streamlit as st
-st.session_state = MockSessionState()
-
-# Import the validation manager
 from utils.validations import ValidationManager
 
-# Load schema
-with open('json_files/SEZNAM_POTREBNIH_PODATKOV.json', 'r', encoding='utf-8') as f:
-    schema = json.load(f)
+# This will help us understand what's actually in session state
+def debug_session_state():
+    print("=" * 80)
+    print("DEBUG: Session State Analysis")
+    print("=" * 80)
+    
+    # Find all social criteria related keys
+    social_keys = [k for k in st.session_state.keys() if 'social' in k.lower()]
+    print(f"\nFound {len(social_keys)} keys with 'social':")
+    for key in sorted(social_keys):
+        value = st.session_state[key]
+        print(f"  {key}: {value} (type: {type(value).__name__})")
+    
+    # Find all selection criteria keys
+    criteria_keys = [k for k in st.session_state.keys() if 'criteria' in k.lower()]
+    print(f"\nFound {len(criteria_keys)} keys with 'criteria':")
+    for key in sorted(criteria_keys):
+        value = st.session_state[key]
+        if 'social' not in key.lower():  # Don't repeat social ones
+            print(f"  {key}: {value} (type: {type(value).__name__})")
+    
+    # Check specific problematic keys
+    print("\n" + "=" * 80)
+    print("Checking specific keys that should work:")
+    
+    test_keys = [
+        'selectionCriteria.socialCriteria',
+        'selectionCriteria.socialCriteriaOptions.otherSocial',
+        'selectionCriteria.socialCriteriaOptions.otherSocialDescription',
+        'selectionCriteria.socialCriteriaOtherRatio',
+        'selectionCriteria.otherCriteriaCustom',
+        'selectionCriteria.otherCriteriaDescription'
+    ]
+    
+    for key in test_keys:
+        value = st.session_state.get(key, "NOT FOUND")
+        print(f"  {key}: {value}")
+    
+    print("\n" + "=" * 80)
+    print("Testing ValidationManager with actual session state:")
+    
+    # Create validator with actual session state
+    validator = ValidationManager(session_state=st.session_state)
+    
+    # Test _has_social_suboptions
+    result = validator._has_social_suboptions('selectionCriteria')
+    print(f"\n_has_social_suboptions result: {result}")
+    
+    # Test _get_selected_criteria
+    selected = validator._get_selected_criteria('selectionCriteria')
+    print(f"\n_get_selected_criteria result: {selected}")
+    
+    # Test full validation
+    is_valid, errors = validator.validate_merila('selectionCriteria')
+    print(f"\nvalidate_merila result: is_valid={is_valid}")
+    if errors:
+        print("Errors:")
+        for error in errors:
+            print(f"  - {error}")
 
-print("\n" + "="*60)
-print("DEBUG: Validation Key Structure")
-print("="*60)
-
-# Simulate selecting price with 0 points
-print("\n1. Setting up session state with price selected:")
-st.session_state.data = {
-    'selectionCriteria.price': True,
-    'selectionCriteria.priceRatio': '0'
-}
-print(f"  Session state: {st.session_state.data}")
-
-print("\n2. Creating validator and running validate_merila:")
-validator = ValidationManager(schema, st.session_state)
-
-print("\n3. Checking _get_selected_criteria:")
-criteria = validator._get_selected_criteria('selectionCriteria')
-print(f"  Selected criteria: {criteria}")
-
-print("\n4. Running full validation:")
-is_valid, errors = validator.validate_merila()
-print(f"  Valid: {is_valid}")
-print(f"  Errors: {errors}")
-
-print("\n5. Checking expanded keys from validate_step:")
-expanded = validator._expand_step_keys(['selectionCriteria'])
-print(f"  Expanded keys (first 5): {expanded[:5]}")
-
-print("\n6. Testing with different key patterns:")
-# Try different key patterns that might be used in the actual form
-test_patterns = [
-    'selectionCriteria.price',
-    'general.selectionCriteria.price', 
-    'price',
-    'lot_1_selectionCriteria.price'
-]
-
-for pattern in test_patterns:
-    st.session_state.data = {pattern: True}
-    print(f"\n  Testing pattern: {pattern}")
-    criteria = validator._get_selected_criteria('selectionCriteria')
-    print(f"    Result: price={criteria.get('price', False)}")
+if __name__ == "__main__":
+    # Initialize minimal session state if needed
+    if 'current_step' not in st.session_state:
+        st.session_state.current_step = 11
+    
+    debug_session_state()
