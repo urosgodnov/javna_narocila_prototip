@@ -517,7 +517,14 @@ def get_step_names(steps):
             
             # Handle lot-specific steps
             if field_name.startswith("lot_context_"):
-                step_name = f"Sklop {field_name.split('_')[-1]}"
+                lot_index = int(field_name.split('_')[-1])
+                # Get actual lot name from session state
+                lots = st.session_state.get('lots', [])
+                if lot_index < len(lots):
+                    lot_name = lots[lot_index].get('name', f'Sklop {lot_index + 1}') if isinstance(lots[lot_index], dict) else f'Sklop {lot_index + 1}'
+                else:
+                    lot_name = f"Sklop {lot_index + 1}"
+                step_name = lot_name
             elif field_name.startswith("lot_"):
                 # Extract the actual field name from lot_0_orderType
                 parts = field_name.split('_', 2)
@@ -1174,7 +1181,43 @@ def render_main_form():
                     field_name = step_fields[0] if isinstance(step_fields, list) else str(step_fields)
                     # Convert field name to readable format
                     if field_name.startswith("lot_context_"):
-                        step_name = f"Sklop {field_name.split('_')[-1]}"
+                        lot_index = int(field_name.split('_')[-1])
+                        # Get actual lot name from session state
+                        lots = st.session_state.get('lots', [])
+                        if lot_index < len(lots):
+                            lot_name = lots[lot_index].get('name', f'Sklop {lot_index + 1}') if isinstance(lots[lot_index], dict) else f'Sklop {lot_index + 1}'
+                        else:
+                            lot_name = f"Sklop {lot_index + 1}"
+                        step_name = lot_name
+                    elif field_name.startswith("lot_"):
+                        # Handle lot_N_fieldName pattern (e.g., lot_0_orderType)
+                        parts = field_name.split('_', 2)
+                        if len(parts) >= 3:
+                            lot_index = int(parts[1])
+                            base_field = parts[2]
+                            # Get lot name prefix
+                            lots = st.session_state.get('lots', [])
+                            if lot_index < len(lots):
+                                lot_name = lots[lot_index].get('name', f'Sklop {lot_index + 1}') if isinstance(lots[lot_index], dict) else f'Sklop {lot_index + 1}'
+                            else:
+                                lot_name = f"Sklop {lot_index + 1}"
+                            # Map the base field to its display name
+                            field_display_name = {
+                                "orderType": "Vrsta naročila",
+                                "technicalSpecifications": "Tehnične zahteve",
+                                "executionDeadline": "Roki izvajanja",
+                                "priceInfo": "Informacije o ceni",
+                                "inspectionInfo": "Ogledi in pogajanja",
+                                "participationAndExclusion": "Pogoji sodelovanja",
+                                "financialGuarantees": "Zavarovanja",
+                                "merila": "Merila",
+                                "selectionCriteria": "Merila izbire",
+                                "contractInfo": "Sklepanje pogodbe",
+                                "otherInfo": "Dodatne informacije"
+                            }.get(base_field, base_field)
+                            step_name = f"{lot_name}: {field_display_name}"
+                        else:
+                            step_name = f"Korak {i+1}"
                     elif field_name == "clientInfo":
                         step_name = "Podatki naročnika"
                     elif field_name == "projectInfo":
