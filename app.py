@@ -784,6 +784,11 @@ def render_main_form():
                             with st.spinner(LOADING_MESSAGES['load_draft']):
                                 loaded_data = database.load_draft(draft['id'])
                                 if loaded_data:
+                                    import logging
+                                    logging.info(f"[DRAFT LOAD] Loading draft with keys: {list(loaded_data.keys())}")
+                                    if 'lots' in loaded_data:
+                                        logging.info(f"[DRAFT LOAD] Found {len(loaded_data['lots'])} lots in draft")
+                                    
                                     # Flatten nested dictionary to dot-notation for session state
                                     def flatten_dict(d, parent_key='', sep='.'):
                                         """Flatten nested dictionary into dot-notation keys."""
@@ -796,7 +801,10 @@ def render_main_form():
                                             if k == 'lots' and isinstance(v, list):
                                                 # Store lot data in session state
                                                 st.session_state['lots'] = v
-                                                st.session_state['lot_mode'] = 'multiple'
+                                                st.session_state['lot_mode'] = 'multiple' if len(v) > 0 else 'none'
+                                                # Also set lotsInfo.hasLots for proper form configuration
+                                                if len(v) > 0:
+                                                    st.session_state['lotsInfo.hasLots'] = True
                                                 
                                                 # Extract lot names
                                                 lot_names = [lot.get('name', f'Sklop {i+1}') for i, lot in enumerate(v)]
@@ -837,12 +845,29 @@ def render_main_form():
                                     # Flatten and load into session state
                                     flattened_data = flatten_dict(loaded_data)
                                     
+                                    import logging
+                                    lot_keys = [k for k in flattened_data.keys() if k.startswith('lot_')]
+                                    logging.info(f"[DRAFT LOAD] Flattened data has {len(lot_keys)} lot-prefixed keys")
+                                    if lot_keys:
+                                        logging.info(f"[DRAFT LOAD] Sample lot keys: {lot_keys[:5]}")
+                                    
                                     # Check if we're in general mode (no lots)
                                     has_lots = loaded_data.get('lotsInfo', {}).get('hasLots', False)
+                                    logging.info(f"[DRAFT LOAD] has_lots from lotsInfo: {has_lots}")
+                                    
+                                    # If we have lots in the data but lotsInfo.hasLots is False, fix it
+                                    if 'lots' in loaded_data and isinstance(loaded_data['lots'], list) and len(loaded_data['lots']) > 0:
+                                        has_lots = True
+                                        st.session_state['lotsInfo.hasLots'] = True
+                                        logging.info(f"[DRAFT LOAD] Corrected has_lots to True based on lots data")
                                     
                                     for key, value in flattened_data.items():
+                                        # Don't add general prefix to lot keys even if has_lots is False
+                                        # (lot keys should be preserved as-is)
+                                        if key.startswith('lot_'):
+                                            st.session_state[key] = value
                                         # In general mode, add "general." prefix to form fields
-                                        if not has_lots and not key.startswith('lot_') and not key.startswith('general.'):
+                                        elif not has_lots and not key.startswith('general.'):
                                             # Skip special keys that shouldn't have prefix
                                             special_keys = ['lots', 'lot_names', 'lot_mode', 'current_lot_index', 
                                                           'lotsInfo.hasLots', 'current_step', 'completed_steps']
@@ -856,6 +881,13 @@ def render_main_form():
                                     
                                     st.session_state.current_draft_id = draft['id']
                                     
+                                    # Ensure lot configuration is properly set if we have lots
+                                    if st.session_state.get('lot_mode') == 'multiple':
+                                        # Set current lot index if not already set
+                                        if 'current_lot_index' not in st.session_state:
+                                            st.session_state['current_lot_index'] = 0
+                                        logging.info(f"[DRAFT LOAD] Set lot configuration: mode={st.session_state.get('lot_mode')}, index={st.session_state.get('current_lot_index')}")
+                                    
                                     # Restore step if saved
                                     if '_save_metadata' in loaded_data:
                                         metadata = loaded_data['_save_metadata']
@@ -864,6 +896,11 @@ def render_main_form():
                                     
                                     # Mark all steps with data as completed for navigation
                                     steps = get_dynamic_form_steps(st.session_state)
+                                    import logging
+                                    logging.info(f"[DRAFT LOAD] After loading, have {len(steps)} total steps")
+                                    logging.info(f"[DRAFT LOAD] lot_mode: {st.session_state.get('lot_mode')}")
+                                    logging.info(f"[DRAFT LOAD] Number of lots: {len(st.session_state.get('lots', []))}")
+                                    
                                     completed_steps = {}
                                     
                                     for i, step_keys in enumerate(steps):
@@ -2443,7 +2480,10 @@ def render_drafts_sidebar(draft_options):
                     if k == 'lots' and isinstance(v, list):
                         # Store lot data in session state
                         st.session_state['lots'] = v
-                        st.session_state['lot_mode'] = 'multiple'
+                        st.session_state['lot_mode'] = 'multiple' if len(v) > 0 else 'none'
+                        # Also set lotsInfo.hasLots for proper form configuration
+                        if len(v) > 0:
+                            st.session_state['lotsInfo.hasLots'] = True
                         
                         # Extract lot names
                         lot_names = [lot.get('name', f'Sklop {i+1}') for i, lot in enumerate(v)]
