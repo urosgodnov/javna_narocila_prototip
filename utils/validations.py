@@ -997,7 +997,7 @@ class ValidationManager:
                 # Check for double-prefixed keys first (form renderer bug)
                 cofinancer_keys.append(f'lot_0.lot_0_orderType.cofinancers')
                 cofinancer_keys.append(f'lot_0.orderType.cofinancers')
-            elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
+            elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
                 # For general step or when lot_mode is 'none', check general prefix
                 cofinancer_keys.append('general.orderType.cofinancers')
             else:
@@ -1018,7 +1018,7 @@ class ValidationManager:
                 # Check for double-prefixed keys first (form renderer bug)
                 count_keys.append(f'lot_0.lot_0_orderType.cofinancerCount')
                 count_keys.append(f'lot_0.orderType.cofinancerCount')
-            elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
+            elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
                 # For general step or when lot_mode is 'none', check general prefix
                 count_keys.append('general.orderType.cofinancerCount')
             else:
@@ -1061,7 +1061,7 @@ class ValidationManager:
                     # Check for double-prefixed keys first (form renderer bug)
                     prefixes.append(f'lot_0.lot_0_orderType')
                     prefixes.append(f'lot_0.orderType')
-                elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
+                elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
                     # For general step or when lot_mode is 'none', check general prefix first
                     prefixes.append('general.orderType')
                 else:
@@ -1131,7 +1131,7 @@ class ValidationManager:
                     prefixes = []
                     
                     # For general step or when lot_mode is 'none', check general prefix
-                    if (current_step and 'general' in current_step.lower()) or lot_mode == 'none':
+                    if (current_step and 'general' in str(current_step).lower()) or lot_mode == 'none':
                         prefixes.append('general.orderType')
                         prefixes.append('orderType')
                     elif lot_mode == 'multiple' and current_lot_index is not None:
