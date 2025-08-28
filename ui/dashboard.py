@@ -5,27 +5,30 @@ Provides table view with CRUD operations
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import json
+import time
 import database
 from utils.schema_utils import get_form_data_from_session, clear_form_data
 from utils.loading_state import set_loading_state, LOADING_MESSAGES
 
 def render_dashboard():
     """Render the procurement dashboard with table view."""
-    # Import and use modern dashboard if available
-    try:
-        from ui.modern_dashboard_simple import render_modern_dashboard
-        render_modern_dashboard()
-        return
-    except Exception as e:
-        st.error(f"Error loading modern dashboard: {e}")
-        pass
+    # DISABLED MODERN DASHBOARD TO FIX IMPORT ISSUES
+    # try:
+    #     from ui.modern_dashboard_simple import render_modern_dashboard
+    #     render_modern_dashboard()
+    #     return
+    # except Exception as e:
+    #     st.error(f"Error loading modern dashboard: {e}")
+    #     pass
+    
     
     st.title("📋 Javna Naročila - Pregled")
     st.markdown(f"**Organizacija:** demo_organizacija")
     st.markdown("---")
     
     # Action buttons row
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 4])
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
     with col1:
         if st.button("➕ Novo javno naročilo", type="primary", use_container_width=True):
             with st.spinner('Pripravljam nov obrazec...'):
@@ -38,6 +41,15 @@ def render_dashboard():
     
     with col2:
         if st.button("🔄 Osveži", use_container_width=True):
+            st.rerun()
+    
+    with col3:
+        if st.button("📋 Uvoz", use_container_width=True):
+            st.session_state.show_import_dialog = True
+    
+    with col4:
+        if st.button("⚙️ Nastavitve", use_container_width=True):
+            st.session_state.current_page = 'admin'
             st.rerun()
     
     # Fetch procurements
@@ -77,6 +89,65 @@ def render_dashboard():
         - 🗑️ Brisali
         - 📊 Spremljali status
         """)
+    
+    # Import Dialog (works even with empty database)
+    if st.session_state.get('show_import_dialog', False):
+        with st.expander("📋 Uvoz podatkov", expanded=True):
+            uploaded_file = st.file_uploader("Izberite JSON datoteko za uvoz", type=['json'])
+            if uploaded_file:
+                try:
+                    import json
+                    import sqlite3
+                    data = json.load(uploaded_file)
+                    
+                    # Direct database insert
+                    conn = sqlite3.connect('mainDB.db')
+                    cursor = conn.cursor()
+                    
+                    # Extract basic fields from nested structure
+                    naziv = data.get('projectInfo', {}).get('projectName', data.get('naziv', 'Uvoženo naročilo'))
+                    vrsta = data.get('orderType', {}).get('type', data.get('vrsta', ''))
+                    postopek = data.get('submissionProcedure', {}).get('procedure', data.get('postopek', ''))
+                    vrednost = data.get('orderType', {}).get('estimatedValue', data.get('vrednost', 0))
+                    status = data.get('status', 'Osnutek')
+                    
+                    # Get form_data
+                    if 'form_data' in data and isinstance(data['form_data'], str):
+                        form_data_json = data['form_data']
+                    elif 'form_data' in data:
+                        form_data_json = json.dumps(data['form_data'])
+                    else:
+                        form_data_json = json.dumps(data)
+                    
+                    # Direct insert
+                    cursor.execute('''
+                        INSERT INTO javna_narocila (
+                            organizacija, naziv, vrsta, postopek, 
+                            datum_objave, status, vrednost, form_data_json,
+                            zadnja_sprememba, uporabnik
+                        ) VALUES (?, ?, ?, ?, date('now'), ?, ?, ?, datetime('now'), ?)
+                    ''', ('demo_organizacija', naziv, vrsta, postopek, 
+                          status, vrednost, form_data_json, 'import'))
+                    
+                    new_id = cursor.lastrowid
+                    conn.commit()
+                    conn.close()
+                    
+                    # Clear session state
+                    if 'show_import_dialog' in st.session_state:
+                        del st.session_state['show_import_dialog']
+                    st.session_state.current_page = 'dashboard'
+                    st.session_state['JUST_IMPORTED'] = True
+                    
+                    st.success(f"✅ Uspešno uvoženo kot naročilo #{new_id}")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Napaka pri uvozu: {str(e)}")
+            
+            if st.button("Zapri"):
+                del st.session_state['show_import_dialog']
+                st.rerun()
 
 def display_procurements_table(procurements):
     """Display procurements in an interactive table with actions."""
@@ -145,6 +216,7 @@ def display_procurements_table(procurements):
     # Action buttons for each row
     st.subheader("🔧 Akcije")
     
+    
     # Create a selectbox for choosing which procurement to act on
     if len(procurements) > 0:
         procurement_options = {f"{p['id']} - {p['naziv'] or 'Neimenovano'}": p['id'] for p in procurements}
@@ -154,7 +226,7 @@ def display_procurements_table(procurements):
         )
         selected_id = procurement_options[selected_proc_label]
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             if st.button("✏️ Uredi", use_container_width=True):
@@ -202,33 +274,135 @@ def display_procurements_table(procurements):
                         del st.session_state[f"confirm_delete_{selected_id}"]
                         st.rerun()
         
-        # Second row of buttons
-        col4, col5, col6 = st.columns(3)
-        
         with col4:
+            if st.button("📋 Izvoz/Uvoz", use_container_width=True):
+                st.session_state.show_export_import = True
+                st.session_state.export_selected_id = selected_id
+        
+        # Second row of buttons
+        col_ai, col_forms, col_status = st.columns(3)
+        
+        with col_ai:
             # Story 25.2: DUMMY AI Generation button
             if st.button("🤖 Generiraj vsebino z AI", use_container_width=True, key=f"ai_gen_{selected_id}"):
                 st.info("ℹ️ Funkcija generiranja z AI bo kmalu na voljo")
         
-        with col5:
+        with col_forms:
             # Story 25.3: DUMMY Form Preparation button
             if st.button("📄 Pripravi obrazce", use_container_width=True, key=f"prep_forms_{selected_id}"):
                 st.info("ℹ️ Funkcija priprave obrazcev bo kmalu na voljo")
         
-        with col6:
+        with col_status:
             # Status change dropdown
-            selected_proc = next(p for p in procurements if p['id'] == selected_id)
-            current_status = selected_proc['status']
-            new_status = st.selectbox(
-                "Spremeni status:",
-                options=["Osnutek", "Aktivno", "Zaključeno"],
-                index=["Osnutek", "Aktivno", "Zaključeno"].index(current_status),
-                key=f"status_{selected_id}"
-            )
-            if new_status != current_status:
-                if database.update_procurement_status(selected_id, new_status):
-                    st.success(f"Status spremenjen na: {new_status}")
+            try:
+                selected_proc = next(p for p in procurements if p['id'] == selected_id)
+                current_status = selected_proc.get('status', 'Osnutek')
+                new_status = st.selectbox(
+                    "Spremeni status:",
+                    options=["Osnutek", "Aktivno", "Zaključeno"],
+                    index=["Osnutek", "Aktivno", "Zaključeno"].index(current_status) if current_status in ["Osnutek", "Aktivno", "Zaključeno"] else 0,
+                    key=f"status_{selected_id}"
+                )
+                if new_status != current_status:
+                    if database.update_procurement_status(selected_id, new_status):
+                        st.success(f"Status spremenjen na: {new_status}")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Napaka pri statusu: {str(e)}")
+        
+        # Export/Import Dialog (moved after buttons)
+        if st.session_state.get('show_export_import', False):
+            with st.expander("📋 Izvoz/Uvoz podatkov", expanded=True):
+                operation = st.radio("Izberite operacijo:", ["Izvoz", "Uvoz"])
+                
+                if operation == "Izvoz":
+                    procurement = database.get_procurement_by_id(st.session_state.export_selected_id)
+                    if procurement:
+                        import json
+                        export_data = json.dumps(procurement, indent=2, ensure_ascii=False)
+                        st.download_button(
+                            label="💾 Prenesi JSON",
+                            data=export_data,
+                            file_name=f"narocilo_{st.session_state.export_selected_id}.json",
+                            mime="application/json"
+                        )
+                
+                elif operation == "Uvoz":
+                    uploaded_file = st.file_uploader("Izberite JSON datoteko", type=['json'])
+                    if uploaded_file:
+                        try:
+                            import json
+                            import sqlite3
+                            data = json.load(uploaded_file)
+                            
+                            
+                            # Direct database insert
+                            conn = sqlite3.connect('mainDB.db')
+                            cursor = conn.cursor()
+                            
+                            # Extract basic fields from nested structure
+                            # Try to extract from nested structure first, fallback to top-level
+                            naziv = data.get('projectInfo', {}).get('projectName', data.get('naziv', 'Uvoženo naročilo'))
+                            vrsta = data.get('orderType', {}).get('type', data.get('vrsta', ''))
+                            postopek = data.get('submissionProcedure', {}).get('procedure', data.get('postopek', ''))
+                            vrednost = data.get('orderType', {}).get('estimatedValue', data.get('vrednost', 0))
+                            status = data.get('status', 'Osnutek')
+                            
+                            
+                            # Get form_data 
+                            if 'form_data' in data and isinstance(data['form_data'], str):
+                                form_data_json = data['form_data']
+                            elif 'form_data' in data:
+                                form_data_json = json.dumps(data['form_data'])
+                            else:
+                                form_data_json = json.dumps(data)
+                            
+                            # Direct insert
+                            cursor.execute('''
+                                INSERT INTO javna_narocila (
+                                    organizacija, naziv, vrsta, postopek, 
+                                    datum_objave, status, vrednost, form_data_json,
+                                    zadnja_sprememba, uporabnik
+                                ) VALUES (?, ?, ?, ?, date('now'), ?, ?, ?, datetime('now'), ?)
+                            ''', ('demo_organizacija', naziv, vrsta, postopek, 
+                                  status, vrednost, form_data_json, 'import'))
+                            
+                            new_id = cursor.lastrowid
+                            conn.commit()
+                            
+                            # Verify it was actually inserted
+                            cursor.execute('SELECT id, naziv FROM javna_narocila WHERE id = ?', (new_id,))
+                            verification = cursor.fetchone()
+                            conn.close()
+                            
+                            
+                            # Clear session state
+                            for key in ['edit_mode', 'edit_record_id', 'edit_data_loaded', 
+                                       'show_export_import', 'current_step']:
+                                if key in st.session_state:
+                                    if key in ['edit_mode']:
+                                        st.session_state[key] = False
+                                    elif key in ['edit_record_id']:
+                                        st.session_state[key] = None
+                                    else:
+                                        del st.session_state[key]
+                            
+                            # Ensure dashboard view after import
+                            st.session_state.current_page = 'dashboard'
+                            st.session_state['JUST_IMPORTED'] = True  # Flag for app.py to handle redirect
+                            
+                            st.success(f"✅ Uspešno uvoženo kot naročilo #{new_id}")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Napaka pri uvozu: {str(e)}")
+                
+                if st.button("Zapri"):
+                    del st.session_state['show_export_import']
                     st.rerun()
+    else:
+        # No procurements
+        st.warning("⚠️ Ni naročil v bazi. Ustvarite novo naročilo z gumbom '➕ Novo javno naročilo' zgoraj.")
 
 def load_procurement_to_form(procurement_id):
     """Load procurement data into form session state."""

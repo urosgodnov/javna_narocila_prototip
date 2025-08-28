@@ -69,6 +69,13 @@ def main():
     if 'edit_record_id' not in st.session_state:
         st.session_state.edit_record_id = None
     
+    # IMPORT REDIRECT FIX: Force back to dashboard if we just imported
+    if st.session_state.get('JUST_IMPORTED'):
+        st.session_state.current_page = 'dashboard'
+        st.session_state.edit_mode = False
+        st.session_state.edit_record_id = None
+        del st.session_state['JUST_IMPORTED']
+    
     if 'schema' not in st.session_state:
         try:
             st.session_state['schema'] = load_json_schema(SCHEMA_FILE)
@@ -392,6 +399,10 @@ def mark_step_completed(step_index, lot_id=None):
 
 def is_step_accessible(step_index, lot_id=None):
     """Check if a step can be accessed based on completion history."""
+    # In edit mode, allow access to all steps since we're editing existing data
+    if st.session_state.get('edit_mode', False):
+        return True
+    
     # Allow access to current and previous steps
     current_step = st.session_state.get('current_step', 0)
     if step_index <= current_step:
@@ -434,13 +445,15 @@ def render_quick_navigation():
     steps = get_dynamic_form_steps(st.session_state)
     current = st.session_state.current_step
     completed = st.session_state.get('completed_steps', {})
+    is_edit_mode = st.session_state.get('edit_mode', False)
     
     # Build accessible steps list
     accessible_steps = []
     step_names = get_step_names(steps)  # Use helper function to get names
     
     for idx, step in enumerate(steps):
-        if idx < current or completed.get(idx, False):
+        # In edit mode, all steps are accessible; otherwise check if completed or current/previous
+        if is_edit_mode or idx <= current or completed.get(idx, False):
             step_name = step_names[idx] if idx < len(step_names) else f"Korak {idx+1}"
             # Add step number to the name for clarity
             accessible_steps.append((idx, f"{idx+1}. {step_name}"))
@@ -448,7 +461,10 @@ def render_quick_navigation():
     if accessible_steps and len(accessible_steps) > 1:
         with st.sidebar:
             st.markdown("### 🧭 Hitra navigacija")
-            st.info("Skočite na že izpolnjene korake")
+            if is_edit_mode:
+                st.info("Pri urejanju lahko skočite na katerikoli korak")
+            else:
+                st.info("Skočite na že izpolnjene korake")
             
             # Show overall progress
             total_steps = len(steps)

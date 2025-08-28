@@ -243,8 +243,10 @@ class ValidationManager:
             self._validate_required_fields(expanded_keys, step_number)
         self._validate_dropdowns(expanded_keys)
         
-        # Always run _validate_multiple_entries - it handles multiple clients and lots
-        self._validate_multiple_entries()
+        # Only run multiple entries validation when we're on a screen that has that data
+        # Check if we're on the client info screen (has clientInfo fields)
+        if any('clientInfo' in key for key in expanded_keys):
+            self._validate_multiple_entries()
         
         self._validate_conditional_requirements()
         
@@ -531,15 +533,18 @@ class ValidationManager:
     
     def _validate_multiple_entries(self):
         """
-        Validate multiple entry requirements.
-        For example, when multiple clients are selected, validate that at least 2 are entered.
+        Validate multiple entry requirements when on the client info screen.
+        This is only called when we're actually on the screen with clientInfo fields.
         """
         # Multiple clients validation - check if NOT single client mode
         is_single_client = self.session_state.get('clientInfo.isSingleClient', True)
+        
+        # Since we're on the client screen, validate if multiple clients is selected
         if not is_single_client:
             # Check if we have clients array (as per JSON schema)
             clients_array = self.session_state.get('clientInfo.clients', [])
             
+            # Validate if array exists
             if clients_array:
                 # Array structure - validate each client
                 client_count = 0
@@ -576,9 +581,6 @@ class ValidationManager:
                     )
                     for incomplete in incomplete_clients:
                         self.errors.append(incomplete)
-            else:
-                # No clients array - maybe error or not initialized
-                self.errors.append("Pri več naročnikih morate vnesti podatke za najmanj 2 naročnika")
         
         # Note: Lot validation moved to validate_screen_5_lots() to use correct field names
     

@@ -706,8 +706,8 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     "omejeni postopek": "omejeni postopek (41. člen ZJN-3)",
                     "konkurenčni dialog": "konkurenčni dialog (42. člen ZJN-3)",
                     "partnerstvo za inovacije": "partnerstvo za inovacije (43. člen ZJN-3)",
-                    "konkurenčni postopek s pogajanji": "konkurenčni postopek s pogajanji (44. člen ZJN-3)",
-                    "postopek s pogajanji z objavo": "postopek s pogajanji z objavo (45. člen ZJN-3)",
+                    "konkurenčni postopek s pogajanji (zgolj za javno naročanje na splošnem področju)": "konkurenčni postopek s pogajanji (zgolj za javno naročanje na splošnem področju) (44. člen ZJN-3)",
+                    "postopek s pogajanji z objavo (zgolj za javno naročanje na infrastrukturnem področju)": "postopek s pogajanji z objavo (zgolj za javno naročanje na infrastrukturnem področju) (45. člen ZJN-3)",
                     "postopek s pogajanji brez predhodne objave": "postopek s pogajanji brez predhodne objave (46. člen ZJN-3)",
                     "postopek naročila male vrednosti": "postopek naročila male vrednosti (47. člen ZJN-3)",
                     "vseeno": "vseeno"

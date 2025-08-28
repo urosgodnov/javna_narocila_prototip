@@ -161,7 +161,8 @@
                         "omejeni postopek",
                         "konkurenčni dialog",
                         "partnerstvo za inovacije",
-                        "konkurenčni postopek s pogajanji",
+                        "konkurenčni postopek s pogajanji (zgolj za javno naročanje na splošnem področju)",
+                        "postopek s pogajanji z objavo (zgolj za javno naročanje na infrastrukturnem področju)",
                         "postopek s pogajanji brez predhodne objave",
                         "postopek naročila male vrednosti",
                         "vseeno"
@@ -561,7 +562,8 @@
                         "not_in": [
                             "konkurenčni dialog",
                             "partnerstvo za inovacije",
-                            "konkurenčni postopek s pogajanji",
+                            "konkurenčni postopek s pogajanji (zgolj za javno naročanje na splošnem področju)",
+                            "postopek s pogajanji z objavo (zgolj za javno naročanje na infrastrukturnem področju)",
                             "postopek s pogajanji brez predhodne objave",
                             "postopek naročila male vrednosti"
                         ]

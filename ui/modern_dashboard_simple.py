@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, List, Any
+import json
 import database
 
 def render_modern_dashboard():
@@ -552,9 +553,56 @@ def render_documents_table(procurements):
                 st.info("ℹ️ Funkcija generiranja z AI bo kmalu na voljo")
         
         with col5:
-            # Story 25.3: DUMMY Form Preparation button
-            if st.button("📄 Pripravi obrazce", use_container_width=True, key=f"prep_forms_{selected_id}"):
-                st.info("ℹ️ Funkcija priprave obrazcev bo kmalu na voljo")
+            # Import/Export button
+            if st.button("📋 Izvoz/Uvoz", use_container_width=True, key=f"export_import_{selected_id}"):
+                st.session_state.show_export_import = True
+                st.session_state.export_selected_id = selected_id
+        
+        # Show Export/Import Dialog
+        if st.session_state.get('show_export_import', False):
+            with st.expander("📋 Izvoz/Uvoz podatkov", expanded=True):
+                operation = st.radio("Izberite operacijo:", ["Izvoz", "Uvoz"])
+                
+                if operation == "Izvoz":
+                    # Export current procurement
+                    procurement = database.get_procurement_by_id(st.session_state.export_selected_id)
+                    if procurement:
+                        import json
+                        export_data = json.dumps(procurement, indent=2, ensure_ascii=False)
+                        st.download_button(
+                            label="💾 Prenesi JSON",
+                            data=export_data,
+                            file_name=f"narocilo_{st.session_state.export_selected_id}.json",
+                            mime="application/json"
+                        )
+                
+                elif operation == "Uvoz":
+                    uploaded_file = st.file_uploader("Izberite JSON datoteko", type=['json'])
+                    if uploaded_file:
+                        try:
+                            import json
+                            data = json.load(uploaded_file)
+                            
+                            # Remove ID to create new procurement
+                            if 'id' in data:
+                                del data['id']
+                            
+                            # Direct database import
+                            new_id = database.create_procurement(data, 'demo_organizacija')
+                            st.success(f"✅ Uspešno uvoženo kot naročilo #{new_id}")
+                            
+                            # Clear the dialog and ensure we stay in dashboard
+                            if 'show_export_import' in st.session_state:
+                                del st.session_state['show_export_import']
+                            st.session_state.current_page = 'dashboard'
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Napaka pri uvozu: {str(e)}")
+                
+                if st.button("Zapri"):
+                    del st.session_state['show_export_import']
+                    st.rerun()
 
 def get_status_badge(status):
     """Generate HTML for status badge."""
