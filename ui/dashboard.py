@@ -53,28 +53,228 @@ def calculate_procurement_value(proc):
 def render_dashboard():
     """Render the procurement dashboard with table view."""
     
-    # Header with organization and logout
-    col_title, col_logout = st.columns([5, 1])
-    with col_title:
-        st.title("📋 Javna Naročila - Pregled")
+    # Professional dashboard styling with subtle colors
+    st.markdown("""
+    <style>
+    /* Professional color palette */
+    :root {
+        --primary-color: #2563eb;
+        --secondary-color: #64748b;
+        --success-color: #16a34a;
+        --warning-color: #ea580c;
+        --danger-color: #dc2626;
+        --dark-text: #1e293b;
+        --light-bg: #f8fafc;
+        --border-color: #e2e8f0;
+    }
+    
+    /* Clean modern buttons - stronger gray for secondary buttons */
+    .stButton > button[kind="secondary"] {
+        background-color: #64748b;
+        color: white !important;
+        border: 1px solid #64748b;
+        padding: 0.5rem 1.5rem;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .stButton > button[kind="secondary"]:hover {
+        background-color: #475569;
+        border-color: #475569;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Primary button - light green for Novo naročilo */
+    .stButton > button[kind="primary"] {
+        background-color: #86efac !important;
+        color: #14532d !important;
+        border: 1px solid #86efac !important;
+        padding: 0.5rem 1.5rem;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background-color: #65d989 !important;
+        border-color: #65d989 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Logout button - red/danger style */
+    button[key="logout_button"] {
+        background-color: #ef4444 !important;
+        color: white !important;
+        border: 1px solid #ef4444 !important;
+    }
+    
+    button[key="logout_button"]:hover {
+        background-color: #dc2626 !important;
+        border-color: #dc2626 !important;
+        transform: translateY(-1px);
+    }
+    
+    /* Stats cards */
+    [data-testid="metric-container"] {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: all 0.2s ease;
+    }
+    
+    [data-testid="metric-container"]:hover {
+        border-color: #cbd5e1;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+    }
+    
+    /* Metric values */
+    [data-testid="metric-container"] [data-testid="metric-value"] {
+        font-size: 2rem !important;
+        font-weight: 700;
+        color: #2C3E50;
+    }
+    
+    [data-testid="metric-container"] label {
+        font-size: 0.9rem;
+        color: #7F8C8D;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    /* Table enhancements */
+    .dataframe {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    
+    .dataframe tbody tr {
+        transition: all 0.2s ease;
+    }
+    
+    .dataframe tbody tr:hover {
+        background-color: #F0F3FF !important;
+        transform: scale(1.01);
+    }
+    
+    /* Status badges */
+    .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+    
+    .status-active {
+        background: linear-gradient(135deg, #48C774, #3EC46D);
+        color: white;
+    }
+    
+    .status-draft {
+        background: linear-gradient(135deg, #FFB443, #FF9A00);
+        color: white;
+    }
+    
+    .status-completed {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+    
+    /* Action buttons row */
+    .action-buttons {
+        display: flex;
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+    
+    /* Search input */
+    .stTextInput > div > div > input {
+        border-radius: 25px;
+        border: 2px solid #E1E8ED;
+        padding: 0.5rem 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    /* Select boxes */
+    .stSelectbox > div > div {
+        border-radius: 10px;
+    }
+    
+    /* Animations */
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7);
+        }
+        70% {
+            box-shadow: 0 0 0 10px rgba(102, 126, 234, 0);
+        }
+        100% {
+            box-shadow: 0 0 0 0 rgba(102, 126, 234, 0);
+        }
+    }
+    
+    .pulse-animation {
+        animation: pulse 2s infinite;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Clean professional header with narrower logout button
+    col_header, col_spacer, col_logout = st.columns([5, 2, 0.8])
+    
+    with col_header:
+        st.markdown("""
+        <h1 style='
+            color: #1e293b;
+            font-size: 2rem;
+            font-weight: 600;
+            margin: 0;
+            padding: 0;
+        '>Javna Naročila</h1>
+        """, unsafe_allow_html=True)
+        
         current_org = st.session_state.get('organization', 'demo_organizacija')
-        st.markdown(f"**Organizacija:** {current_org}")
+        st.markdown(f"""
+        <p style='
+            color: #64748b;
+            font-size: 1rem;
+            margin-top: 0.25rem;
+        '>Organizacija: <strong style='color: #334155;'>{current_org}</strong></p>
+        """, unsafe_allow_html=True)
+    
+    # Empty spacer column for better layout
+    with col_spacer:
+        pass
     
     with col_logout:
-        st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
-        if st.button("🚪 Odjava", use_container_width=True):
+        st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+        if st.button("🚪 Odjava", use_container_width=True, key="logout_button"):
             # Clear authentication
             for key in ['authenticated', 'organization']:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
     
-    st.markdown("---")
+    # Action buttons row - all buttons at same level
+    st.markdown("<div style='margin: 1rem 0;'></div>", unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns(4)
     
-    # Action buttons row
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
     with col1:
-        if st.button("➕ Novo javno naročilo", type="primary", use_container_width=True):
+        if st.button("➕ Novo naročilo", use_container_width=True, key="new_procurement", type="primary"):
             with st.spinner('Pripravljam nov obrazec...'):
                 st.session_state.current_page = 'form'
                 st.session_state.edit_mode = False
@@ -84,15 +284,15 @@ def render_dashboard():
                 st.rerun()
     
     with col2:
-        if st.button("🔄 Osveži", use_container_width=True):
+        if st.button("Osveži", use_container_width=True):
             st.rerun()
     
     with col3:
-        if st.button("📋 Uvoz", use_container_width=True):
+        if st.button("Uvoz", use_container_width=True):
             st.session_state.show_import_dialog = True
     
     with col4:
-        if st.button("⚙️ Nastavitve", use_container_width=True):
+        if st.button("Nastavitve", use_container_width=True):
             st.session_state.current_page = 'admin'
             st.rerun()
     
@@ -100,43 +300,76 @@ def render_dashboard():
     procurements = database.get_procurements_for_customer('demo_organizacija')
     
     if procurements:
-        # Add some statistics
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Vsa naročila", len(procurements))
-        with col2:
-            active_count = len([p for p in procurements if p['status'] == 'Aktivno'])
-            st.metric("Aktivna", active_count)
-        with col3:
-            draft_count = len([p for p in procurements if p['status'] == 'Osnutek'])
-            st.metric("Osnutki", draft_count)
-        with col4:
-            total_value = sum([calculate_procurement_value(p) for p in procurements])
-            st.metric("Skupna vrednost", f"{total_value:,.2f} €")
+        # Modern stats section with enhanced cards
+        st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
         
-        st.markdown("---")
+        # Calculate metrics
+        total_count = len(procurements)
+        active_count = len([p for p in procurements if p['status'] == 'Aktivno'])
+        draft_count = len([p for p in procurements if p['status'] == 'Osnutek'])
+        total_value = sum([calculate_procurement_value(p) for p in procurements])
+        
+        # Display metrics with enhanced styling
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                label="VSA NAROČILA",
+                value=total_count,
+                delta=None
+            )
+        
+        with col2:
+            st.metric(
+                label="AKTIVNA",
+                value=active_count,
+                delta=f"{(active_count/total_count*100):.0f}%" if total_count > 0 else "0%"
+            )
+        
+        with col3:
+            st.metric(
+                label="OSNUTKI", 
+                value=draft_count,
+                delta=f"{(draft_count/total_count*100):.0f}%" if total_count > 0 else "0%"
+            )
+        
+        with col4:
+            st.metric(
+                label="SKUPNA VREDNOST",
+                value=f"{total_value:,.0f} €",
+                delta=None
+            )
+        
+        # Elegant separator
+        st.markdown("""
+        <div style='
+            height: 2px; 
+            background: linear-gradient(90deg, transparent, #e0e0e0 20%, #e0e0e0 80%, transparent);
+            margin: 2rem 0;
+        '></div>
+        """, unsafe_allow_html=True)
         
         # Display procurements in an enhanced table
         display_procurements_table(procurements)
         
     else:
         # Empty state
-        st.info("📭 Ni najdenih javnih naročil.")
+        st.info("Ni najdenih javnih naročil.")
         st.markdown("""
         ### Začnite z ustvarjanjem prvega javnega naročila
         
-        Kliknite na gumb **'➕ Novo javno naročilo'** zgoraj, da začnete z vnosom.
+        Kliknite na gumb **'+ Novo naročilo'** zgoraj, da začnete z vnosom.
         
         Po ustvarjanju bo naročilo prikazano v tej tabeli, kjer ga boste lahko:
-        - 📝 Urejali
-        - 📋 Kopirali
-        - 🗑️ Brisali
-        - 📊 Spremljali status
+        - Urejali
+        - Kopirali
+        - Brisali
+        - Spremljali status
         """)
     
     # Import Dialog (works even with empty database)
     if st.session_state.get('show_import_dialog', False):
-        with st.expander("📋 Uvoz podatkov", expanded=True):
+        with st.expander("Uvoz podatkov", expanded=True):
             uploaded_file = st.file_uploader("Izberite JSON datoteko za uvoz", type=['json'])
             if uploaded_file:
                 try:
@@ -183,7 +416,7 @@ def render_dashboard():
                     st.session_state.current_page = 'dashboard'
                     st.session_state['JUST_IMPORTED'] = True
                     
-                    st.success(f"✅ Uspešno uvoženo kot naročilo #{new_id}")
+                    st.success(f"Uspešno uvoženo kot naročilo #{new_id}")
                     st.rerun()
                     
                 except Exception as e:
@@ -227,13 +460,21 @@ def display_procurements_table(procurements):
     
     df = pd.DataFrame(df_data)
     
-    # Display the dataframe
-    st.subheader("📊 Seznam javnih naročil")
+    # Display the dataframe with clean header
+    st.markdown("""
+    <h3 style='
+        color: #1e293b;
+        font-weight: 500;
+        margin-bottom: 1rem;
+        border-left: 3px solid #e2e8f0;
+        padding-left: 10px;
+    '>Seznam javnih naročil</h3>
+    """, unsafe_allow_html=True)
     
     # Add search/filter
     col1, col2, col3 = st.columns([3, 2, 2])
     with col1:
-        search_term = st.text_input("🔍 Iskanje", placeholder="Vnesite iskalni niz...")
+        search_term = st.text_input("Iskanje", placeholder="Vnesite iskalni niz...")
     with col2:
         status_filter = st.selectbox("Status", ["Vsi", "Osnutek", "Aktivno", "Zaključeno"])
     
@@ -272,8 +513,16 @@ def display_procurements_table(procurements):
         }
     )
     
-    # Action buttons for each row
-    st.subheader("🔧 Akcije")
+    # Action buttons section with clean styling
+    st.markdown("""
+    <h3 style='
+        color: #1e293b;
+        font-weight: 500;
+        margin: 2rem 0 1rem 0;
+        border-left: 3px solid #e2e8f0;
+        padding-left: 10px;
+    '>Akcije</h3>
+    """, unsafe_allow_html=True)
     
     
     # Create a selectbox for choosing which procurement to act on
@@ -288,7 +537,7 @@ def display_procurements_table(procurements):
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            if st.button("✏️ Uredi", use_container_width=True):
+            if st.button("Uredi", use_container_width=True):
                 import logging
                 logging.info(f"=== EDIT BUTTON CLICKED for ID {selected_id} ===")
                 st.session_state.current_page = 'form'
@@ -301,7 +550,7 @@ def display_procurements_table(procurements):
                 st.rerun()
         
         with col2:
-            if st.button("📋 Kopiraj", use_container_width=True):
+            if st.button("Kopiraj", use_container_width=True):
                 # Story 1: Direct copy without opening form
                 # Load full procurement data
                 original_data = database.get_procurement_by_id(selected_id)
@@ -321,24 +570,24 @@ def display_procurements_table(procurements):
                     # Create new procurement
                     new_id = database.create_procurement(form_data_copy)
                     if new_id:
-                        st.success(f"✅ Naročilo uspešno kopirano! Novo naročilo ID: {new_id}")
+                        st.success(f"Naročilo uspešno kopirano! Novo naročilo ID: {new_id}")
                         st.rerun()
                     else:
-                        st.error("❌ Napaka pri kopiranju naročila")
+                        st.error("Napaka pri kopiranju naročila")
                 else:
-                    st.error("❌ Ni mogoče naložiti podatkov naročila")
+                    st.error("Ni mogoče naložiti podatkov naročila")
         
         with col3:
             # Handle delete with confirmation
             if f"confirm_delete_{selected_id}" not in st.session_state:
-                if st.button("🗑️ Izbriši", use_container_width=True, type="secondary"):
+                if st.button("Izbriši", use_container_width=True):
                     st.session_state[f"confirm_delete_{selected_id}"] = True
                     st.rerun()
             else:
                 st.warning("Ali ste prepričani?")
                 col_yes, col_no = st.columns(2)
                 with col_yes:
-                    if st.button("Da, izbriši", type="primary", use_container_width=True):
+                    if st.button("Da, izbriši", use_container_width=True):
                         with st.spinner(LOADING_MESSAGES['delete']):
                             if database.delete_procurement(selected_id):
                                 st.success("Naročilo uspešno izbrisano")
@@ -351,62 +600,53 @@ def display_procurements_table(procurements):
                         st.rerun()
         
         with col4:
-            if st.button("📋 Izvoz/Uvoz", use_container_width=True):
+            if st.button("Izvoz/Uvoz", use_container_width=True):
                 st.session_state.show_export_import = True
                 st.session_state.export_selected_id = selected_id
         
-        # Second row of buttons
-        col_ai, col_forms, col_status = st.columns(3)
+        # Second row with symmetric buttons - TODO(human): Implement status change logic
+        st.markdown("<div style='margin-top: 1rem;'></div>", unsafe_allow_html=True)
+        col1_2, col2_2, col3_2, col4_2 = st.columns(4)
         
-        with col_ai:
-            # Story 25.2: DUMMY AI Generation button
-            if st.button("🤖 Generiraj vsebino z AI", use_container_width=True, key=f"ai_gen_{selected_id}"):
-                st.info("ℹ️ Funkcija generiranja z AI bo kmalu na voljo")
-        
-        with col_forms:
-            # Story 25.3: DUMMY Form Preparation button
-            if st.button("📄 Pripravi obrazce", use_container_width=True, key=f"prep_forms_{selected_id}"):
-                st.info("ℹ️ Funkcija priprave obrazcev bo kmalu na voljo")
-        
-        with col_status:
-            # Status change with button confirmation
-            try:
-                selected_proc = next(p for p in procurements if p['id'] == selected_id)
+        with col1_2:
+            # TODO(human): Implement status change functionality
+            # This button should cycle through statuses: Osnutek -> Aktivno -> Zaključeno -> Osnutek
+            # Current status should be shown on the button label
+            selected_proc = next((p for p in procurements if p['id'] == selected_id), None)
+            if selected_proc:
                 current_status = selected_proc.get('status', 'Osnutek')
+                # Determine next status in cycle
+                status_cycle = {
+                    'Osnutek': 'Aktivno',
+                    'Aktivno': 'Zaključeno', 
+                    'Zaključeno': 'Osnutek'
+                }
+                next_status = status_cycle.get(current_status, 'Osnutek')
                 
-                st.markdown(f"**Trenutni status:** {current_status}")
-                
-                # Show buttons for status change
-                st.markdown("Spremeni na:")
-                col_s1, col_s2, col_s3 = st.columns(3)
-                
-                with col_s1:
-                    if current_status != "Osnutek":
-                        if st.button("📝 Osnutek", key=f"set_osnutek_{selected_id}", use_container_width=True):
-                            if database.update_procurement_status(selected_id, "Osnutek"):
-                                st.success("Status spremenjen!")
-                                st.rerun()
-                
-                with col_s2:
-                    if current_status != "Aktivno":
-                        if st.button("▶️ Aktivno", key=f"set_aktivno_{selected_id}", use_container_width=True):
-                            if database.update_procurement_status(selected_id, "Aktivno"):
-                                st.success("Status spremenjen!")
-                                st.rerun()
-                
-                with col_s3:
-                    if current_status != "Zaključeno":
-                        if st.button("✅ Zaključeno", key=f"set_zakljuceno_{selected_id}", use_container_width=True):
-                            if database.update_procurement_status(selected_id, "Zaključeno"):
-                                st.success("Status spremenjen!")
-                                st.rerun()
-                                
-            except Exception as e:
-                st.error(f"Napaka pri statusu: {str(e)}")
+                if st.button(f"Status: {current_status} → {next_status}", 
+                           use_container_width=True, 
+                           key=f"status_change_{selected_id}"):
+                    if database.update_procurement_status(selected_id, next_status):
+                        st.success(f"Status uspešno spremenjen na {next_status}")
+                        st.rerun()
+        
+        with col2_2:
+            # Story 25.2: DUMMY AI Generation button
+            if st.button("Generiraj z AI", use_container_width=True, key=f"ai_gen_{selected_id}"):
+                st.info("Funkcija generiranja z AI bo kmalu na voljo")
+        
+        with col3_2:
+            # Story 25.3: DUMMY Form Preparation button  
+            if st.button("Pripravi obrazce", use_container_width=True, key=f"prep_forms_{selected_id}"):
+                st.info("Funkcija priprave obrazcev bo kmalu na voljo")
+        
+        with col4_2:
+            # Empty column for symmetry
+            st.empty()
         
         # Export/Import Dialog (moved after buttons)
         if st.session_state.get('show_export_import', False):
-            with st.expander("📋 Izvoz/Uvoz podatkov", expanded=True):
+            with st.expander("Izvoz/Uvoz podatkov", expanded=True):
                 operation = st.radio("Izberite operacijo:", ["Izvoz", "Uvoz"])
                 
                 if operation == "Izvoz":
@@ -415,7 +655,7 @@ def display_procurements_table(procurements):
                         import json
                         export_data = json.dumps(procurement, indent=2, ensure_ascii=False)
                         st.download_button(
-                            label="💾 Prenesi JSON",
+                            label="Prenesi JSON",
                             data=export_data,
                             file_name=f"narocilo_{st.session_state.export_selected_id}.json",
                             mime="application/json"
@@ -485,7 +725,7 @@ def display_procurements_table(procurements):
                             st.session_state.current_page = 'dashboard'
                             st.session_state['JUST_IMPORTED'] = True  # Flag for app.py to handle redirect
                             
-                            st.success(f"✅ Uspešno uvoženo kot naročilo #{new_id}")
+                            st.success(f"Uspešno uvoženo kot naročilo #{new_id}")
                             st.rerun()
                             
                         except Exception as e:
@@ -496,7 +736,7 @@ def display_procurements_table(procurements):
                     st.rerun()
     else:
         # No procurements
-        st.warning("⚠️ Ni naročil v bazi. Ustvarite novo naročilo z gumbom '➕ Novo javno naročilo' zgoraj.")
+        st.warning("Ni naročil v bazi. Ustvarite novo naročilo z gumbom '+ Novo naročilo' zgoraj.")
 
 def load_procurement_to_form(procurement_id):
     """Load procurement data into form session state."""
