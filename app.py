@@ -3,8 +3,8 @@
 import streamlit as st
 import database
 import logging
-from config_refactored import (
-    get_dynamic_form_steps_refactored as get_dynamic_form_steps,
+from config import (
+    get_dynamic_form_steps,
     is_final_lot_step,
     get_lot_navigation_buttons,
     SCHEMA_FILE
@@ -440,7 +440,7 @@ def navigate_to_step(target_step, lot_id=None):
 
 def render_quick_navigation():
     """Render quick navigation dropdown for completed steps."""
-    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    from config import get_dynamic_form_steps
     
     steps = get_dynamic_form_steps(st.session_state)
     current = st.session_state.current_step
@@ -552,7 +552,7 @@ def get_step_names(steps):
 # Story 31.3: Visual Progress Indicator
 def render_visual_progress_indicator():
     """Render horizontal progress indicator with visual states and navigation."""
-    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    from config import get_dynamic_form_steps
     
     steps = get_dynamic_form_steps(st.session_state)
     current = st.session_state.current_step
@@ -659,7 +659,7 @@ def render_visual_progress_indicator():
 
 def render_compact_progress_indicator():
     """Compact progress indicator for many steps or mobile view."""
-    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    from config import get_dynamic_form_steps
     
     steps = get_dynamic_form_steps(st.session_state)
     current = st.session_state.current_step
@@ -762,7 +762,7 @@ def validate_step(step_keys, schema):
 def render_main_form():
     """Render the main multi-step form interface with enhanced UX."""
     # Import get_dynamic_form_steps function
-    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    from config import get_dynamic_form_steps
     
     # Check for saved progress on startup - only show if we're in edit mode or have a current draft
     if 'checked_saved_progress' not in st.session_state:
@@ -900,6 +900,15 @@ def render_main_form():
                                     logging.info(f"[DRAFT LOAD] After loading, have {len(steps)} total steps")
                                     logging.info(f"[DRAFT LOAD] lot_mode: {st.session_state.get('lot_mode')}")
                                     logging.info(f"[DRAFT LOAD] Number of lots: {len(st.session_state.get('lots', []))}")
+                                    logging.info(f"[DRAFT LOAD] lotsInfo.hasLots: {st.session_state.get('lotsInfo.hasLots')}")
+                                    logging.info(f"[DRAFT LOAD] lot_names: {st.session_state.get('lot_names')}")
+                                    logging.info(f"[DRAFT LOAD] First 3 steps: {steps[:3] if steps else 'No steps'}")
+                                    
+                                    # Log all keys starting with lot_
+                                    lot_keys = [k for k in st.session_state.keys() if k.startswith('lot_')]
+                                    logging.info(f"[DRAFT LOAD] Found {len(lot_keys)} lot_ keys in session state")
+                                    if lot_keys:
+                                        logging.info(f"[DRAFT LOAD] First 10 lot keys: {lot_keys[:10]}")
                                     
                                     completed_steps = {}
                                     
@@ -2104,7 +2113,7 @@ def get_current_lot_name():
 def render_step_breadcrumbs():
     """Render step navigation breadcrumbs with lot context highlighting (Rule of Three: Location 2)."""
     from localization import get_dynamic_step_label
-    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    from config import get_dynamic_form_steps
     
     # Get dynamic form steps for breadcrumbs
     dynamic_form_steps = get_dynamic_form_steps(st.session_state)
@@ -2549,7 +2558,7 @@ def render_drafts_sidebar(draft_options):
             
             # Mark all steps with data as completed for navigation
             # Need to import here as we're not in render_main_form scope
-            from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+            from config import get_dynamic_form_steps
             steps = get_dynamic_form_steps(st.session_state)
             completed_steps = {}
             

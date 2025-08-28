@@ -152,8 +152,8 @@ def save_current_lot_data():
 
 def find_lot_configuration_step():
     """Find the step index for lot configuration."""
-    from config_refactored import get_dynamic_form_steps_refactored
-    steps = get_dynamic_form_steps_refactored(st.session_state)
+    from config import get_dynamic_form_steps
+    steps = get_dynamic_form_steps(st.session_state)
     
     for i, step_fields in enumerate(steps):
         if 'lotConfiguration' in step_fields:

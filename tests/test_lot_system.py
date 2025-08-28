@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Test script to verify lot system configuration."""
 
-from config_refactored import (
-    get_dynamic_form_steps_refactored,
+from config import (
+    get_dynamic_form_steps,
     is_final_lot_step,
     get_lot_navigation_buttons
 )
@@ -17,7 +17,7 @@ def test_no_lots():
         'current_step': 0
     }
     
-    steps = get_dynamic_form_steps_refactored(session_state)
+    steps = get_dynamic_form_steps(session_state)
     print(f"Total steps: {len(steps)}")
     print(f"Steps: {steps[:5]}...")  # Show first 5 steps
     
@@ -43,7 +43,7 @@ def test_multiple_lots():
         'current_step': 0
     }
     
-    steps = get_dynamic_form_steps_refactored(session_state)
+    steps = get_dynamic_form_steps(session_state)
     print(f"Total steps: {len(steps)}")
     
     # Should have lotConfiguration step
