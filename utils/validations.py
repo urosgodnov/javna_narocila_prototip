@@ -990,8 +990,12 @@ class ValidationManager:
             cofinancer_keys = []
             
             if lot_mode == 'multiple' and current_lot_index is not None:
+                # Check for double-prefixed keys first (form renderer bug)
+                cofinancer_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.cofinancers')
                 cofinancer_keys.append(f'lot_{current_lot_index}.orderType.cofinancers')
             elif lot_mode == 'single':
+                # Check for double-prefixed keys first (form renderer bug)
+                cofinancer_keys.append(f'lot_0.lot_0_orderType.cofinancers')
                 cofinancer_keys.append(f'lot_0.orderType.cofinancers')
             elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
                 # For general step or when lot_mode is 'none', check general prefix
@@ -1007,8 +1011,12 @@ class ValidationManager:
             count_keys = []
             
             if lot_mode == 'multiple' and current_lot_index is not None:
+                # Check for double-prefixed keys first (form renderer bug)
+                count_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType.cofinancerCount')
                 count_keys.append(f'lot_{current_lot_index}.orderType.cofinancerCount')
             elif lot_mode == 'single':
+                # Check for double-prefixed keys first (form renderer bug)
+                count_keys.append(f'lot_0.lot_0_orderType.cofinancerCount')
                 count_keys.append(f'lot_0.orderType.cofinancerCount')
             elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
                 # For general step or when lot_mode is 'none', check general prefix
@@ -1046,8 +1054,12 @@ class ValidationManager:
                 prefixes = []
                 
                 if lot_mode == 'multiple' and current_lot_index is not None:
+                    # Check for double-prefixed keys first (form renderer bug)
+                    prefixes.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType')
                     prefixes.append(f'lot_{current_lot_index}.orderType')
                 elif lot_mode == 'single':
+                    # Check for double-prefixed keys first (form renderer bug)
+                    prefixes.append(f'lot_0.lot_0_orderType')
                     prefixes.append(f'lot_0.orderType')
                 elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
                     # For general step or when lot_mode is 'none', check general prefix first
@@ -1123,9 +1135,13 @@ class ValidationManager:
                         prefixes.append('general.orderType')
                         prefixes.append('orderType')
                     elif lot_mode == 'multiple' and current_lot_index is not None:
+                        # Check for double-prefixed keys first (form renderer bug)
+                        prefixes.append(f'lot_{current_lot_index}.lot_{current_lot_index}_orderType')
                         prefixes.append(f'lot_{current_lot_index}.orderType')
                         prefixes.append('orderType')
                     elif lot_mode == 'single':
+                        # Check for double-prefixed keys first (form renderer bug)
+                        prefixes.append(f'lot_0.lot_0_orderType')
                         prefixes.append(f'lot_0.orderType')
                         prefixes.append('orderType')
                     else:
