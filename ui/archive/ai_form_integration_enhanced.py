@@ -448,7 +448,7 @@ def render_enhanced_ai_field(form_section: str, field_name: str, **kwargs):
     This is a drop-in replacement for render_ai_field that automatically
     uses document context when available.
     """
-    from ui.ai_form_integration import render_ai_field
+    # Removed circular import - this function should be called from ai_form_integration
     
     # Check if we should use enhanced assistant
     context = kwargs.get('context', {})
@@ -467,8 +467,6 @@ def render_enhanced_ai_field(form_section: str, field_name: str, **kwargs):
 
 
 # Export the enhanced assistant as the default if AI is available
-if AI_AVAILABLE:
-    # Override the default assistant in ai_form_integration
-    import ui.ai_form_integration
-    ui.ai_form_integration.FormAIAssistant = EnhancedFormAIAssistant
-    logger.info("Enhanced AI assistant activated with document context support")
+# Removed circular import - ai_form_integration handles the import of this module
+# if AI_AVAILABLE:
+#     logger.info("Enhanced AI assistant available with document context support")

@@ -14,20 +14,13 @@ load_dotenv()
 
 # Import AI processing capabilities
 try:
-    # Story 28.5: Try to import enhanced AI first
-    from ui.ai_form_integration_enhanced import EnhancedFormAIAssistant
-    FormAIAssistant = EnhancedFormAIAssistant
+    # Use basic AI processor
+    from ui.ai_processor import FormAIAssistant
     AI_AVAILABLE = True
-    AI_ENHANCED = True
+    AI_ENHANCED = False
 except ImportError:
-    # Fall back to basic AI
-    try:
-        from ui.ai_processor import FormAIAssistant
-        AI_AVAILABLE = True
-        AI_ENHANCED = False
-    except ImportError:
-        AI_AVAILABLE = False
-        AI_ENHANCED = False
+    AI_AVAILABLE = False
+    AI_ENHANCED = False
 
 # Define form field mappings
 AI_ENABLED_FIELDS = {

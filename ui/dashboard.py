@@ -13,15 +13,6 @@ from utils.loading_state import set_loading_state, LOADING_MESSAGES
 
 def render_dashboard():
     """Render the procurement dashboard with table view."""
-    # DISABLED MODERN DASHBOARD TO FIX IMPORT ISSUES
-    # try:
-    #     from ui.modern_dashboard_simple import render_modern_dashboard
-    #     render_modern_dashboard()
-    #     return
-    # except Exception as e:
-    #     st.error(f"Error loading modern dashboard: {e}")
-    #     pass
-    
     
     st.title("📋 Javna Naročila - Pregled")
     st.markdown(f"**Organizacija:** demo_organizacija")
