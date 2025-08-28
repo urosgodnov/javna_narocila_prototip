@@ -203,10 +203,17 @@ def is_final_lot_step(session_state, current_step):
     current_step_fields = steps[current_step]
     next_step_fields = steps[current_step + 1]
     
-    # Check if next step is a lot context or final step
+    # Only return true for lot final steps when we're actually in lot mode
+    lot_mode = session_state.get("lot_mode", "none")
+    if lot_mode != "multiple":
+        return False
+    
+    # Check if next step is a lot context (for multi-lot scenarios)
     if next_step_fields and len(next_step_fields) > 0:
         next_field = next_step_fields[0]
-        if next_field.startswith('lot_context_') or next_field in ['contractInfo', 'otherInfo']:
+        # Only check for lot_context transitions, not contractInfo/otherInfo
+        # Those are handled by normal navigation
+        if next_field.startswith('lot_context_'):
             return True
     
     return False

@@ -11,11 +11,64 @@ import database
 from utils.schema_utils import get_form_data_from_session, clear_form_data
 from utils.loading_state import set_loading_state, LOADING_MESSAGES
 
+def update_status_callback(procurement_id, new_status):
+    """Callback function to update procurement status."""
+    if database.update_procurement_status(procurement_id, new_status):
+        st.success(f"✅ Status uspešno spremenjen na: {new_status}")
+
+def calculate_procurement_value(proc):
+    """
+    Calculate total procurement value.
+    If procurement has lots, sum up all lot values.
+    Otherwise, use the main value field.
+    """
+    # Check if procurement has form_data with lots
+    if proc.get('form_data') and isinstance(proc['form_data'], dict):
+        form_data = proc['form_data']
+        
+        # Check if this procurement has lots
+        has_lots = form_data.get('lotsInfo', {}).get('hasLots', False)
+        
+        if has_lots and 'lots' in form_data:
+            # Sum up values from all lots
+            total_value = 0
+            lots = form_data.get('lots', [])
+            
+            for lot in lots:
+                if isinstance(lot, dict):
+                    lot_value = lot.get('estimatedValue', 0)
+                    try:
+                        # Convert to float if it's a string
+                        if isinstance(lot_value, str):
+                            lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
+                        total_value += lot_value
+                    except (ValueError, AttributeError):
+                        continue
+            
+            return total_value if total_value > 0 else proc.get('vrednost', 0)
+    
+    # Fall back to the main value field
+    return proc.get('vrednost', 0)
+
 def render_dashboard():
     """Render the procurement dashboard with table view."""
     
-    st.title("📋 Javna Naročila - Pregled")
-    st.markdown(f"**Organizacija:** demo_organizacija")
+    # Header with organization and logout
+    col_title, col_logout = st.columns([5, 1])
+    with col_title:
+        st.title("📋 Javna Naročila - Pregled")
+        current_org = st.session_state.get('organization', 'demo_organizacija')
+        st.markdown(f"**Organizacija:** {current_org}")
+    
+    with col_logout:
+        st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
+        if st.button("🚪 Odjava", use_container_width=True):
+            # Clear authentication
+            for key in ['authenticated', 'organization']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
+    
     st.markdown("---")
     
     # Action buttons row
@@ -58,7 +111,7 @@ def render_dashboard():
             draft_count = len([p for p in procurements if p['status'] == 'Osnutek'])
             st.metric("Osnutki", draft_count)
         with col4:
-            total_value = sum([p['vrednost'] or 0 for p in procurements])
+            total_value = sum([calculate_procurement_value(p) for p in procurements])
             st.metric("Skupna vrednost", f"{total_value:,.2f} €")
         
         st.markdown("---")
@@ -146,6 +199,21 @@ def display_procurements_table(procurements):
     # Convert to DataFrame for better display
     df_data = []
     for proc in procurements:
+        # Calculate value (sum of lots if applicable)
+        value = calculate_procurement_value(proc)
+        
+        # Check if this has lots for display purposes
+        has_lots = False
+        if proc.get('form_data') and isinstance(proc['form_data'], dict):
+            has_lots = proc['form_data'].get('lotsInfo', {}).get('hasLots', False)
+        
+        # Add indicator if value is from lots
+        value_display = f"{value:,.2f}"
+        if has_lots:
+            num_lots = len(proc['form_data'].get('lots', [])) if proc.get('form_data') else 0
+            if num_lots > 0:
+                value_display = f"{value:,.2f} ({num_lots} sklopov)"
+        
         df_data.append({
             'ID': proc['id'],
             'Naziv': proc['naziv'] or 'Neimenovano',
@@ -153,7 +221,7 @@ def display_procurements_table(procurements):
             'Postopek': proc['postopek'] or '-',
             'Datum': proc['datum_objave'] or '-',
             'Status': proc['status'],
-            'Vrednost (€)': f"{proc['vrednost'] or 0:,.2f}",
+            'Vrednost (€)': value_display,
             'Posodobljeno': proc['zadnja_sprememba'][:10] if proc['zadnja_sprememba'] else '-'
         })
     
@@ -234,14 +302,31 @@ def display_procurements_table(procurements):
         
         with col2:
             if st.button("📋 Kopiraj", use_container_width=True):
-                # Load the procurement but create as new
-                st.session_state.current_page = 'form'
-                st.session_state.edit_mode = False
-                st.session_state.edit_record_id = None
-                st.session_state.current_step = 0
-                load_procurement_to_form(selected_id)
-                st.success("Naročilo kopirano. Urejate novo kopijo.")
-                st.rerun()
+                # Story 1: Direct copy without opening form
+                # Load full procurement data
+                original_data = database.get_procurement_by_id(selected_id)
+                if original_data and original_data.get('form_data'):
+                    # Get the form data
+                    form_data_copy = original_data['form_data'].copy()
+                    
+                    # Modify the name to append "(kopija)"
+                    if 'projectInfo' in form_data_copy and 'projectName' in form_data_copy['projectInfo']:
+                        original_name = form_data_copy['projectInfo']['projectName']
+                        form_data_copy['projectInfo']['projectName'] = f"{original_name} (kopija)"
+                    else:
+                        # Fallback if structure is different
+                        form_data_copy['projectInfo'] = form_data_copy.get('projectInfo', {})
+                        form_data_copy['projectInfo']['projectName'] = f"{original_data.get('naziv', 'Neimenovano')} (kopija)"
+                    
+                    # Create new procurement
+                    new_id = database.create_procurement(form_data_copy)
+                    if new_id:
+                        st.success(f"✅ Naročilo uspešno kopirano! Novo naročilo ID: {new_id}")
+                        st.rerun()
+                    else:
+                        st.error("❌ Napaka pri kopiranju naročila")
+                else:
+                    st.error("❌ Ni mogoče naložiti podatkov naročila")
         
         with col3:
             # Handle delete with confirmation
@@ -284,20 +369,38 @@ def display_procurements_table(procurements):
                 st.info("ℹ️ Funkcija priprave obrazcev bo kmalu na voljo")
         
         with col_status:
-            # Status change dropdown
+            # Status change with button confirmation
             try:
                 selected_proc = next(p for p in procurements if p['id'] == selected_id)
                 current_status = selected_proc.get('status', 'Osnutek')
-                new_status = st.selectbox(
-                    "Spremeni status:",
-                    options=["Osnutek", "Aktivno", "Zaključeno"],
-                    index=["Osnutek", "Aktivno", "Zaključeno"].index(current_status) if current_status in ["Osnutek", "Aktivno", "Zaključeno"] else 0,
-                    key=f"status_{selected_id}"
-                )
-                if new_status != current_status:
-                    if database.update_procurement_status(selected_id, new_status):
-                        st.success(f"Status spremenjen na: {new_status}")
-                        st.rerun()
+                
+                st.markdown(f"**Trenutni status:** {current_status}")
+                
+                # Show buttons for status change
+                st.markdown("Spremeni na:")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                
+                with col_s1:
+                    if current_status != "Osnutek":
+                        if st.button("📝 Osnutek", key=f"set_osnutek_{selected_id}", use_container_width=True):
+                            if database.update_procurement_status(selected_id, "Osnutek"):
+                                st.success("Status spremenjen!")
+                                st.rerun()
+                
+                with col_s2:
+                    if current_status != "Aktivno":
+                        if st.button("▶️ Aktivno", key=f"set_aktivno_{selected_id}", use_container_width=True):
+                            if database.update_procurement_status(selected_id, "Aktivno"):
+                                st.success("Status spremenjen!")
+                                st.rerun()
+                
+                with col_s3:
+                    if current_status != "Zaključeno":
+                        if st.button("✅ Zaključeno", key=f"set_zakljuceno_{selected_id}", use_container_width=True):
+                            if database.update_procurement_status(selected_id, "Zaključeno"):
+                                st.success("Status spremenjen!")
+                                st.rerun()
+                                
             except Exception as e:
                 st.error(f"Napaka pri statusu: {str(e)}")
         

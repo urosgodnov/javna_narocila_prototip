@@ -263,10 +263,34 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
     naziv = form_data.get('projectInfo', {}).get('projectName', 'Neimenovano naročilo')
     vrsta = form_data.get('orderType', {}).get('type', '')
     postopek = form_data.get('submissionProcedure', {}).get('procedure', '')
-    vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
+    
+    # Calculate value - sum from lots if present, otherwise from main field
+    vrednost = 0
+    has_lots = form_data.get('lotsInfo', {}).get('hasLots', False)
+    
+    if has_lots and 'lots' in form_data:
+        # Sum up values from all lots
+        for lot in form_data.get('lots', []):
+            if isinstance(lot, dict):
+                lot_value = lot.get('estimatedValue', 0)
+                try:
+                    if isinstance(lot_value, str):
+                        lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
+                    vrednost += lot_value
+                except (ValueError, AttributeError):
+                    continue
+    
+    # If no value from lots, try to get from main field
+    if vrednost == 0:
+        vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
+        if isinstance(vrednost, str):
+            try:
+                vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
+            except ValueError:
+                vrednost = 0
     
     # Debug: Show what we extracted
-    logging.warning(f"  Extracted: naziv='{naziv}', vrsta='{vrsta}', postopek='{postopek}', vrednost={vrednost}")
+    logging.warning(f"  Extracted: naziv='{naziv}', vrsta='{vrsta}', postopek='{postopek}', vrednost={vrednost}, has_lots={has_lots}")
     
     # Set default date and status
     datum_objave = datetime.now().date().isoformat()
@@ -321,21 +345,6 @@ def delete_procurement(procurement_id):
         conn.commit()
         return cursor.rowcount > 0
 
-def update_procurement_status(procurement_id, new_status):
-    """Update the status of a procurement."""
-    init_db()
-    zadnja_sprememba = datetime.now().isoformat()
-    
-    with sqlite3.connect(DATABASE_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE javna_narocila 
-            SET status = ?, zadnja_sprememba = ?
-            WHERE id = ?
-        """, (new_status, zadnja_sprememba, procurement_id))
-        conn.commit()
-        return cursor.rowcount > 0
-
 # ============ LOGGING TABLE OPERATIONS ============
 
 def create_logs_table():
@@ -352,9 +361,16 @@ def create_logs_table():
                 CREATE TABLE IF NOT EXISTS organizacija (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     naziv TEXT NOT NULL,
+                    password_hash TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            
+            # Story 2: Add password_hash column if it doesn't exist (migration)
+            cursor.execute("PRAGMA table_info(organizacija)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'password_hash' not in columns:
+                cursor.execute('ALTER TABLE organizacija ADD COLUMN password_hash TEXT')
             
             # Create application_logs table with new columns
             cursor.execute('''
@@ -712,3 +728,171 @@ def create_ai_documents_tables():
             ''')
             
             conn.commit()
+
+# ============ ORGANIZATION MANAGEMENT (Story 2) ============
+
+def get_all_organizations():
+    """Get all organizations from the database."""
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # Try to get with password_hash first, fallback to without
+        try:
+            cursor.execute('SELECT id, naziv, password_hash FROM organizacija ORDER BY naziv')
+            columns = ['id', 'name', 'password_hash']
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        except sqlite3.OperationalError as e:
+            if "password_hash" in str(e):
+                # Column doesn't exist, try without it and add None for password_hash
+                cursor.execute('SELECT id, naziv FROM organizacija ORDER BY naziv')
+                result = []
+                for row in cursor.fetchall():
+                    result.append({'id': row[0], 'name': row[1], 'password_hash': None})
+                return result
+            else:
+                raise
+
+def get_organization_by_name(name):
+    """Get organization by name."""
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # Try to get with password_hash first, fallback to without
+        try:
+            cursor.execute('SELECT id, naziv, password_hash FROM organizacija WHERE naziv = ?', (name,))
+            row = cursor.fetchone()
+            if row:
+                return {'id': row[0], 'name': row[1], 'password_hash': row[2]}
+            return None
+        except sqlite3.OperationalError as e:
+            if "password_hash" in str(e):
+                # Column doesn't exist, try without it
+                cursor.execute('SELECT id, naziv FROM organizacija WHERE naziv = ?', (name,))
+                row = cursor.fetchone()
+                if row:
+                    return {'id': row[0], 'name': row[1], 'password_hash': None}
+                return None
+            else:
+                raise
+
+def create_organization(name, password_hash=None):
+    """Create a new organization."""
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # Try to insert with password_hash first, fallback to without
+        try:
+            cursor.execute(
+                'INSERT INTO organizacija (naziv, password_hash) VALUES (?, ?)',
+                (name, password_hash)
+            )
+        except sqlite3.OperationalError as e:
+            if "password_hash" in str(e):
+                # Column doesn't exist, insert without it
+                cursor.execute(
+                    'INSERT INTO organizacija (naziv) VALUES (?)',
+                    (name,)
+                )
+            else:
+                raise
+        
+        conn.commit()
+        return cursor.lastrowid
+
+def update_organization(org_id, name=None, password_hash=None):
+    """Update an organization."""
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        try:
+            if name and password_hash is not None:
+                cursor.execute(
+                    'UPDATE organizacija SET naziv = ?, password_hash = ? WHERE id = ?',
+                    (name, password_hash, org_id)
+                )
+            elif name:
+                cursor.execute(
+                    'UPDATE organizacija SET naziv = ? WHERE id = ?',
+                    (name, org_id)
+                )
+            elif password_hash is not None:
+                cursor.execute(
+                    'UPDATE organizacija SET password_hash = ? WHERE id = ?',
+                    (password_hash, org_id)
+                )
+        except sqlite3.OperationalError as e:
+            if "password_hash" in str(e) and password_hash is not None:
+                # Column doesn't exist, try to add it first
+                try:
+                    cursor.execute('ALTER TABLE organizacija ADD COLUMN password_hash TEXT')
+                    conn.commit()
+                    # Retry the update
+                    if name and password_hash is not None:
+                        cursor.execute(
+                            'UPDATE organizacija SET naziv = ?, password_hash = ? WHERE id = ?',
+                            (name, password_hash, org_id)
+                        )
+                    elif password_hash is not None:
+                        cursor.execute(
+                            'UPDATE organizacija SET password_hash = ? WHERE id = ?',
+                            (password_hash, org_id)
+                        )
+                except:
+                    # If we can't add the column, just update the name
+                    if name:
+                        cursor.execute(
+                            'UPDATE organizacija SET naziv = ? WHERE id = ?',
+                            (name, org_id)
+                        )
+            elif name:
+                # Just update the name if that's all we have
+                cursor.execute(
+                    'UPDATE organizacija SET naziv = ? WHERE id = ?',
+                    (name, org_id)
+                )
+            else:
+                raise
+        
+        conn.commit()
+        return cursor.rowcount > 0
+
+def delete_organization(org_id):
+    """Delete an organization."""
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM organizacija WHERE id = ?', (org_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def update_procurement_status(procurement_id, new_status):
+    """Update the status of a procurement (Story 2)."""
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE javna_narocila SET status = ?, zadnja_sprememba = datetime("now") WHERE id = ?',
+            (new_status, procurement_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+def ensure_demo_organization_exists():
+    """Ensure demo_organizacija exists in the database."""
+    try:
+        org = get_organization_by_name('demo_organizacija')
+        if not org:
+            create_organization('demo_organizacija', None)  # No password for demo
+    except sqlite3.OperationalError as e:
+        # If there's an error with the organizacija table, try to handle it gracefully
+        if "no such table" in str(e):
+            # Table doesn't exist, create it
+            init_db()
+            create_organization('demo_organizacija', None)
+        else:
+            # For other errors, just ensure we can continue
+            pass

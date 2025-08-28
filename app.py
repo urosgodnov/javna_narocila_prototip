@@ -52,9 +52,103 @@ def init_app_data():
 # Run initialization before Streamlit
 init_app_data()
 
+def show_login_form():
+    """Display organization login form (Story 3)."""
+    import hashlib
+    
+    # Check if already logged in
+    if st.session_state.get('authenticated', False):
+        return True
+    
+    # Center the login form
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        # Title with JANA AI on top
+        st.markdown("""
+        <div style='text-align: center;'>
+            <h1 style='color: #ff7f0e; font-weight: bold; margin-bottom: 0; font-size: 2.5em;'>
+                JANA AI
+            </h1>
+            <h2 style='color: #1f77b4; margin-top: 0;'>
+                <span style='font-size: 1.2em;'>JA</span>vna 
+                <span style='font-size: 1.2em;'>NA</span>ročila
+            </h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Organization selection
+        orgs = database.get_all_organizations()
+        org_names = [org['name'] for org in orgs]
+        
+        # Ensure demo_organizacija is in the list
+        if 'demo_organizacija' not in org_names:
+            database.ensure_demo_organization_exists()
+            orgs = database.get_all_organizations()
+            org_names = [org['name'] for org in orgs]
+        
+        selected_org = st.selectbox(
+            "Izberite organizacijo",
+            options=org_names,
+            index=org_names.index("demo_organizacija") if "demo_organizacija" in org_names else 0,
+            key="login_org"
+        )
+        
+        # Password input
+        password = st.text_input(
+            "Geslo organizacije",
+            type="password",
+            key="login_password",
+            placeholder="Vnesite geslo (pustite prazno za demo)"
+        )
+        
+        # Login button
+        if st.button("🔐 Prijava", use_container_width=True, type="primary"):
+            # Authenticate organization
+            org = database.get_organization_by_name(selected_org)
+            if not org:
+                st.error("Organizacija ne obstaja!")
+            else:
+                # Allow empty password for demo
+                if selected_org == "demo_organizacija" and password == "":
+                    st.session_state.authenticated = True
+                    st.session_state.organization = selected_org
+                    st.success("Uspešna prijava!")
+                    st.rerun()
+                # Check hashed password
+                elif org.get('password_hash'):
+                    password_hash = hashlib.sha256(password.encode()).hexdigest()
+                    if password_hash == org['password_hash']:
+                        st.session_state.authenticated = True
+                        st.session_state.organization = selected_org
+                        st.success("Uspešna prijava!")
+                        st.rerun()
+                    else:
+                        st.error("Napačno geslo!")
+                # No password set but password provided
+                elif not org.get('password_hash') and password:
+                    st.error("Ta organizacija nima nastavljenega gesla!")
+                # No password set and no password provided
+                elif not org.get('password_hash') and not password:
+                    st.session_state.authenticated = True
+                    st.session_state.organization = selected_org
+                    st.success("Uspešna prijava!")
+                    st.rerun()
+        
+        # Demo info
+        st.info("ℹ️ Demo organizacija nima nastavljenega gesla - pustite prazno")
+    
+    return False
+
 def main():
     """Main application entry point."""
     st.set_page_config(layout="wide", page_title=get_text("app_title"))
+    
+    # Story 3: Show login form first
+    if not show_login_form():
+        # If not logged in, stop here
+        return
     
     # Show loading message on initial startup
     if 'initialized' not in st.session_state:

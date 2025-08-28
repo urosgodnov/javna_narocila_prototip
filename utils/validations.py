@@ -2494,14 +2494,20 @@ class ValidationManager:
             
             if current_lot_index is None:
                 framework_type_keys.extend([
-                    'general.contractInfo.frameworkType',  # FIRST priority
-                    'widget_general.contractInfo.frameworkType',
+                    'general.contractInfo.frameworkAgreementType',  # FIRST priority - correct field name
+                    'widget_general.contractInfo.frameworkAgreementType',
+                    'contractInfo.frameworkAgreementType',
+                    # Also check old field name for backward compatibility
+                    'general.contractInfo.frameworkType',
                     'contractInfo.frameworkType',
                 ])
             else:
                 framework_type_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.frameworkAgreementType',
+                    f'lot_{current_lot_index}_contractInfo.frameworkAgreementType',
+                    'contractInfo.frameworkAgreementType',
+                    # Also check old field name for backward compatibility
                     f'lot_{current_lot_index}.contractInfo.frameworkType',
-                    f'lot_{current_lot_index}_contractInfo.frameworkType',
                     'contractInfo.frameworkType',
                 ])
             

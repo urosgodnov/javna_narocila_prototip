@@ -195,86 +195,114 @@ def render_database_management_tab():
     render_database_manager()
 
 def render_organization_management_tab():
-    """Render the organization management tab content."""
+    """Render the organization management tab content (Story 2: with password support)."""
+    import hashlib
     
-    # Get the absolute path for organizations.json
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    org_file_path = os.path.join(dir_path, '..', 'json_files', 'organizations.json')
-
-    # Create the file if it doesn't exist
-    if not os.path.exists(org_file_path):
-        with open(org_file_path, 'w') as f:
-            json.dump([], f)
-
-    # Load organizations and perform migration if necessary
-    with open(org_file_path, 'r') as f:
-        organizations = json.load(f)
-
-    migrated = False
-    new_organizations = []
-    demo_org_id = None
-
-    # Migration logic
-    for org in organizations:
-        if isinstance(org, str):
-            # Old format, migrate it
-            org_id = str(uuid.uuid4())
-            if org == "demo_organizacije":
-                demo_org_id = org_id
-            new_organizations.append({"id": org_id, "name": org})
-            migrated = True
-        else:
-            # Already new format
-            if org["name"] == "demo_organizacije":
-                demo_org_id = org["id"]
-            new_organizations.append(org)
+    # Ensure demo organization exists
+    database.ensure_demo_organization_exists()
     
-    # Ensure demo_organizacije exists and get its ID
-    if not any(org["name"] == "demo_organizacije" for org in new_organizations):
-        demo_org_id = str(uuid.uuid4())
-        new_organizations.append({"id": demo_org_id, "name": "demo_organizacije"})
-        migrated = True
-
-    if migrated:
-        with open(org_file_path, 'w') as f:
-            json.dump(new_organizations, f, indent=4)
-        st.success("Organizacije uspešno migrirane na nov format.")
-        st.rerun()
-
-    st.session_state["demo_organizacije_id"] = demo_org_id
-
     with st.container():
         st.markdown("### 🏢 Upravljanje organizacij")
 
-        # Add new organization form
+        # Add new organization form with password field
         with st.form(key='add_organization_form'):
-            new_org_name = st.text_input("Naziv nove organizacije")
-            submitted = st.form_submit_button("Dodaj organizacijo")
+            col1, col2 = st.columns(2)
+            with col1:
+                new_org_name = st.text_input("Naziv nove organizacije")
+            with col2:
+                new_org_password = st.text_input("Geslo organizacije", type="password", 
+                                                help="Pustite prazno za organizacije brez gesla")
+            
+            submitted = st.form_submit_button("➕ Dodaj organizacijo", use_container_width=True)
             if submitted and new_org_name:
-                # Check if organization already exists by name
-                if any(org["name"] == new_org_name for org in new_organizations):
+                # Check if organization already exists
+                existing_org = database.get_organization_by_name(new_org_name)
+                if existing_org:
                     st.warning(f"Organizacija '{new_org_name}' že obstaja.")
                 else:
-                    new_org_id = str(uuid.uuid4())
-                    new_organizations.append({"id": new_org_id, "name": new_org_name})
-                    with open(org_file_path, "w") as f_write:
-                        json.dump(new_organizations, f_write, indent=4)
-                    st.success(f"Organizacija '{new_org_name}' dodana.")
-                    st.rerun()
+                    # Hash password if provided
+                    password_hash = None
+                    if new_org_password:
+                        password_hash = hashlib.sha256(new_org_password.encode()).hexdigest()
+                    
+                    # Create organization
+                    org_id = database.create_organization(new_org_name, password_hash)
+                    if org_id:
+                        st.success(f"✅ Organizacija '{new_org_name}' uspešno dodana.")
+                        if new_org_password:
+                            st.info("Geslo je bilo varno shranjeno.")
+                        st.rerun()
+                    else:
+                        st.error("Napaka pri dodajanju organizacije.")
 
         st.markdown("---")
         st.markdown("### 📋 Seznam obstoječih organizacij")
-        if new_organizations:
-            for i, org in enumerate(new_organizations):
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.markdown(f"- **{org["name"]}** (ID: `{org["id"]}`)")
-                with col2:
-                    if st.button(f"🗑️ Izbriši", key=f"delete_org_{org["id"]}"):
-                        new_organizations.pop(i)
-                        with open(org_file_path, "w") as f_write:
-                            json.dump(new_organizations, f_write, indent=4)
-                        st.rerun()
+        
+        # Get all organizations from database
+        organizations = database.get_all_organizations()
+        
+        if organizations:
+            # Create a table-like display
+            for org in organizations:
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                    with col1:
+                        st.markdown(f"**{org['name']}**")
+                        if org['name'] == 'demo_organizacija':
+                            st.caption("Demo organizacija (brez gesla)")
+                    
+                    with col2:
+                        # Password status
+                        if org['password_hash']:
+                            st.success("🔐 Geslo nastavljeno")
+                        else:
+                            st.warning("⚠️ Brez gesla")
+                    
+                    with col3:
+                        # Update password button
+                        if st.button(f"🔑 Spremeni geslo", key=f"change_pwd_{org['id']}"):
+                            st.session_state[f"editing_pwd_{org['id']}"] = True
+                    
+                    with col4:
+                        # Delete button (except for demo)
+                        if org['name'] != 'demo_organizacija':
+                            if st.button(f"🗑️", key=f"delete_org_{org['id']}"):
+                                if database.delete_organization(org['id']):
+                                    st.success(f"Organizacija izbrisana.")
+                                    st.rerun()
+                    
+                    # Password change form (shown when editing)
+                    if st.session_state.get(f"editing_pwd_{org['id']}", False):
+                        with st.form(key=f"pwd_form_{org['id']}"):
+                            st.markdown(f"#### Spremeni geslo za: {org['name']}")
+                            new_password = st.text_input("Novo geslo", type="password", key=f"new_pwd_{org['id']}")
+                            confirm_password = st.text_input("Potrdi geslo", type="password", key=f"confirm_pwd_{org['id']}")
+                            
+                            col_save, col_cancel = st.columns(2)
+                            with col_save:
+                                if st.form_submit_button("💾 Shrani", use_container_width=True):
+                                    if new_password != confirm_password:
+                                        st.error("Gesli se ne ujemata!")
+                                    elif new_password:
+                                        # Hash and update password
+                                        password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+                                        if database.update_organization(org['id'], password_hash=password_hash):
+                                            st.success("Geslo uspešno posodobljeno!")
+                                            del st.session_state[f"editing_pwd_{org['id']}"]
+                                            st.rerun()
+                                    else:
+                                        # Clear password
+                                        if database.update_organization(org['id'], password_hash=None):
+                                            st.success("Geslo odstranjeno!")
+                                            del st.session_state[f"editing_pwd_{org['id']}"]
+                                            st.rerun()
+                            
+                            with col_cancel:
+                                if st.form_submit_button("❌ Prekliči", use_container_width=True):
+                                    del st.session_state[f"editing_pwd_{org['id']}"]
+                                    st.rerun()
+                    
+                    st.divider()
         else:
             st.info("Ni najdenih organizacij.")
 
