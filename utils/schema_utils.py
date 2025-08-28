@@ -153,6 +153,10 @@ def clear_form_data():
     if 'current_draft_id' in st.session_state:
         del st.session_state['current_draft_id']
     
+    # Clear edit data loaded flag
+    if 'edit_data_loaded' in st.session_state:
+        del st.session_state['edit_data_loaded']
+    
     # Identify all form-related keys
     for key in st.session_state.keys():
         top_level_key = key.split('.')[0]

@@ -139,7 +139,7 @@ STEP_LABELS = {
     12: "Zavarovanja in ponudbe",
     13: "Merila izbire",
     14: "Sklepanje pogodbe",
-    15: "Dodatne informacije"
+    15: "Potrditev"
 }
 
 def get_text(key: str, **kwargs) -> str:
@@ -245,7 +245,7 @@ def get_dynamic_step_label(step_keys, step_number: int, has_lots: bool = False) 
         'variantOffers': "Zavarovanja in ponudbe",
         'selectionCriteria': "Merila izbire",
         'contractInfo': "Sklepanje pogodbe",
-        'otherInfo': "Sklepanje pogodbe"
+        'otherInfo': "Potrditev"
     }
     
     return key_to_label.get(first_key, f"Korak {step_number}")

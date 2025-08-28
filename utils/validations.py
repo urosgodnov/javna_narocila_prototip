@@ -156,6 +156,9 @@ class ValidationManager:
         self.errors = []
         self.warnings = []
         
+        # Store step number for other methods to use
+        self.current_step_number = step_number
+        
         # Collect array data from individual fields
         self._collect_array_data()
         
@@ -584,6 +587,21 @@ class ValidationManager:
         Check conditional field requirements.
         For example, if certain options are selected, related fields become required.
         """
+        import logging
+        
+        # Skip social criteria validation here if we're on the selectionCriteria step
+        # since it's handled by validate_merila()
+        # Check both session state and instance variable
+        current_step = self.session_state.get('current_step', 0)
+        step_number = getattr(self, 'current_step_number', None)
+        logging.warning(f"DEBUG _validate_conditional_requirements: current_step = {current_step}, step_number = {step_number}")
+        
+        # Merila step can be 7, 11, or 12 depending on configuration
+        merila_step_numbers = [7, 11, 12]
+        if current_step in merila_step_numbers or step_number in merila_step_numbers:
+            logging.warning("  Skipping conditional validation for Merila step")
+            return  # Skip this validation for merila step
+            
         # Social criteria validation
         if (self.session_state.get('merila.hasSocialCriteria') == 'da' or 
             self.session_state.get('criteria.hasSocialCriteria') == 'da' or
@@ -2186,12 +2204,22 @@ class ValidationManager:
             contract_type_keys.append(f'lot_{current_lot_index}.contractInfo.type')  # Dot pattern
             contract_type_keys.append(f'lot_{current_lot_index}.lot_{current_lot_index}_contractInfo.type')  # Double prefix pattern
         
-        # Add general mode and direct keys
-        contract_type_keys.extend([
-            'general.contractInfo.type',        # General mode
-            'contractInfo.type',                # Direct key
-            'widget_contractInfo.type',         # Widget key
-        ])
+        # Add general mode and direct keys with proper priority
+        if current_lot_index is None:
+            # General mode - prioritize general. prefix
+            contract_type_keys.extend([
+                'general.contractInfo.type',        # FIRST priority in general mode
+                'widget_general.contractInfo.type', # Widget general
+                'contractInfo.type',                # Fallback
+                'widget_contractInfo.type',         # Widget fallback
+            ])
+        else:
+            # Lot mode
+            contract_type_keys.extend([
+                'contractInfo.type',                # Direct key
+                'general.contractInfo.type',        # General mode fallback
+                'widget_contractInfo.type',         # Widget key
+            ])
         
         # Add other lot-specific keys as fallback (check all patterns)
         for i in range(len(lots)):
@@ -2218,15 +2246,104 @@ class ValidationManager:
         # Validate based on contract type
         if contract_type == 'pogodba':
             # For regular contracts, check contract validity
-            contract_period_type = self.session_state.get('contractInfo.contractPeriodType', '')
+            # Check multiple key patterns for period type (prioritize general. prefix in general mode)
+            contract_period_type = None
+            period_type_keys = []
+            
+            # Priority order for general mode
+            if current_lot_index is None:
+                period_type_keys.extend([
+                    'general.contractInfo.contractPeriodType',  # FIRST priority for general mode
+                    'widget_general.contractInfo.contractPeriodType',
+                    'contractInfo.contractPeriodType',  # Fallback
+                ])
+            else:
+                # Lot mode keys
+                period_type_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.contractPeriodType',
+                    f'lot_{current_lot_index}_contractInfo.contractPeriodType',
+                    'contractInfo.contractPeriodType',
+                ])
+            
+            for key in period_type_keys:
+                value = self.session_state.get(key)
+                if value is not None and value != "":
+                    contract_period_type = value
+                    break
+            
             if contract_period_type == 'z veljavnostjo':
-                validity = self._safe_strip(self.session_state.get('contractInfo.contractValidity', ''))
+                # Check validity field with proper key priority
+                validity = None
+                validity_keys = []
+                
+                if current_lot_index is None:
+                    validity_keys.extend([
+                        'general.contractInfo.contractValidity',  # FIRST priority
+                        'widget_general.contractInfo.contractValidity',
+                        'contractInfo.contractValidity',
+                    ])
+                else:
+                    validity_keys.extend([
+                        f'lot_{current_lot_index}.contractInfo.contractValidity',
+                        f'lot_{current_lot_index}_contractInfo.contractValidity',
+                        'contractInfo.contractValidity',
+                    ])
+                
+                for key in validity_keys:
+                    value = self.session_state.get(key)
+                    if value is not None and value != "":
+                        validity = self._safe_strip(value)
+                        break
+                
                 if not validity:
                     errors.append("Veljavnost pogodbe je obvezna")
+                    
             elif contract_period_type == 'za obdobje od-do':
-                # Use correct field names from JSON schema
-                start_date = self.session_state.get('contractInfo.contractDateFrom')
-                end_date = self.session_state.get('contractInfo.contractDateTo')
+                # Check date fields with proper key priority
+                start_date = None
+                end_date = None
+                
+                # Start date keys
+                start_date_keys = []
+                if current_lot_index is None:
+                    start_date_keys.extend([
+                        'general.contractInfo.contractDateFrom',  # FIRST priority
+                        'widget_general.contractInfo.contractDateFrom',
+                        'contractInfo.contractDateFrom',
+                    ])
+                else:
+                    start_date_keys.extend([
+                        f'lot_{current_lot_index}.contractInfo.contractDateFrom',
+                        f'lot_{current_lot_index}_contractInfo.contractDateFrom',
+                        'contractInfo.contractDateFrom',
+                    ])
+                
+                for key in start_date_keys:
+                    value = self.session_state.get(key)
+                    if value is not None and value != "":
+                        start_date = value
+                        break
+                
+                # End date keys  
+                end_date_keys = []
+                if current_lot_index is None:
+                    end_date_keys.extend([
+                        'general.contractInfo.contractDateTo',  # FIRST priority
+                        'widget_general.contractInfo.contractDateTo',
+                        'contractInfo.contractDateTo',
+                    ])
+                else:
+                    end_date_keys.extend([
+                        f'lot_{current_lot_index}.contractInfo.contractDateTo',
+                        f'lot_{current_lot_index}_contractInfo.contractDateTo',
+                        'contractInfo.contractDateTo',
+                    ])
+                
+                for key in end_date_keys:
+                    value = self.session_state.get(key)
+                    if value is not None and value != "":
+                        end_date = value
+                        break
                 if not start_date:
                     errors.append("Obdobje od je obvezno")
                 if not end_date:
@@ -2254,45 +2371,228 @@ class ValidationManager:
                         logging.debug(f"Date validation error: {e}")
         
         elif contract_type == 'okvirni sporazum':
-            # Check framework duration (text field, not dates)
-            duration = self._safe_strip(self.session_state.get('contractInfo.frameworkDuration', ''))
+            # Check framework duration with proper key priority
+            duration = None
+            duration_keys = []
+            
+            if current_lot_index is None:
+                duration_keys.extend([
+                    'general.contractInfo.frameworkDuration',  # FIRST priority
+                    'widget_general.contractInfo.frameworkDuration',
+                    'contractInfo.frameworkDuration',
+                ])
+            else:
+                duration_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.frameworkDuration',
+                    f'lot_{current_lot_index}_contractInfo.frameworkDuration',
+                    'contractInfo.frameworkDuration',
+                ])
+            
+            for key in duration_keys:
+                value = self.session_state.get(key)
+                if value is not None and value != "":
+                    duration = self._safe_strip(value)
+                    break
+            
             if not duration:
                 errors.append("Obdobje okvirnega sporazuma je obvezno")
             
-            # Check framework agreement type
-            framework_type = self.session_state.get('contractInfo.frameworkType', '')
+            # Check framework agreement type with proper key priority
+            framework_type = None
+            framework_type_keys = []
+            
+            if current_lot_index is None:
+                framework_type_keys.extend([
+                    'general.contractInfo.frameworkType',  # FIRST priority
+                    'widget_general.contractInfo.frameworkType',
+                    'contractInfo.frameworkType',
+                ])
+            else:
+                framework_type_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.frameworkType',
+                    f'lot_{current_lot_index}_contractInfo.frameworkType',
+                    'contractInfo.frameworkType',
+                ])
+            
+            for key in framework_type_keys:
+                value = self.session_state.get(key)
+                if value is not None and value != "":
+                    framework_type = value
+                    break
+            
             if not framework_type:
                 errors.append("Vrsta okvirnega sporazuma je obvezna")
             
             # If competition reopening, check frequency
             if framework_type and 'odpiranjem konkurence' in framework_type:
-                frequency = self._safe_strip(self.session_state.get('contractInfo.competitionFrequency', ''))
+                frequency = None
+                frequency_keys = []
+                
+                if current_lot_index is None:
+                    frequency_keys.extend([
+                        'general.contractInfo.competitionFrequency',  # FIRST priority
+                        'widget_general.contractInfo.competitionFrequency',
+                        'contractInfo.competitionFrequency',
+                    ])
+                else:
+                    frequency_keys.extend([
+                        f'lot_{current_lot_index}.contractInfo.competitionFrequency',
+                        f'lot_{current_lot_index}_contractInfo.competitionFrequency',
+                        'contractInfo.competitionFrequency',
+                    ])
+                
+                for key in frequency_keys:
+                    value = self.session_state.get(key)
+                    if value is not None and value != "":
+                        frequency = self._safe_strip(value)
+                        break
+                
                 if not frequency:
                     errors.append("Pogostost odpiranja konkurence je obvezna pri tej vrsti okvirnega sporazuma")
         
         
-        # Check contract extension
-        if self.session_state.get('contractInfo.canBeExtended') == 'da':
-            reasons = self._safe_strip(self.session_state.get('contractInfo.extensionReasons', ''))
-            duration = self._safe_strip(self.session_state.get('contractInfo.extensionDuration', ''))
+        # Check contract extension with proper key priority
+        can_be_extended = None
+        extension_keys = []
+        
+        if current_lot_index is None:
+            extension_keys.extend([
+                'general.contractInfo.canBeExtended',  # FIRST priority
+                'widget_general.contractInfo.canBeExtended',
+                'contractInfo.canBeExtended',
+            ])
+        else:
+            extension_keys.extend([
+                f'lot_{current_lot_index}.contractInfo.canBeExtended',
+                f'lot_{current_lot_index}_contractInfo.canBeExtended',
+                'contractInfo.canBeExtended',
+            ])
+        
+        for key in extension_keys:
+            value = self.session_state.get(key)
+            if value is not None and value != "":
+                can_be_extended = value
+                break
+        
+        if can_be_extended == 'da':
+            # Check reasons with proper key priority
+            reasons = None
+            reasons_keys = []
+            
+            if current_lot_index is None:
+                reasons_keys.extend([
+                    'general.contractInfo.extensionReasons',  # FIRST priority
+                    'widget_general.contractInfo.extensionReasons',
+                    'contractInfo.extensionReasons',
+                ])
+            else:
+                reasons_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.extensionReasons',
+                    f'lot_{current_lot_index}_contractInfo.extensionReasons',
+                    'contractInfo.extensionReasons',
+                ])
+            
+            for key in reasons_keys:
+                value = self.session_state.get(key)
+                if value is not None and value != "":
+                    reasons = self._safe_strip(value)
+                    break
+            
+            # Check duration with proper key priority
+            duration = None
+            duration_ext_keys = []
+            
+            if current_lot_index is None:
+                duration_ext_keys.extend([
+                    'general.contractInfo.extensionDuration',  # FIRST priority
+                    'widget_general.contractInfo.extensionDuration',
+                    'contractInfo.extensionDuration',
+                ])
+            else:
+                duration_ext_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.extensionDuration',
+                    f'lot_{current_lot_index}_contractInfo.extensionDuration',
+                    'contractInfo.extensionDuration',
+                ])
+            
+            for key in duration_ext_keys:
+                value = self.session_state.get(key)
+                if value is not None and value != "":
+                    duration = self._safe_strip(value)
+                    break
             
             if not reasons:
                 errors.append("Navedite razloge za možnost podaljšanja pogodbe")
             if not duration:
                 errors.append("Navedite trajanje podaljšanja pogodbe")
         
-        # Check internal rules document
-        has_internal_rules = self.session_state.get('contractInfo.hasInternalRules')
+        # Check internal rules document with proper key priority
+        has_internal_rules = None
+        rules_keys = []
+        
+        if current_lot_index is None:
+            rules_keys.extend([
+                'general.contractInfo.hasInternalRules',  # FIRST priority
+                'widget_general.contractInfo.hasInternalRules',
+                'contractInfo.hasInternalRules',
+            ])
+        else:
+            rules_keys.extend([
+                f'lot_{current_lot_index}.contractInfo.hasInternalRules',
+                f'lot_{current_lot_index}_contractInfo.hasInternalRules',
+                'contractInfo.hasInternalRules',
+            ])
+        
+        for key in rules_keys:
+            value = self.session_state.get(key)
+            if value is not None and value != "":
+                has_internal_rules = value
+                break
         
         # Handle both cases - 'DA'/'da' and 'NE'/'ne'
         if has_internal_rules and has_internal_rules.lower() == 'da':
-            # Check if document is uploaded
-            doc_field = 'contractInfo.internalRulesDocument'
-            doc_uploaded = self.session_state.get(doc_field)
+            # Check if document is uploaded with proper key priority
+            doc_uploaded = None
+            doc_keys = []
+            
+            if current_lot_index is None:
+                doc_keys.extend([
+                    'general.contractInfo.internalRulesDocument',  # FIRST priority
+                    'widget_general.contractInfo.internalRulesDocument',
+                    'contractInfo.internalRulesDocument',
+                ])
+            else:
+                doc_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.internalRulesDocument',
+                    f'lot_{current_lot_index}_contractInfo.internalRulesDocument',
+                    'contractInfo.internalRulesDocument',
+                ])
+            
+            for key in doc_keys:
+                value = self.session_state.get(key)
+                if value is not None and value != "":
+                    doc_uploaded = value
+                    break
             
             # Also check for file info in session (recently uploaded but not saved)
-            file_info_key = f'{doc_field}_file_info'
-            has_file_info = file_info_key in self.session_state
+            file_info_keys = []
+            if current_lot_index is None:
+                file_info_keys.extend([
+                    'general.contractInfo.internalRulesDocument_file_info',
+                    'contractInfo.internalRulesDocument_file_info',
+                ])
+            else:
+                file_info_keys.extend([
+                    f'lot_{current_lot_index}.contractInfo.internalRulesDocument_file_info',
+                    f'lot_{current_lot_index}_contractInfo.internalRulesDocument_file_info',
+                    'contractInfo.internalRulesDocument_file_info',
+                ])
+            
+            has_file_info = False
+            for key in file_info_keys:
+                if key in self.session_state:
+                    has_file_info = True
+                    break
             
             if not doc_uploaded and not has_file_info:
                 errors.append("Pri internih pravilih morate naložiti dokument")
@@ -2338,25 +2638,52 @@ class ValidationManager:
             logging.warning("No criteria selected - adding error")
             errors.append("Izbrati morate vsaj eno merilo za izbor")
         
+        # DEBUG: Show all keys in session state related to criteria and ratios
+        import logging
+        logging.warning("=== DEBUG: Session state keys for selection criteria ===")
+        for key in sorted(self.session_state.keys()):
+            if 'criteria' in key.lower() or 'ratio' in key.lower():
+                value = self.session_state.get(key)
+                if value and value != False and value != 0:
+                    logging.warning(f"  {key} = {value}")
+        logging.warning("=== END DEBUG ===")
+        
         # Rule 2: Check points for selected criteria
         total_points = 0
         for criterion, is_selected in criteria_selected.items():
             if is_selected:
                 # Map criterion to ratio field with multiple possible patterns
-                ratio_keys = [
-                    f"{step_key}.{criterion}Ratio",
-                    f"general.{step_key}.{criterion}Ratio",
-                ]
+                # Map criterion to ratio field - need to handle the actual field naming
+                # The ratio field name depends on the criterion
+                ratio_field_name = self._get_ratio_field_name(criterion)
+                
+                # In general mode, prioritize general. prefixed keys
+                if self.session_state.get('current_lot_index') is None:
+                    ratio_keys = [
+                        f"general.{step_key}.{ratio_field_name}",  # General mode key - FIRST priority
+                        f"widget_general.{step_key}.{ratio_field_name}",  # Widget general key
+                        f"{step_key}.{ratio_field_name}",  # Fallback
+                        f"widget_{step_key}.{ratio_field_name}",  # Widget fallback
+                    ]
+                else:
+                    ratio_keys = [
+                        f"{step_key}.{ratio_field_name}",
+                        f"general.{step_key}.{ratio_field_name}",
+                        f"widget_{step_key}.{ratio_field_name}",  # Widget key pattern
+                    ]
                 
                 # Add lot-specific ratio keys based on current lot index
                 current_lot_index = self.session_state.get('current_lot_index')
                 if current_lot_index is not None:
-                    ratio_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{criterion}Ratio")  # Underscore pattern
-                    ratio_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{criterion}Ratio")  # Dot pattern
-                    ratio_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{criterion}Ratio")  # Double prefix pattern
+                    ratio_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{ratio_field_name}")  # Underscore pattern
+                    ratio_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{ratio_field_name}")  # Dot pattern
+                    ratio_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{ratio_field_name}")  # Double prefix pattern
+                    ratio_keys.insert(0, f"widget_lot_{current_lot_index}_{step_key}.{ratio_field_name}")  # Widget with underscore
+                    ratio_keys.insert(0, f"widget_lot_{current_lot_index}.{step_key}.{ratio_field_name}")  # Widget with dot
                 
                 # Also check hardcoded lot_1 for backwards compatibility
-                ratio_keys.append(f"lot_1_{step_key}.{criterion}Ratio")
+                ratio_keys.append(f"lot_1_{step_key}.{ratio_field_name}")
+                ratio_keys.append(f"widget_lot_1_{step_key}.{ratio_field_name}")
                 
                 # Handle special case for social criteria - sum all sub-criteria points
                 if criterion == 'socialCriteria':
@@ -2366,17 +2693,28 @@ class ValidationManager:
                         'socialCriteriaElderlyRatio',   # elderlyEmployeesShare
                         'socialCriteriaStaffRatio',     # registeredStaffEmployed
                         'socialCriteriaSalaryRatio',    # averageSalary
-                        'socialCriteriaOtherRatio'      # otherSocial
+                        'socialCriteriaOtherRatio'      # otherSocial (Drugo)
                     ]
                     
                     # Sum points from all social criteria sub-fields
                     social_points = 0
                     for ratio_field in social_ratio_fields:
-                        ratio_keys = [
-                            f"{step_key}.{ratio_field}",
-                            f"general.{step_key}.{ratio_field}",
-                            f"lot_1_{step_key}.{ratio_field}",
-                        ]
+                        # In general mode, prioritize general. prefixed keys
+                        if self.session_state.get('current_lot_index') is None:
+                            ratio_keys = [
+                                f"general.{step_key}.{ratio_field}",  # General mode key - FIRST priority
+                                f"widget_general.{step_key}.{ratio_field}",  # Widget general key
+                                f"{step_key}.{ratio_field}",  # Fallback
+                                f"widget_{step_key}.{ratio_field}",  # Widget fallback
+                            ]
+                        else:
+                            ratio_keys = [
+                                f"{step_key}.{ratio_field}",
+                                f"general.{step_key}.{ratio_field}",
+                                f"widget_{step_key}.{ratio_field}",  # Widget key
+                                f"lot_1_{step_key}.{ratio_field}",
+                                f"widget_lot_1_{step_key}.{ratio_field}",
+                            ]
                         
                         # Add lot-specific keys based on current lot index
                         current_lot_index = self.session_state.get('current_lot_index')
@@ -2384,6 +2722,8 @@ class ValidationManager:
                             ratio_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{ratio_field}")  # Underscore pattern
                             ratio_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{ratio_field}")  # Dot pattern
                             ratio_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{ratio_field}")  # Double prefix pattern
+                            ratio_keys.insert(0, f"widget_lot_{current_lot_index}_{step_key}.{ratio_field}")  # Widget with underscore
+                            ratio_keys.insert(0, f"widget_lot_{current_lot_index}.{step_key}.{ratio_field}")  # Widget with dot
                         
                         for key in ratio_keys:
                             test_value = self.session_state.get(key, None)
@@ -2394,7 +2734,7 @@ class ValidationManager:
                                     if field_points > 0:
                                         logging.debug(f"Found social criteria points at {key}: {field_points}")
                                 except (ValueError, TypeError):
-                                    pass
+                                    logging.debug(f"Could not convert value at {key} to float: {test_value}")
                                 break
                     
                     points_str = str(social_points)
@@ -2407,17 +2747,24 @@ class ValidationManager:
                 if criterion != 'socialCriteria':
                     # Also check if step_key already has a prefix
                     if 'general.' in step_key or 'lot_' in step_key:
-                        base_key = f"{step_key}.{criterion}Ratio"
+                        base_key = f"{step_key}.{ratio_field_name}"
                         ratio_keys.insert(0, base_key)
                         
+                    # DEBUG: Show what keys we're checking for this criterion
+                    logging.warning(f"DEBUG: Looking for {criterion} ratio in keys: {ratio_keys[:3]}...")
+                    
                     # Try to find the points value
                     points_str = '0'
                     for key in ratio_keys:
                         test_value = self.session_state.get(key, None)
+                        logging.warning(f"  Checking {key}: value = {test_value}")
                         if test_value is not None:
                             points_str = test_value
-                            logging.debug(f"Found points for {criterion} at key {key}: {points_str}")
+                            logging.warning(f"  ✓ Found points for {criterion} at key {key}: {points_str}")
                             break
+                    
+                    if points_str == '0':
+                        logging.warning(f"  ✗ No points found for {criterion}")
                     
                     # Convert to float, handle empty strings
                     try:
@@ -2444,13 +2791,21 @@ class ValidationManager:
         
         # Rule 3: Social criteria sub-options validation
         if criteria_selected.get('socialCriteria'):
-            if not self._has_social_suboptions(step_key):
+            logging.warning("DEBUG: Checking social criteria sub-options...")
+            has_suboptions = self._has_social_suboptions(step_key)
+            logging.warning(f"  has_suboptions = {has_suboptions}")
+            if not has_suboptions:
                 errors.append("Pri socialnih merilih morate izbrati vsaj eno možnost")
         
         # Rule 4: Other criteria custom description validation
+        # NOTE: This is for the MAIN criterion "Drugo, imam predlog", NOT social sub-options!
         if criteria_selected.get('otherCriteriaCustom'):
-            # Try different possible key patterns for the description
+            logging.debug(f"otherCriteriaCustom is selected, checking for description")
+            # Try different possible key patterns for the description (field is named otherCriteriaCustomDescription in JSON)
             desc_keys = [
+                f"{step_key}.otherCriteriaCustomDescription",
+                f"general.{step_key}.otherCriteriaCustomDescription",
+                # Also try the old name for backwards compatibility
                 f"{step_key}.otherCriteriaDescription",
                 f"general.{step_key}.otherCriteriaDescription",
             ]
@@ -2458,22 +2813,33 @@ class ValidationManager:
             # Add lot-specific keys based on current lot index
             current_lot_index = self.session_state.get('current_lot_index')
             if current_lot_index is not None:
+                desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.otherCriteriaCustomDescription")  # Underscore pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.{step_key}.otherCriteriaCustomDescription")  # Dot pattern
+                desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.otherCriteriaCustomDescription")  # Double prefix pattern
+                # Also try old name
                 desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.otherCriteriaDescription")  # Underscore pattern
                 desc_keys.insert(0, f"lot_{current_lot_index}.{step_key}.otherCriteriaDescription")  # Dot pattern
                 desc_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.otherCriteriaDescription")  # Double prefix pattern
             
             # Also check hardcoded lot_1 for backwards compatibility
+            desc_keys.append(f"lot_1_{step_key}.otherCriteriaCustomDescription")
             desc_keys.append(f"lot_1_{step_key}.otherCriteriaDescription")
             
             description = ""
             for key in desc_keys:
-                test_value = self.session_state.get(key, '').strip()
+                test_value = self.session_state.get(key, '')
+                if isinstance(test_value, str):
+                    test_value = test_value.strip()
                 if test_value:
                     description = test_value
+                    logging.debug(f"Found otherCriteriaDescription at {key}: {test_value}")
                     break
+                else:
+                    logging.debug(f"No value for otherCriteriaDescription at {key}")
             
             if not description:
-                errors.append("Pri drugih merilih morate navesti opis")
+                logging.warning(f"No description found for otherCriteriaCustom. Checked keys: {desc_keys}")
+                errors.append("Pri izbiri 'Drugo, imam predlog' morate navesti opis merila")
         
         # Rule 5: Additional technical requirements description validation
         if criteria_selected.get('additionalTechnicalRequirements'):
@@ -2592,7 +2958,8 @@ class ValidationManager:
             'longerWarranty': False,
             'costEfficiency': False,
             'socialCriteria': False,
-            'otherCriteriaCustom': False
+            'otherCriteriaCustom': False,
+            'otherCriteriaAI': False
         }
         
         # Debug logging
@@ -2691,9 +3058,33 @@ class ValidationManager:
             'longerWarranty': 'Daljša garancijska doba',
             'costEfficiency': 'Stroškovna učinkovitost',
             'socialCriteria': 'Socialna merila',
-            'otherCriteriaCustom': 'Druga merila'
+            'otherCriteriaCustom': 'Drugo, imam predlog',
+            'otherCriteriaAI': 'Drugo, prosim predlog AI'
         }
         return names.get(criterion, criterion)
+    
+    def _get_ratio_field_name(self, criterion: str) -> str:
+        """
+        Get the ratio field name for a criterion.
+        
+        Args:
+            criterion: The criterion key
+            
+        Returns:
+            The ratio field name
+        """
+        # Direct mapping of criterion to ratio field names as they appear in JSON schema
+        ratio_mapping = {
+            'price': 'priceRatio',
+            'additionalReferences': 'additionalReferencesRatio',
+            'additionalTechnicalRequirements': 'additionalTechnicalRequirementsRatio',
+            'shorterDeadline': 'shorterDeadlineRatio',
+            'longerWarranty': 'longerWarrantyRatio',
+            'costEfficiency': 'costEfficiencyRatio',
+            'otherCriteriaCustom': 'otherCriteriaCustomRatio',
+            'otherCriteriaAI': 'otherCriteriaAIRatio'
+        }
+        return ratio_mapping.get(criterion, f"{criterion}Ratio")
     
     def _has_social_suboptions(self, step_key: str) -> bool:
         """
@@ -2706,62 +3097,47 @@ class ValidationManager:
             True if at least one sub-option is selected
         """
         import logging
-        social_options = [
-            'youngEmployeesShare',
-            'elderlyEmployeesShare',
-            'registeredStaffEmployed',
-            'averageSalary',
-            'otherSocial'
-        ]
         
-        # Also check if any social criteria has points assigned
+        logging.warning(f"DEBUG _has_social_suboptions: step_key = {step_key}")
+        
+        # First, check if any social criteria ratio fields have points > 0
+        # This is the most reliable way to check if social options are selected
         social_ratio_fields = [
-            'socialCriteriaYoungRatio',
-            'socialCriteriaElderlyRatio', 
-            'socialCriteriaStaffRatio',
-            'socialCriteriaSalaryRatio',
-            'socialCriteriaOtherRatio'
+            'socialCriteriaYoungRatio',          # For youngEmployeesShare
+            'socialCriteriaElderlyRatio',        # For elderlyEmployeesShare
+            'socialCriteriaStaffRatio',          # For registeredStaffEmployed
+            'socialCriteriaSalaryRatio',         # For averageSalary
+            'socialCriteriaOtherRatio'           # For otherSocial (Drugo)
         ]
         
         # Get current lot index for proper key checking
         current_lot_index = self.session_state.get('current_lot_index')
         
-        for option in social_options:
-            # Try different key patterns for the checkbox
-            possible_keys = [
-                f"{step_key}.socialCriteriaOptions.{option}",
-                f"general.{step_key}.socialCriteriaOptions.{option}",
-                f"lot_1_{step_key}.socialCriteriaOptions.{option}",
-            ]
-            
-            # Add lot-specific keys based on current lot index
-            if current_lot_index is not None:
-                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.socialCriteriaOptions.{option}")  # Underscore pattern
-                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.socialCriteriaOptions.{option}")  # Dot pattern
-                possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.socialCriteriaOptions.{option}")  # Double prefix pattern
-            
-            for key in possible_keys:
-                value = self.session_state.get(key, None)
-                if value is not None:
-                    # Handle string 'da' values
-                    if isinstance(value, str) and value.lower() == 'da':
-                        return True
-                    elif value:
-                        return True
-        
-        # Also check if any ratio field has points > 0
+        # Check ratio fields first - if any have points, social sub-option is selected
         for ratio_field in social_ratio_fields:
-            possible_keys = [
-                f"{step_key}.{ratio_field}",
-                f"general.{step_key}.{ratio_field}",
-                f"lot_1_{step_key}.{ratio_field}",
-            ]
+            # In general mode, prioritize general. prefixed keys
+            if current_lot_index is None:
+                possible_keys = [
+                    f"general.{step_key}.{ratio_field}",  # General mode key - FIRST priority
+                    f"widget_general.{step_key}.{ratio_field}",  # Widget general key
+                    f"{step_key}.{ratio_field}",  # Fallback
+                    f"widget_{step_key}.{ratio_field}",  # Widget fallback
+                ]
+            else:
+                possible_keys = [
+                    f"{step_key}.{ratio_field}",
+                    f"general.{step_key}.{ratio_field}",
+                    f"widget_{step_key}.{ratio_field}",
+                    f"lot_1_{step_key}.{ratio_field}",
+                    f"widget_lot_1_{step_key}.{ratio_field}",
+                ]
             
             # Add lot-specific keys based on current lot index
             if current_lot_index is not None:
-                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{ratio_field}")  # Underscore pattern
-                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{ratio_field}")  # Dot pattern
-                possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.{ratio_field}")  # Double prefix pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.{ratio_field}")
+                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.{ratio_field}")
+                possible_keys.insert(0, f"widget_lot_{current_lot_index}_{step_key}.{ratio_field}")
+                possible_keys.insert(0, f"widget_lot_{current_lot_index}.{step_key}.{ratio_field}")
             
             for key in possible_keys:
                 value = self.session_state.get(key, None)
@@ -2769,11 +3145,115 @@ class ValidationManager:
                     try:
                         points = float(value) if value else 0
                         if points > 0:
-                            logging.debug(f"Found social sub-option with points at {key}: {points}")
-                            return True
+                            logging.warning(f"  DEBUG: Found social points at {key}: {points}")
+                            
+                            # Special validation for otherSocial - needs description
+                            if ratio_field == 'socialCriteriaOtherRatio':
+                                # Check if description exists
+                                desc_keys = [
+                                    f"{step_key}.socialCriteriaOptions.otherSocialDescription",
+                                    f"general.{step_key}.socialCriteriaOptions.otherSocialDescription",
+                                ]
+                                if current_lot_index is not None:
+                                    desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.socialCriteriaOptions.otherSocialDescription")
+                                
+                                has_description = False
+                                for desc_key in desc_keys:
+                                    desc_value = self.session_state.get(desc_key, "")
+                                    if desc_value and str(desc_value).strip():
+                                        logging.debug(f"Found otherSocial description: {desc_value}")
+                                        has_description = True
+                                        break
+                                
+                                if has_description:
+                                    return True
+                                else:
+                                    logging.warning(f"socialCriteriaOtherRatio has {points} points but no description found")
+                                    # Still return True - points indicate selection even without description
+                                    return True
+                            else:
+                                # For other social criteria, points alone are sufficient
+                                return True
                     except (ValueError, TypeError):
-                        pass
+                        logging.debug(f"Could not convert {value} to float for {key}")
         
+        # Fallback: check checkboxes (less reliable in Streamlit)
+        social_options = [
+            'youngEmployeesShare',
+            'elderlyEmployeesShare', 
+            'registeredStaffEmployed',
+            'averageSalary',
+            'otherSocial'               # Drugo (the only "other" option in social sub-options)
+        ]
+        
+        for option in social_options:
+            # Try different key patterns for the checkbox
+            # In general mode, prioritize general. prefixed keys
+            if current_lot_index is None:
+                possible_keys = [
+                    f"general.{step_key}.socialCriteriaOptions.{option}",  # General mode - FIRST priority
+                    f"widget_general.{step_key}.socialCriteriaOptions.{option}",  # Widget general
+                    f"{step_key}.socialCriteriaOptions.{option}",  # Fallback
+                    f"widget_{step_key}.socialCriteriaOptions.{option}",  # Widget fallback
+                ]
+            else:
+                possible_keys = [
+                    f"{step_key}.socialCriteriaOptions.{option}",
+                    f"general.{step_key}.socialCriteriaOptions.{option}",
+                    f"widget_{step_key}.socialCriteriaOptions.{option}",
+                    f"lot_1_{step_key}.socialCriteriaOptions.{option}",
+                    f"widget_lot_1_{step_key}.socialCriteriaOptions.{option}",
+                ]
+            
+            
+            # Add lot-specific keys based on current lot index
+            if current_lot_index is not None:
+                possible_keys.insert(0, f"lot_{current_lot_index}_{step_key}.socialCriteriaOptions.{option}")  # Underscore pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.{step_key}.socialCriteriaOptions.{option}")  # Dot pattern
+                possible_keys.insert(0, f"lot_{current_lot_index}.lot_{current_lot_index}_{step_key}.socialCriteriaOptions.{option}")  # Double prefix pattern
+                possible_keys.insert(0, f"widget_lot_{current_lot_index}_{step_key}.socialCriteriaOptions.{option}")  # Widget underscore
+                possible_keys.insert(0, f"widget_lot_{current_lot_index}.{step_key}.socialCriteriaOptions.{option}")  # Widget dot
+            
+            for key in possible_keys:
+                value = self.session_state.get(key, None)
+                if value is not None:
+                    # Convert value to boolean for checking
+                    bool_value = False
+                    if isinstance(value, bool):
+                        bool_value = value
+                    elif isinstance(value, str):
+                        bool_value = value.lower() in ['da', 'true', '1', 'yes']
+                    else:
+                        bool_value = bool(value)
+                    
+                    if bool_value:
+                        # Special handling for options that require descriptions
+                        if option == 'otherSocial':
+                            desc_keys = [
+                                f"{step_key}.socialCriteriaOptions.otherSocialDescription",
+                                f"general.{step_key}.socialCriteriaOptions.otherSocialDescription",
+                                f"lot_1_{step_key}.socialCriteriaOptions.otherSocialDescription",
+                            ]
+                            if current_lot_index is not None:
+                                desc_keys.insert(0, f"lot_{current_lot_index}_{step_key}.socialCriteriaOptions.otherSocialDescription")
+                                desc_keys.insert(0, f"lot_{current_lot_index}.{step_key}.socialCriteriaOptions.otherSocialDescription")
+                            
+                            # Check if description exists and is not empty
+                            for desc_key in desc_keys:
+                                desc_value = self.session_state.get(desc_key, "")
+                                if desc_value and desc_value.strip():
+                                    logging.debug(f"Found valid otherSocial with description at {desc_key}: {desc_value}")
+                                    return True
+                            # If otherSocial is selected but no description, still count it as valid
+                            # The description requirement is checked separately in validation
+                            logging.debug(f"otherSocial selected at {key}, counting as valid sub-option")
+                            return True
+                        else:
+                            # Other social options don't require descriptions
+                            logging.debug(f"Found valid social option {option} at {key}")
+                            return True
+        
+        logging.debug("No valid social sub-options found")
         return False
     
     def _validate_cpv_requirements(self, selected_criteria: Dict[str, bool]) -> Tuple[List[str], List[str]]:

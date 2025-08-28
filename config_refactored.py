@@ -51,9 +51,12 @@ LOT_SPECIFIC_STEPS = [
     # Step 13: Selection criteria
     ["selectionCriteria"],
     
-    # Step 14: Contract info and additional info (last step per lot)
-    ["contractInfo", "otherInfo"]
+    # Step 14: Contract info
+    ["contractInfo"]
 ]
+
+# Final step - additional info with confirmation
+FINAL_STEP = ["otherInfo"]
 
 def get_dynamic_form_steps_refactored(session_state):
     """
@@ -114,6 +117,9 @@ def get_dynamic_form_steps_refactored(session_state):
                 # Prefix each field with lot index
                 lot_step = [f"lot_{current_lot_index}_{field}" for field in step]
                 steps.append(lot_step)
+    
+    # Always add final step (otherInfo) at the very end
+    steps.append(FINAL_STEP)
     
     return steps
 

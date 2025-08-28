@@ -54,8 +54,10 @@ LOT_SPECIFIC_STEPS = [
 
 # Final steps - always included at the end
 FINAL_STEPS = [
-    # Contract info and additional information on the same (last) step
-    ["contractInfo", "otherInfo"]
+    # Contract info (step 14)
+    ["contractInfo"],
+    # Additional info with submit button (step 15)
+    ["otherInfo"]
 ]
 
 def get_dynamic_form_steps(session_state):

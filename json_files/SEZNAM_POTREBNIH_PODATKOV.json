@@ -1004,12 +1004,12 @@
                 "hasInternalRules": {
                     "type": "string",
                     "title": "Ali imate interna pravila, ki jih je potrebno upoštevati pri pripravi javnega naročila?",
-                    "description": "✓ DA: Naložiti boste morali dokument z internimi pravili.\n✗ NE: Ni potrebe po nalaganju dokumentov internih pravil.",
+                    "description": "✓ da: Naložiti boste morali dokument z internimi pravili.\n✗ ne: Ni potrebe po nalaganju dokumentov internih pravil.",
                     "enum": [
-                        "DA",
-                        "NE"
+                        "da",
+                        "ne"
                     ],
-                    "default": "NE"
+                    "default": "ne"
                 },
                 "internalRulesDocument": {
                     "type": "string",
@@ -1018,7 +1018,7 @@
                     "description": "Naložite dokument z internimi pravili vaše organizacije, ki se nanašajo na javna naročila.",
                     "render_if": {
                         "field": "contractInfo.hasInternalRules",
-                        "value": "DA"
+                        "value": "da"
                     }
                 }
             }
@@ -1968,6 +1968,25 @@
                         "value": true
                     }
                 },
+                "otherCriteriaCustom": {
+                    "type": "boolean",
+                    "title": "Drugo, imam predlog",
+                    "default": false
+                },
+                "otherCriteriaCustomDescription": {
+                    "type": "string",
+                    "format": "textarea",
+                    "title": "→ Opišite merilo",
+                    "render_if": {
+                        "field": "selectionCriteria.otherCriteriaCustom",
+                        "value": true
+                    }
+                },
+                "otherCriteriaAI": {
+                    "type": "boolean",
+                    "title": "Drugo, prosim predlog AI",
+                    "default": false
+                },
                 "socialCriteria": {
                     "type": "boolean",
                     "title": "Socialna merila",
@@ -2016,25 +2035,6 @@
                             }
                         }
                     }
-                },
-                "otherCriteriaCustom": {
-                    "type": "boolean",
-                    "title": "Drugo, imamo predlog",
-                    "default": false
-                },
-                "otherCriteriaCustomDescription": {
-                    "type": "string",
-                    "format": "textarea",
-                    "title": "→ Opišite merilo",
-                    "render_if": {
-                        "field": "selectionCriteria.otherCriteriaCustom",
-                        "value": true
-                    }
-                },
-                "otherCriteriaAI": {
-                    "type": "boolean",
-                    "title": "Drugo, prosim za predlog AI",
-                    "default": false
                 },
                 "ratiosHeader": {
                     "type": "object",
@@ -2143,10 +2143,19 @@
                 },
                 "otherCriteriaCustomRatio": {
                     "type": "number",
-                    "title": "Drugo merilo (točke)",
+                    "title": "Drugo, imam predlog (točke)",
                     "minimum": 0,
                     "render_if": {
                         "field": "selectionCriteria.otherCriteriaCustom",
+                        "value": true
+                    }
+                },
+                "otherCriteriaAIRatio": {
+                    "type": "number",
+                    "title": "Drugo, prosim predlog AI (točke)",
+                    "minimum": 0,
+                    "render_if": {
+                        "field": "selectionCriteria.otherCriteriaAI",
                         "value": true
                     }
                 },

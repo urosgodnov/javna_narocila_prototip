@@ -131,6 +131,29 @@ def save_draft(form_data):
         conn.commit()
     return cursor.lastrowid
 
+def update_draft(draft_id, form_data):
+    """Update an existing draft with new form data."""
+    init_db()
+    timestamp = datetime.now().isoformat()
+    # Convert any date objects to strings before JSON serialization
+    form_data_serializable = convert_dates_to_strings(form_data)
+    form_data_json = json.dumps(form_data_serializable)
+    
+    try:
+        with sqlite3.connect(DATABASE_FILE) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE drafts SET timestamp = ?, form_data_json = ? WHERE id = ?',
+                (timestamp, form_data_json, draft_id)
+            )
+            conn.commit()
+            # Return True if a row was updated
+            return cursor.rowcount > 0
+    except Exception as e:
+        import logging
+        logging.error(f"Error updating draft {draft_id}: {e}")
+        return False
+
 def get_all_draft_metadata():
     init_db()
     with sqlite3.connect(DATABASE_FILE) as conn:
@@ -228,11 +251,22 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
     """Create a new procurement record."""
     init_db()
     
+    # Debug: Print what we're getting
+    import logging
+    logging.warning(f"=== DEBUG create_procurement: form_data keys = {list(form_data.keys())}")
+    if 'projectInfo' in form_data:
+        logging.warning(f"  projectInfo = {form_data['projectInfo']}")
+    if 'orderType' in form_data:
+        logging.warning(f"  orderType = {form_data['orderType']}")
+    
     # Extract key fields from form data
     naziv = form_data.get('projectInfo', {}).get('projectName', 'Neimenovano naročilo')
     vrsta = form_data.get('orderType', {}).get('type', '')
     postopek = form_data.get('submissionProcedure', {}).get('procedure', '')
     vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
+    
+    # Debug: Show what we extracted
+    logging.warning(f"  Extracted: naziv='{naziv}', vrsta='{vrsta}', postopek='{postopek}', vrednost={vrednost}")
     
     # Set default date and status
     datum_objave = datetime.now().date().isoformat()

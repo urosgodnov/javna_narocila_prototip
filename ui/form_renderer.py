@@ -72,7 +72,9 @@ def get_social_criteria_specific_labels(criteria_prefix="selectionCriteria"):
         'elderlyEmployeesShare': 'Delež zaposlenih starejših',
         'registeredStaffEmployed': 'Priglašeni kader je zaposlen pri ponudniku',
         'averageSalary': 'Povprečna plača priglašenega kadra',
-        'otherSocial': 'Drugo socialno merilo'
+        'otherSocial': 'Drugo',
+        'otherSocialCustom': 'Drugo, imam predlog',
+        'otherSocialAI': 'Drugo, prosim predlog AI'
     }
     
     selected = []
@@ -92,7 +94,7 @@ def get_selected_criteria_labels(parent_key="", lot_context=None):
         'shorterDeadline': 'Krajši rok izvedbe',
         'longerWarranty': 'Garancija daljša od zahtevane',
         'costEfficiency': 'Stroškovna učinkovitost',
-        'otherCriteriaCustom': 'Drugo merilo'
+        'otherCriteriaCustom': 'Drugo merilo (ne-socialno)'
     }
     
     selected_labels = []
@@ -161,7 +163,8 @@ def display_criteria_ratios_total(parent_key="", lot_context=None):
         'shorterDeadline': 'shorterDeadlineRatio',
         'longerWarranty': 'longerWarrantyRatio',
         'costEfficiency': 'costEfficiencyRatio',
-        'otherCriteriaCustom': 'otherCriteriaCustomRatio'
+        'otherCriteriaCustom': 'otherCriteriaCustomRatio',
+        'otherCriteriaAI': 'otherCriteriaAIRatio'
     }
     
     # Social criteria specific mapping
@@ -489,8 +492,19 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                         # Handle information tooltip objects
                         st.info(help_text)
                         # Continue processing other fields in this section
-                        
-                render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context, field_manager=field_manager, real_time_validator=real_time_validator)
+                
+                # Add special indentation for socialCriteriaOptions to show hierarchy
+                if prop_name == "socialCriteriaOptions":
+                    # Use columns to create indentation effect
+                    col1, col2 = st.columns([0.1, 0.9])
+                    with col1:
+                        # Empty column for spacing
+                        st.write("")
+                    with col2:
+                        # Render social sub-options in the indented column
+                        render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context, field_manager=field_manager, real_time_validator=real_time_validator)
+                else:
+                    render_form(prop_details.get("properties", {}), parent_key=full_key, lot_context=lot_context, field_manager=field_manager, real_time_validator=real_time_validator)
                 
                 # Add validation and ratio totals ONLY for the main selectionCriteria section
                 # Not for nested objects like socialCriteriaOptions or ratiosHeader

@@ -158,11 +158,15 @@ def display_procurements_table(procurements):
         
         with col1:
             if st.button("✏️ Uredi", use_container_width=True):
+                import logging
+                logging.info(f"=== EDIT BUTTON CLICKED for ID {selected_id} ===")
                 st.session_state.current_page = 'form'
                 st.session_state.edit_mode = True
                 st.session_state.edit_record_id = selected_id
                 st.session_state.current_step = 0
-                load_procurement_to_form(selected_id)
+                # Clear the flag to force data reload
+                if 'edit_data_loaded' in st.session_state:
+                    del st.session_state.edit_data_loaded
                 st.rerun()
         
         with col2:
@@ -228,15 +232,21 @@ def display_procurements_table(procurements):
 
 def load_procurement_to_form(procurement_id):
     """Load procurement data into form session state."""
+    import logging
+    logging.info(f"=== FUNCTION START: Loading procurement {procurement_id} to form ===")
+    
     from utils.data_migration import migrate_form_data
     
     procurement = database.get_procurement_by_id(procurement_id)
+    logging.info(f"Procurement retrieved: {procurement is not None}")
     
     if procurement and procurement.get('form_data'):
         form_data = procurement['form_data']
+        logging.info(f"Form data keys: {list(form_data.keys()) if isinstance(form_data, dict) else 'NOT A DICT'}")
         
         # Apply Epic 3.0 data migrations
         form_data = migrate_form_data(form_data)
+        logging.info(f"After migration, form data keys: {list(form_data.keys()) if isinstance(form_data, dict) else 'NOT A DICT'}")
         
         # Clear existing form data first
         clear_form_data()
@@ -258,8 +268,55 @@ def load_procurement_to_form(procurement_id):
         
         # Flatten and load into session state
         flattened_data = flatten_dict(form_data)
+        
+        # Check if we have lots configuration
+        has_lots = flattened_data.get('lotsInfo.hasLots', False)
+        
+        # Set lot mode based on has_lots
+        if not has_lots:
+            st.session_state.lot_mode = 'none'
+        else:
+            lots = flattened_data.get('lots', [])
+            if len(lots) > 1:
+                st.session_state.lot_mode = 'multiple'
+            elif len(lots) == 1:
+                st.session_state.lot_mode = 'single'
+            else:
+                st.session_state.lot_mode = 'none'
+        
+        logging.info(f"Has lots: {has_lots}, lot_mode: {st.session_state.lot_mode}")
+        logging.info(f"Loading {len(flattened_data)} keys into session state")
+        logging.info(f"Sample keys: {list(flattened_data.keys())[:5]}")
+        
         for key, value in flattened_data.items():
-            st.session_state[key] = value
+            # Skip special keys that shouldn't have prefix
+            special_keys = ['lots', 'lot_names', 'lot_mode', 'current_lot_index', 
+                          'lotsInfo.hasLots', 'current_step', 'completed_steps']
+            
+            if not has_lots and not key.startswith('lot_') and key not in special_keys and not key.startswith('_'):
+                # In general mode, add "general." prefix for non-special keys
+                general_key = f'general.{key}'
+                st.session_state[general_key] = value
+                logging.debug(f"Set {general_key} = {value[:50] if isinstance(value, str) else value}")
+                # Also set without prefix for backward compatibility
+                st.session_state[key] = value
+            else:
+                # For lots mode or special keys, use as is
+                st.session_state[key] = value
+                logging.debug(f"Set {key} = {value[:50] if isinstance(value, str) else value}")
         
         # Store that we loaded data for tracking changes
         st.session_state._last_loaded_data = flattened_data.copy()
+        
+        # Debug: Check what we loaded
+        logging.info("=== Data loaded to session state ===")
+        logging.info(f"Total keys in session state: {len(st.session_state.keys())}")
+        
+        test_keys = ['general.clientInfo.name', 'clientInfo.name', 'general.projectInfo.projectName', 'projectInfo.projectName']
+        for tk in test_keys:
+            if tk in st.session_state:
+                logging.info(f"  {tk} = {st.session_state[tk][:50] if isinstance(st.session_state[tk], str) else st.session_state[tk]}")
+            else:
+                logging.info(f"  {tk} = NOT FOUND")
+        
+        logging.info("=== END load_procurement_to_form ===")

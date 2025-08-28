@@ -82,11 +82,52 @@ def main():
 
     if "current_step" not in st.session_state:
         st.session_state.current_step = 0
+    
+    # Initialize step tracking for smart navigation
+    initialize_step_tracking()
+    
+    # Load data if in edit mode but data not yet loaded
+    if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
+        import logging
+        logging.info(f"=== CHECKING EDIT MODE: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}, current_page={st.session_state.get('current_page')}")
+        # Check if we need to load the data
+        if 'edit_data_loaded' not in st.session_state:
+            from ui.dashboard import load_procurement_to_form
+            logging.info(f"=== AUTO-LOADING procurement {st.session_state.edit_record_id} for editing ===")
+            try:
+                load_procurement_to_form(st.session_state.edit_record_id)
+                st.session_state.edit_data_loaded = True
+                logging.info(f"=== AUTO-LOADING COMPLETED ===")
+            except Exception as e:
+                logging.error(f"=== AUTO-LOADING ERROR: {e} ===")
+                import traceback
+                logging.error(traceback.format_exc())
+        else:
+            logging.info(f"=== EDIT DATA ALREADY LOADED ===")
+    else:
+        if st.session_state.get('current_page') == 'form':
+            import logging
+            logging.debug(f"Form page but not edit mode: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}")
 
     # Route to appropriate page based on current_page state
     if st.session_state.current_page == 'dashboard':
         render_dashboard()
     elif st.session_state.current_page == 'form':
+        # Load data if in edit mode but data not yet loaded - moved here for proper timing
+        if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
+            import logging
+            logging.info(f"=== FORM PAGE EDIT CHECK: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}")
+            if 'edit_data_loaded' not in st.session_state:
+                from ui.dashboard import load_procurement_to_form
+                logging.info(f"=== LOADING procurement {st.session_state.edit_record_id} for editing ===")
+                try:
+                    load_procurement_to_form(st.session_state.edit_record_id)
+                    st.session_state.edit_data_loaded = True
+                    logging.info(f"=== LOADING COMPLETED ===")
+                except Exception as e:
+                    logging.error(f"=== LOADING ERROR: {e} ===")
+                    import traceback
+                    logging.error(traceback.format_exc())
         render_main_form()
     elif st.session_state.current_page == 'admin':
         render_admin_panel()
@@ -99,13 +140,14 @@ def _set_navigation_flags():
             navigation_key = f"{key}_navigation_flag"
             st.session_state[navigation_key] = True
 
-def save_form_draft(include_files=True, show_success=True, location="navigation"):
+def save_form_draft(include_files=True, show_success=True, location="navigation", is_confirmation=False):
     """Unified function to save current form state as a draft.
     
     Args:
         include_files: Whether to also save uploaded files (default: True)
         show_success: Whether to show success message (default: True)
         location: Where the save was triggered from ("navigation" or "sidebar")
+        is_confirmation: Whether this save is from the confirmation step (default: False)
     
     Returns:
         draft_id if successful, None otherwise
@@ -117,11 +159,14 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
         # Get current form data
         form_data = get_form_data_from_session()
         
+        # Add status based on save type
+        form_data['status'] = 'osnutek' if is_confirmation else 'delno izpolnjen'
+        
         # Add metadata
         form_data['_save_metadata'] = {
             'saved_at': datetime.datetime.now().isoformat(),
             'current_step': st.session_state.current_step,
-            'save_type': 'progress',
+            'save_type': 'confirmation' if is_confirmation else 'progress',
             'save_location': location
         }
         
@@ -134,18 +179,29 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
                 success = database.update_procurement(draft_id, form_data)
                 if not success:
                     draft_id = None
+                else:
+                    import logging
+                    logging.info(f"Updated existing procurement ID: {draft_id}")
             else:
-                # Update existing draft
+                # Update existing draft using the new update_draft function
                 draft_id = st.session_state.current_draft_id
-                success = database.update_procurement(draft_id, form_data)
-                if not success:
+                success = database.update_draft(draft_id, form_data)
+                if success:
+                    import logging
+                    logging.info(f"Updated existing draft ID: {draft_id}")
+                else:
                     # If update fails (draft was deleted?), create new one
+                    import logging
+                    logging.warning(f"Failed to update draft {draft_id}, creating new one")
                     draft_id = database.save_draft(form_data)
                     st.session_state.current_draft_id = draft_id
+                    logging.info(f"Created new draft ID: {draft_id}")
         else:
             # Create new draft
             draft_id = database.save_draft(form_data)
             st.session_state.current_draft_id = draft_id
+            import logging
+            logging.info(f"Created initial draft ID: {draft_id}")
         
         if draft_id:
             
@@ -263,6 +319,364 @@ def save_form_progress():
     This is a wrapper for backward compatibility."""
     return save_form_draft(include_files=True, show_success=True, location="navigation")
 
+def render_confirmation_step():
+    """Render the final confirmation step."""
+    st.markdown("## 📋 Potrditev naročila")
+    st.markdown("---")
+    
+    # Confirmation info
+    st.info("ℹ️ S klikom na 'Potrdi' bo naročilo shranjeno s statusom 'osnutek'")
+    
+    # Navigation buttons
+    col1, col2, col3 = st.columns([2, 1, 2])
+    
+    with col1:
+        if st.button("◀ Nazaj", key="conf_back", use_container_width=True):
+            st.session_state.current_step -= 1
+            st.rerun()
+    
+    with col3:
+        if st.button("✅ Potrdi naročilo", type="primary", key="confirm_order", use_container_width=True):
+            with st.spinner("Shranjujem naročilo..."):
+                # Create the actual procurement (not just a draft)
+                from utils.schema_utils import get_form_data_from_session
+                final_form_data = get_form_data_from_session()
+                
+                # Create new procurement
+                new_id = database.create_procurement(final_form_data)
+                
+                if new_id:
+                    st.success(f"✅ Novo naročilo uspešno ustvarjeno z ID: {new_id}")
+                    # Removed balloons - too distracting as requested
+                    
+                    # Show options for next actions
+                    st.markdown("---")
+                    st.markdown("### Kaj želite narediti zdaj?")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("📊 Nazaj na pregled", key="to_dashboard", use_container_width=True):
+                            st.session_state.current_page = 'dashboard'
+                            st.session_state.current_step = 0
+                            clear_form_data()
+                            st.rerun()
+                    with col2:
+                        if st.button("➕ Novo naročilo", key="new_order", use_container_width=True):
+                            st.session_state.current_step = 0
+                            clear_form_data()
+                            st.rerun()
+                else:
+                    st.error("❌ Napaka pri ustvarjanju naročila. Prosim, poskusite znova.")
+
+# Story 31.2: Smart Navigation Implementation
+def initialize_step_tracking():
+    """Initialize step completion tracking in session state."""
+    if 'completed_steps' not in st.session_state:
+        st.session_state['completed_steps'] = {}
+    
+    # For lot-based forms
+    if st.session_state.get('lot_mode') == 'multiple':
+        if 'lot_completed_steps' not in st.session_state:
+            st.session_state['lot_completed_steps'] = {}
+
+def mark_step_completed(step_index, lot_id=None):
+    """Mark a step as completed when moving forward."""
+    initialize_step_tracking()
+    
+    if lot_id:
+        if lot_id not in st.session_state['lot_completed_steps']:
+            st.session_state['lot_completed_steps'][lot_id] = {}
+        st.session_state['lot_completed_steps'][lot_id][step_index] = True
+    else:
+        st.session_state['completed_steps'][step_index] = True
+
+def is_step_accessible(step_index, lot_id=None):
+    """Check if a step can be accessed based on completion history."""
+    # Allow access to current and previous steps
+    current_step = st.session_state.get('current_step', 0)
+    if step_index <= current_step:
+        return True
+    
+    # Check completion tracking
+    if lot_id:
+        lot_steps = st.session_state.get('lot_completed_steps', {}).get(lot_id, {})
+        completed = lot_steps
+    else:
+        completed = st.session_state.get('completed_steps', {})
+    
+    # Verify all previous steps are completed
+    for i in range(step_index):
+        if not completed.get(i, False):
+            return False
+    
+    return completed.get(step_index, False)
+
+def navigate_to_step(target_step, lot_id=None):
+    """Navigate to a specific step with validation."""
+    if is_step_accessible(target_step, lot_id):
+        # Mark current step as completed if moving forward
+        current = st.session_state.get('current_step', 0)
+        if target_step > current:
+            mark_step_completed(current, lot_id)
+        
+        # Update navigation
+        if lot_id:
+            st.session_state['current_lot'] = lot_id
+        st.session_state['current_step'] = target_step
+        st.rerun()
+    else:
+        st.warning("⚠️ Ne morete skočiti na ta korak - prejšnji koraki niso izpolnjeni")
+
+def render_quick_navigation():
+    """Render quick navigation dropdown for completed steps."""
+    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    
+    steps = get_dynamic_form_steps(st.session_state)
+    current = st.session_state.current_step
+    completed = st.session_state.get('completed_steps', {})
+    
+    # Build accessible steps list
+    accessible_steps = []
+    step_names = get_step_names(steps)  # Use helper function to get names
+    
+    for idx, step in enumerate(steps):
+        if idx < current or completed.get(idx, False):
+            step_name = step_names[idx] if idx < len(step_names) else f"Korak {idx+1}"
+            # Add step number to the name for clarity
+            accessible_steps.append((idx, f"{idx+1}. {step_name}"))
+    
+    if accessible_steps and len(accessible_steps) > 1:
+        with st.sidebar:
+            st.markdown("### 🧭 Hitra navigacija")
+            st.info("Skočite na že izpolnjene korake")
+            
+            # Show overall progress
+            total_steps = len(steps)
+            progress = (current + 1) / total_steps
+            st.progress(progress)
+            st.markdown(f"**Napredek:** Korak {current+1} od {total_steps}")
+            
+            # Current step indicator with step number
+            current_name = step_names[current] if current < len(step_names) else f"Korak {current+1}"
+            st.markdown(f"**Trenutni korak:** {current+1}. {current_name}")
+            
+            # Navigation dropdown
+            selected = st.selectbox(
+                "Pojdi na korak:",
+                options=[idx for idx, _ in accessible_steps],
+                format_func=lambda x: next(title for idx, title in accessible_steps if idx == x),
+                index=[idx for idx, _ in accessible_steps].index(current) if current in [idx for idx, _ in accessible_steps] else 0,
+                key="quick_nav_select"
+            )
+            
+            if st.button("➡️ Pojdi", key="quick_nav_go", use_container_width=True):
+                navigate_to_step(selected)
+
+def get_step_names(steps):
+    """Helper function to get readable names for steps."""
+    step_names = []
+    for i, step_fields in enumerate(steps):
+        if step_fields and len(step_fields) > 0:
+            field_name = step_fields[0] if isinstance(step_fields, list) else str(step_fields)
+            # Map field names to readable format
+            name_map = {
+                "clientInfo": "Podatki naročnika",
+                "projectInfo": "Podatki projekta",
+                "legalBasis": "Pravna podlaga",
+                "submissionProcedure": "Postopek oddaje",
+                "lotsInfo": "Konfiguracija sklopov",
+                "lotConfiguration": "Konfiguracija sklopov",
+                "orderType": "Vrsta naročila",
+                "technicalSpecifications": "Tehnične zahteve",
+                "executionDeadline": "Roki izvajanja",
+                "priceInfo": "Informacije o ceni",
+                "inspectionInfo": "Ogledi in pogajanja",
+                "participationAndExclusion": "Pogoji sodelovanja",
+                "financialGuarantees": "Zavarovanja",
+                "selectionCriteria": "Merila izbire",
+                "contractInfo": "Pogodba",
+                "otherInfo": "Dodatne informacije",
+                "confirmation": "Potrditev"
+            }
+            
+            # Handle lot-specific steps
+            if field_name.startswith("lot_context_"):
+                step_name = f"Sklop {field_name.split('_')[-1]}"
+            elif field_name.startswith("lot_"):
+                # Extract the actual field name from lot_0_orderType
+                parts = field_name.split('_', 2)
+                if len(parts) >= 3:
+                    base_field = parts[2]
+                    step_name = name_map.get(base_field, f"Korak {i+1}")
+                else:
+                    step_name = f"Korak {i+1}"
+            else:
+                step_name = name_map.get(field_name, f"Korak {i+1}")
+            
+            step_names.append(step_name)
+        else:
+            step_names.append(f"Korak {i+1}")
+    
+    return step_names
+
+# Story 31.3: Visual Progress Indicator
+def render_visual_progress_indicator():
+    """Render horizontal progress indicator with visual states and navigation."""
+    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    
+    steps = get_dynamic_form_steps(st.session_state)
+    current = st.session_state.current_step
+    completed = st.session_state.get('completed_steps', {})
+    step_names = get_step_names(steps)
+    
+    # Skip if only one step
+    if len(steps) <= 1:
+        return
+    
+    # Create progress container
+    st.markdown("### 📊 Napredek obrazca")
+    
+    # Calculate how many columns we need (limit to avoid too narrow columns)
+    num_steps = len(steps)
+    if num_steps > 7:
+        # For many steps, show compact view
+        render_compact_progress_indicator()
+        return
+    
+    # Create columns for steps
+    cols = st.columns(num_steps)
+    
+    for idx, col in enumerate(cols):
+        with col:
+            # Determine step status
+            if idx == current:
+                # Current step
+                status_icon = "🔵"
+                status_color = "#2196F3"
+                is_clickable = False
+                button_type = "primary"
+            elif completed.get(idx, False):
+                # Completed step
+                status_icon = "✅"
+                status_color = "#4CAF50"
+                is_clickable = True
+                button_type = "secondary"
+            elif idx < current:
+                # Skipped/incomplete step
+                status_icon = "⚠️"
+                status_color = "#FF9800"
+                is_clickable = True
+                button_type = "secondary"
+            else:
+                # Locked step
+                status_icon = "🔒"
+                status_color = "#9E9E9E"
+                is_clickable = False
+                button_type = None
+            
+            # Get step name
+            step_name = step_names[idx] if idx < len(step_names) else f"Korak {idx+1}"
+            # Truncate long names
+            if len(step_name) > 12:
+                display_name = step_name[:10] + "..."
+            else:
+                display_name = step_name
+            
+            # Render step indicator
+            if is_clickable:
+                # Clickable step button
+                if st.button(
+                    f"{status_icon}\\n{display_name}",
+                    key=f"progress_{idx}",
+                    use_container_width=True,
+                    type=button_type,
+                    help=f"{step_name}"
+                ):
+                    navigate_to_step(idx)
+            else:
+                # Non-clickable step (current or locked)
+                st.markdown(
+                    f"""
+                    <div style="
+                        text-align: center;
+                        padding: 8px 4px;
+                        border-radius: 8px;
+                        background-color: {'#e3f2fd' if idx == current else '#f5f5f5'};
+                        border: 2px solid {status_color};
+                        min-height: 70px;
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                        <div style="font-size: 20px; margin-bottom: 4px;">{status_icon}</div>
+                        <div style="font-size: 10px; color: #666;">
+                            {display_name}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+    
+    # Add progress bar below steps
+    progress_percentage = int(((current + 1) / num_steps) * 100)
+    st.progress(progress_percentage / 100)
+    st.caption(f"Korak {current + 1} od {num_steps} ({progress_percentage}% dokončano)")
+
+def render_compact_progress_indicator():
+    """Compact progress indicator for many steps or mobile view."""
+    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    
+    steps = get_dynamic_form_steps(st.session_state)
+    current = st.session_state.current_step
+    completed = st.session_state.get('completed_steps', {})
+    step_names = get_step_names(steps)
+    total = len(steps)
+    
+    # Progress metrics
+    completed_count = sum(1 for v in completed.values() if v)
+    progress_percent = int(((current + 1) / total) * 100)
+    
+    # Current step info
+    current_name = step_names[current] if current < len(step_names) else f"Korak {current+1}"
+    
+    # Render compact view
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.markdown(f"**Korak {current + 1} od {total}**: {current_name}")
+        st.progress(progress_percent / 100)
+        
+        # Show step status summary
+        status_text = []
+        if completed_count > 0:
+            status_text.append(f"✅ Dokončani: {completed_count}")
+        if current < total - 1:
+            remaining = total - current - 1
+            status_text.append(f"⏳ Preostali: {remaining}")
+        
+        if status_text:
+            st.caption(" | ".join(status_text))
+    
+    with col2:
+        # Quick jump menu for completed steps
+        accessible = []
+        for i in range(total):
+            if i < current or completed.get(i, False):
+                accessible.append(i)
+        
+        if len(accessible) > 1:
+            selected = st.selectbox(
+                "Skoči na:",
+                options=accessible,
+                format_func=lambda x: f"{x+1}. {step_names[x][:15]}" if x < len(step_names) else f"{x+1}. Korak",
+                index=accessible.index(current) if current in accessible else 0,
+                key="compact_nav",
+                label_visibility="collapsed"
+            )
+            if selected != current:
+                navigate_to_step(selected)
+
 def validate_step(step_keys, schema):
     """Validate the fields for the current step using centralized validation."""
     # Story 27.3: Refactored to use ValidationManager
@@ -309,6 +723,9 @@ def validate_step(step_keys, schema):
 
 def render_main_form():
     """Render the main multi-step form interface with enhanced UX."""
+    # Import get_dynamic_form_steps function
+    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+    
     # Check for saved progress on startup - only show if we're in edit mode or have a current draft
     if 'checked_saved_progress' not in st.session_state:
         st.session_state.checked_saved_progress = True
@@ -373,8 +790,23 @@ def render_main_form():
                                     
                                     # Flatten and load into session state
                                     flattened_data = flatten_dict(loaded_data)
+                                    
+                                    # Check if we're in general mode (no lots)
+                                    has_lots = loaded_data.get('lotsInfo', {}).get('hasLots', False)
+                                    
                                     for key, value in flattened_data.items():
-                                        st.session_state[key] = value
+                                        # In general mode, add "general." prefix to form fields
+                                        if not has_lots and not key.startswith('lot_') and not key.startswith('general.'):
+                                            # Skip special keys that shouldn't have prefix
+                                            special_keys = ['lots', 'lot_names', 'lot_mode', 'current_lot_index', 
+                                                          'lotsInfo.hasLots', 'current_step', 'completed_steps']
+                                            if key not in special_keys and not key.startswith('_'):
+                                                # Add general. prefix for form fields in general mode
+                                                st.session_state[f'general.{key}'] = value
+                                            else:
+                                                st.session_state[key] = value
+                                        else:
+                                            st.session_state[key] = value
                                     
                                     st.session_state.current_draft_id = draft['id']
                                     
@@ -383,6 +815,44 @@ def render_main_form():
                                         metadata = loaded_data['_save_metadata']
                                         if 'current_step' in metadata:
                                             st.session_state.current_step = metadata['current_step']
+                                    
+                                    # Mark all steps with data as completed for navigation
+                                    steps = get_dynamic_form_steps(st.session_state)
+                                    completed_steps = {}
+                                    
+                                    for i, step_keys in enumerate(steps):
+                                        # Check if step has any data
+                                        has_data = False
+                                        for key in step_keys:
+                                            # Check various key patterns
+                                            if has_lots:
+                                                # Lot mode - check lot-specific keys
+                                                if st.session_state.get(key):
+                                                    has_data = True
+                                                    break
+                                            else:
+                                                # General mode - check with general. prefix
+                                                check_keys = [
+                                                    f'general.{key}',
+                                                    key
+                                                ]
+                                                for check_key in check_keys:
+                                                    # Check if there's any nested data
+                                                    for session_key in st.session_state.keys():
+                                                        if session_key.startswith(check_key):
+                                                            value = st.session_state.get(session_key)
+                                                            if value and value not in [False, '', 0, []]:
+                                                                has_data = True
+                                                                break
+                                                    if has_data:
+                                                        break
+                                            if has_data:
+                                                break
+                                        
+                                        if has_data:
+                                            completed_steps[i] = True
+                                    
+                                    st.session_state.completed_steps = completed_steps
                                     
                                     st.success("✅ Napredek uspešno naložen!")
                                     st.rerun()
@@ -420,6 +890,12 @@ def render_main_form():
 
     # Add custom CSS for better styling
     add_custom_css()
+    
+    # Render quick navigation in sidebar
+    render_quick_navigation()
+    
+    # Render lot navigation in sidebar (Rule of Three: Location 3)
+    render_lot_sidebar()
     
     # Add back to dashboard button at the top
     col_back, col_title = st.columns([1, 5])
@@ -482,6 +958,9 @@ def render_main_form():
         # Show accurate step count even if it exceeds expected total
         st.progress(progress_percentage, text=f"{get_text('progress')}: {current_step_num}/{max(total_steps, current_step_num)}")
         
+        # Lot visibility header (Rule of Three: Location 1)
+        render_lot_header()
+        
         # Step navigation breadcrumbs
         render_step_breadcrumbs()
 
@@ -501,6 +980,21 @@ def render_main_form():
         
         # Get lot context for current step
         lot_context = get_current_lot_context(current_step_keys)
+        
+        # Debug edit mode
+        if st.session_state.get('edit_mode'):
+            import logging
+            logging.info(f"=== EDIT MODE DEBUG ===")
+            logging.info(f"Current step keys: {current_step_keys}")
+            logging.info(f"Lot context: {lot_context}")
+            logging.info(f"Lot mode in session: {st.session_state.get('lot_mode', 'NOT SET')}")
+            # Check for sample data
+            test_key = 'general.clientInfo.name' if lot_context['mode'] == 'general' else 'clientInfo.name'
+            logging.info(f"Looking for key: {test_key}")
+            if test_key in st.session_state:
+                logging.info(f"Found: {st.session_state[test_key]}")
+            else:
+                logging.info(f"NOT FOUND in session state")
         
         # Store current step keys for use in lot utilities
         st.session_state.current_step_keys = current_step_keys
@@ -691,10 +1185,14 @@ def render_main_form():
                         step_name = "Zavarovanja"
                     elif field_name == "merila":
                         step_name = "Merila izbire"
+                    elif field_name == "selectionCriteria":
+                        step_name = "Merila izbire"
                     elif field_name == "contractInfo":
-                        step_name = "Pogodba in zaključek"
+                        step_name = "Sklepanje pogodbe"
                     elif field_name == "otherInfo":
                         step_name = "Dodatne informacije"
+                    elif field_name == "confirmation":
+                        step_name = "Potrditev"
                     else:
                         step_name = f"Korak {i+1}"
                     step_names.append(step_name)
@@ -715,12 +1213,40 @@ def render_main_form():
         
         # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)
-        if use_modern_form:
-            # Use modern form renderer
-            render_modern_form()
+        
+        # Special handling for step 15 - otherInfo
+        if 'otherInfo' in current_step_keys:
+            # Get the session key for otherInfo field
+            session_key = 'otherInfo'
+            if lot_context and lot_context['mode'] == 'general':
+                session_key = 'general.otherInfo'
+            
+            # Initialize if not exists
+            if session_key not in st.session_state:
+                st.session_state[session_key] = ""
+            
+            # Render the textarea
+            st.subheader("Potrditev naročila")
+            other_info_value = st.text_area(
+                "Dodatne informacije in posebne zahteve",
+                value=st.session_state.get(session_key, ""),
+                help="Bi nam želeli še kaj sporočiti?",
+                height=150,
+                key=f"widget_{session_key}"
+            )
+            
+            # Update session state
+            if other_info_value != st.session_state.get(session_key):
+                st.session_state[session_key] = other_info_value
         else:
-            # Fallback to original renderer
-            render_form(current_step_properties, lot_context=lot_context)
+            # Render normal form for all other steps including step 14 (contractInfo)
+            if use_modern_form:
+                # Use modern form renderer
+                render_modern_form()
+            else:
+                # Fallback to original renderer
+                render_form(current_step_properties, lot_context=lot_context)
+        
         st.markdown('</div>', unsafe_allow_html=True)
         
         # Story 22.2: Add per-step validation toggle
@@ -1258,6 +1784,80 @@ def add_custom_css():
         }
     }
     
+    /* === LOT VISIBILITY STYLES === */
+    .lot-context-header {
+        background: #E3F2FD;
+        border-left: 4px solid #2196F3;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 8px;
+        font-weight: 500;
+        animation: fadeIn 0.3s ease-out;
+    }
+    
+    .lot-context-header strong {
+        color: #1976D2;
+    }
+    
+    .lot-sidebar-section {
+        background: var(--gray-50);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin: 1rem 0;
+        border: 1px solid var(--gray-300);
+    }
+    
+    .lot-sidebar-active {
+        background: #E3F2FD !important;
+        border-left: 4px solid #2196F3 !important;
+        font-weight: 600;
+        padding: 0.75rem !important;
+        margin: 0.5rem 0 !important;
+        border-radius: var(--radius-md) !important;
+    }
+    
+    .lot-sidebar-completed {
+        background: #E8F5E9 !important;
+        border-left: 4px solid #4CAF50 !important;
+        padding: 0.75rem !important;
+        margin: 0.5rem 0 !important;
+        border-radius: var(--radius-md) !important;
+    }
+    
+    .lot-sidebar-pending {
+        background: var(--gray-100) !important;
+        border-left: 4px solid var(--gray-400) !important;
+        padding: 0.75rem !important;
+        margin: 0.5rem 0 !important;
+        border-radius: var(--radius-md) !important;
+        opacity: 0.8;
+    }
+    
+    .lot-progress-badge {
+        background: #4CAF50;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        margin-left: 0.5rem;
+        display: inline-block;
+    }
+    
+    .lot-transition-indicator {
+        background: #FFF3CD;
+        border-left: 4px solid #FFC107;
+        padding: 0.75rem;
+        margin: 1rem 0;
+        border-radius: var(--radius-md);
+        font-size: 0.9rem;
+    }
+    
+    .lot-breadcrumb-active {
+        background: #E3F2FD !important;
+        border: 2px solid #2196F3 !important;
+        font-weight: 600 !important;
+    }
+    
     /* === PRINT STYLES === */
     @media print {
         .form-header {
@@ -1277,15 +1877,116 @@ def add_custom_css():
     </style>
     """, unsafe_allow_html=True)
 
+def render_lot_header():
+    """Display lot context header at the top of the form (Rule of Three: Location 1)."""
+    if st.session_state.get('lot_mode') == 'multiple':
+        lots = st.session_state.get('lots', [])
+        current_lot_index = st.session_state.get('current_lot_index', 0)
+        
+        if lots and current_lot_index < len(lots):
+            current_lot = lots[current_lot_index]
+            lot_name = current_lot.get('name', f'Sklop {current_lot_index + 1}') if isinstance(current_lot, dict) else f'Sklop {current_lot_index + 1}'
+            
+            st.markdown(
+                f'<div class="lot-context-header">'
+                f'🏷️ Trenutno urejate sklop: <strong>{lot_name}</strong>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+def calculate_lot_progress(lot_index):
+    """Calculate completion percentage for a specific lot."""
+    # This would need to be implemented based on your step completion tracking
+    # For now, returning a placeholder value
+    completed_steps = st.session_state.get('lot_completed_steps', {}).get(lot_index, {})
+    if not completed_steps:
+        return 0
+    
+    # Count completed steps for this lot
+    total_lot_steps = 10  # Adjust based on your actual lot-specific steps
+    completed_count = sum(1 for v in completed_steps.values() if v)
+    return int((completed_count / total_lot_steps) * 100)
+
+def switch_to_lot(lot_index):
+    """Switch to a different lot with validation."""
+    # Check for unsaved changes
+    if st.session_state.get('unsaved_changes'):
+        st.warning("⚠️ Imate neshranjene spremembe. Prosim, shranite pred preklopom.")
+        return
+    
+    # Update current lot index
+    st.session_state['current_lot_index'] = lot_index
+    st.success(f"Preklop na sklop: {st.session_state.get('lots', [])[lot_index].get('name', f'Sklop {lot_index + 1}')}")
+    st.rerun()
+
+def render_lot_sidebar():
+    """Display lot navigation in sidebar (Rule of Three: Location 3)."""
+    if st.session_state.get('lot_mode') == 'multiple':
+        with st.sidebar:
+            st.markdown('<div class="lot-sidebar-section">', unsafe_allow_html=True)
+            st.markdown("### 📦 Sklopi")
+            
+            lots = st.session_state.get('lots', [])
+            current_lot_index = st.session_state.get('current_lot_index', 0)
+            
+            for i, lot in enumerate(lots):
+                lot_name = lot.get('name', f'Sklop {i+1}') if isinstance(lot, dict) else f'Sklop {i+1}'
+                progress = calculate_lot_progress(i)
+                
+                if i == current_lot_index:
+                    # Active lot
+                    st.markdown(
+                        f'<div class="lot-sidebar-active">'
+                        f'📝 <strong>{lot_name}</strong>'
+                        f'<span class="lot-progress-badge">{progress}%</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                elif progress == 100:
+                    # Completed lot
+                    st.markdown(
+                        f'<div class="lot-sidebar-completed">'
+                        f'✅ {lot_name}'
+                        f'<span class="lot-progress-badge">100%</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                else:
+                    # Pending lot
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        if st.button(f"⏳ {lot_name}", key=f"lot_nav_{i}", use_container_width=True):
+                            switch_to_lot(i)
+                    with col2:
+                        st.markdown(f'<small>{progress}%</small>', unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+def get_current_lot_name():
+    """Get the name of the current lot being edited."""
+    lots = st.session_state.get('lots', [])
+    current_lot_index = st.session_state.get('current_lot_index', 0)
+    
+    if lots and current_lot_index < len(lots):
+        lot = lots[current_lot_index]
+        if isinstance(lot, dict):
+            return lot.get('name', f'Sklop {current_lot_index + 1}')
+        else:
+            return f'Sklop {current_lot_index + 1}'
+    
+    return None
+
 def render_step_breadcrumbs():
-    """Render step navigation breadcrumbs."""
+    """Render step navigation breadcrumbs with lot context highlighting (Rule of Three: Location 2)."""
     from localization import get_dynamic_step_label
+    from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
     
     # Get dynamic form steps for breadcrumbs
     dynamic_form_steps = get_dynamic_form_steps(st.session_state)
     
     # Check if lots are enabled
     has_lots = st.session_state.get("lotsInfo.hasLots", False)
+    lot_mode = st.session_state.get('lot_mode', 'none')
     
     breadcrumbs_html = '<div class="step-breadcrumbs">'
     
@@ -1293,10 +1994,21 @@ def render_step_breadcrumbs():
         step_num = i + 1
         step_label = get_dynamic_step_label(step_keys, step_num, has_lots)
         
+        # Check if this is a lot-specific step
+        is_lot_step = any(key.startswith('lot_context_') for key in step_keys) if step_keys else False
+        
         if i < st.session_state.current_step:
             css_class = "completed"
         elif i == st.session_state.current_step:
-            css_class = "current"
+            # Highlight lot-specific steps differently
+            if is_lot_step and lot_mode == 'multiple':
+                css_class = "current lot-breadcrumb-active"
+                # Add lot name to breadcrumb
+                lot_name = get_current_lot_name()
+                if lot_name:
+                    step_label = f"{step_label} ({lot_name})"
+            else:
+                css_class = "current"
         else:
             css_class = "pending"
             
@@ -1398,6 +2110,8 @@ def render_navigation_buttons_in_form(current_step_keys):
 
 def render_navigation_buttons(current_step_keys):
     """Render enhanced navigation buttons with proper state handling."""
+    # Don't skip for any step - step 15 needs buttons too
+    
     # Get dynamic form steps for navigation
     dynamic_form_steps = get_dynamic_form_steps(st.session_state)
     
@@ -1534,6 +2248,10 @@ def render_navigation_buttons(current_step_keys):
                     
                     if validation_passed:
                         logging.info("Navigation allowed - moving to next step")
+                        # Mark current step as completed
+                        current = st.session_state.current_step
+                        lot_id = st.session_state.get('current_lot') if st.session_state.get('lot_mode') == 'multiple' else None
+                        mark_step_completed(current, lot_id)
                         # Set navigation flag for all form fields to prevent auto-selection triggers
                         _set_navigation_flags()
                         st.session_state.current_step += 1
@@ -1573,13 +2291,15 @@ def render_navigation_buttons(current_step_keys):
                                 # Update existing procurement
                                 if database.update_procurement(st.session_state.edit_record_id, final_form_data):
                                     st.success(f"✅ Naročilo ID {st.session_state.edit_record_id} uspešno posodobljeno!")
-                                    # Clear edit mode and return to dashboard
-                                    import time
-                                    time.sleep(1)  # Show success message
+                                    # Clear edit mode and return to dashboard immediately
                                     st.session_state.edit_mode = False
                                     st.session_state.edit_record_id = None
-                                    st.session_state.current_page = 'dashboard'
+                                    # Clear current draft ID if it exists
+                                    if 'current_draft_id' in st.session_state:
+                                        del st.session_state['current_draft_id']
+                                    # Clear form data and navigate to dashboard
                                     clear_form_data()
+                                    st.session_state.current_page = 'dashboard'
                                     st.rerun()
                                 else:
                                     st.error("❌ Napaka pri posodabljanju naročila")
@@ -1587,12 +2307,13 @@ def render_navigation_buttons(current_step_keys):
                                 # Create new procurement
                                 new_id = database.create_procurement(final_form_data)
                                 if new_id:
-                                    st.success(f"✅ Osnutek uspešno shranjen! ID: {new_id}")
-                                    # Return to dashboard
-                                    import time
-                                    time.sleep(1)  # Show success message
-                                    st.session_state.current_page = 'dashboard'
+                                    st.success(f"✅ Javno naročilo uspešno ustvarjeno! ID: {new_id}")
+                                    # Clear current draft ID since procurement is now saved
+                                    if 'current_draft_id' in st.session_state:
+                                        del st.session_state['current_draft_id']
+                                    # Clear form data and navigate to dashboard immediately
                                     clear_form_data()
+                                    st.session_state.current_page = 'dashboard'
                                     st.rerun()
                                 else:
                                     st.error("❌ Napaka pri ustvarjanju naročila")
@@ -1666,14 +2387,69 @@ def render_drafts_sidebar(draft_options):
             
             # Flatten and load into session state
             flattened_data = flatten_dict(loaded_data)
+            
+            # Check if we're in general mode (no lots)
+            has_lots = loaded_data.get('lotsInfo', {}).get('hasLots', False)
+            
             for key, value in flattened_data.items():
-                st.session_state[key] = value
+                # In general mode, add "general." prefix to form fields
+                if not has_lots and not key.startswith('lot_') and not key.startswith('general.'):
+                    # Skip special keys that shouldn't have prefix
+                    special_keys = ['lots', 'lot_names', 'lot_mode', 'current_lot_index', 
+                                  'lotsInfo.hasLots', 'current_step', 'completed_steps']
+                    if key not in special_keys and not key.startswith('_'):
+                        # Add general. prefix for form fields in general mode
+                        st.session_state[f'general.{key}'] = value
+                    else:
+                        st.session_state[key] = value
+                else:
+                    st.session_state[key] = value
             
             # Restore metadata if present
             if '_save_metadata' in loaded_data:
                 metadata = loaded_data['_save_metadata']
                 if 'current_step' in metadata:
                     st.session_state.current_step = metadata['current_step']
+            
+            # Mark all steps with data as completed for navigation
+            # Need to import here as we're not in render_main_form scope
+            from config_refactored import get_dynamic_form_steps_refactored as get_dynamic_form_steps
+            steps = get_dynamic_form_steps(st.session_state)
+            completed_steps = {}
+            
+            for i, step_keys in enumerate(steps):
+                # Check if step has any data
+                has_data = False
+                for key in step_keys:
+                    # Check various key patterns
+                    if has_lots:
+                        # Lot mode - check lot-specific keys
+                        if st.session_state.get(key):
+                            has_data = True
+                            break
+                    else:
+                        # General mode - check with general. prefix
+                        check_keys = [
+                            f'general.{key}',
+                            key
+                        ]
+                        for check_key in check_keys:
+                            # Check if there's any nested data
+                            for session_key in st.session_state.keys():
+                                if session_key.startswith(check_key):
+                                    value = st.session_state.get(session_key)
+                                    if value and value not in [False, '', 0, []]:
+                                        has_data = True
+                                        break
+                            if has_data:
+                                break
+                    if has_data:
+                        break
+                
+                if has_data:
+                    completed_steps[i] = True
+            
+            st.session_state.completed_steps = completed_steps
             
             # Story 28.3: Store form_id for file loading
             st.session_state.form_id = selected_draft_id
