@@ -107,12 +107,26 @@ def get_form_data_from_session():
             
             # Collect all lot-specific fields
             lot_prefix = f'lot_{i}.'
+            lot_double_prefix = f'lot_{i}.lot_{i}_'  # Handle double-prefixed keys
+            
             for key, value in st.session_state.items():
                 # Skip file info keys - they contain binary data that can't be serialized
                 if '_file_info' in key:
                     continue
+                    
+                # Skip widget keys
+                if key.startswith('widget_'):
+                    continue
+                    
                 if key.startswith(lot_prefix):
+                    # Remove the lot prefix
                     field_name = key[len(lot_prefix):]
+                    
+                    # Check if this has double prefix pattern (lot_0.lot_0_orderType)
+                    if field_name.startswith(f'lot_{i}_'):
+                        # Remove the redundant prefix
+                        field_name = field_name[len(f'lot_{i}_'):]
+                    
                     # Build nested structure
                     parts = field_name.split('.')
                     d = lot_data

@@ -806,11 +806,19 @@ def render_main_form():
                                                 for i, lot in enumerate(v):
                                                     for lot_key, lot_value in lot.items():
                                                         if lot_key != 'name' and not isinstance(lot_value, dict):
+                                                            # Store with regular prefix
                                                             items.append((f'lot_{i}.{lot_key}', lot_value))
+                                                            # Also store with double prefix for compatibility
+                                                            if lot_key.startswith('orderType') or lot_key in ['technicalSpecifications', 'executionDeadline']:
+                                                                items.append((f'lot_{i}.lot_{i}_{lot_key}', lot_value))
                                                         elif isinstance(lot_value, dict):
                                                             # Recursively flatten nested lot data
                                                             nested_items = flatten_dict(lot_value, f'lot_{i}.{lot_key}', sep=sep)
                                                             items.extend(nested_items.items())
+                                                            # Also handle double-prefix pattern for nested fields
+                                                            if lot_key == 'orderType' or lot_key in ['technicalSpecifications', 'executionDeadline']:
+                                                                double_nested = flatten_dict(lot_value, f'lot_{i}.lot_{i}_{lot_key}', sep=sep)
+                                                                items.extend(double_nested.items())
                                                 continue
                                             elif k == 'lot_names':
                                                 st.session_state['lot_names'] = v
@@ -2445,11 +2453,19 @@ def render_drafts_sidebar(draft_options):
                         for i, lot in enumerate(v):
                             for lot_key, lot_value in lot.items():
                                 if lot_key != 'name' and not isinstance(lot_value, dict):
+                                    # Store with regular prefix
                                     items.append((f'lot_{i}.{lot_key}', lot_value))
+                                    # Also store with double prefix for compatibility
+                                    if lot_key.startswith('orderType') or lot_key in ['technicalSpecifications', 'executionDeadline']:
+                                        items.append((f'lot_{i}.lot_{i}_{lot_key}', lot_value))
                                 elif isinstance(lot_value, dict):
                                     # Recursively flatten nested lot data
                                     nested_items = flatten_dict(lot_value, f'lot_{i}.{lot_key}', sep=sep)
                                     items.extend(nested_items.items())
+                                    # Also handle double-prefix pattern for nested fields
+                                    if lot_key == 'orderType' or lot_key in ['technicalSpecifications', 'executionDeadline']:
+                                        double_nested = flatten_dict(lot_value, f'lot_{i}.lot_{i}_{lot_key}', sep=sep)
+                                        items.extend(double_nested.items())
                         continue
                     elif k == 'lot_names':
                         st.session_state['lot_names'] = v
