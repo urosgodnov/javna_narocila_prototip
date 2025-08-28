@@ -1899,7 +1899,8 @@ def render_lot_header():
         lots = st.session_state.get('lots', [])
         current_lot_index = st.session_state.get('current_lot_index', 0)
         
-        if lots and current_lot_index < len(lots):
+        # Fix TypeError: Handle None case for current_lot_index
+        if lots and current_lot_index is not None and current_lot_index < len(lots):
             current_lot = lots[current_lot_index]
             lot_name = current_lot.get('name', f'Sklop {current_lot_index + 1}') if isinstance(current_lot, dict) else f'Sklop {current_lot_index + 1}'
             
@@ -1983,7 +1984,8 @@ def get_current_lot_name():
     lots = st.session_state.get('lots', [])
     current_lot_index = st.session_state.get('current_lot_index', 0)
     
-    if lots and current_lot_index < len(lots):
+    # Fix TypeError: Handle None case for current_lot_index
+    if lots and current_lot_index is not None and current_lot_index < len(lots):
         lot = lots[current_lot_index]
         if isinstance(lot, dict):
             return lot.get('name', f'Sklop {current_lot_index + 1}')

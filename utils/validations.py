@@ -860,8 +860,19 @@ class ValidationManager:
         # Determine current lot context from session state
         current_lot_index = self.session_state.get('current_lot_index')
         lot_mode = self.session_state.get('lot_mode', 'none')
+        current_step = self.session_state.get('current_step')
         
-        logging.info(f"[validate_order_type] Context: lot_mode={lot_mode}, current_lot_index={current_lot_index}")
+        logging.info(f"[validate_order_type] Context: lot_mode={lot_mode}, current_lot_index={current_lot_index}, current_step={current_step}")
+        
+        # DEBUG: Log all cofinancer-related keys to understand session state structure
+        cofinancer_keys = [k for k in self.session_state.keys() if 'cofinanc' in k.lower()]
+        if cofinancer_keys:
+            logging.info(f"[validate_order_type] DEBUG - Found {len(cofinancer_keys)} cofinancer keys in session:")
+            for key in sorted(cofinancer_keys):
+                value = self.session_state.get(key)
+                if value:
+                    value_str = str(value)[:100] if isinstance(value, str) else str(value)
+                    logging.info(f"  {key} = {value_str}")
         
         # Check estimated value - try multiple possible keys based on context
         estimated_value = None
@@ -982,6 +993,9 @@ class ValidationManager:
                 cofinancer_keys.append(f'lot_{current_lot_index}.orderType.cofinancers')
             elif lot_mode == 'single':
                 cofinancer_keys.append(f'lot_0.orderType.cofinancers')
+            elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
+                # For general step or when lot_mode is 'none', check general prefix
+                cofinancer_keys.append('general.orderType.cofinancers')
             else:
                 cofinancer_keys.append('general.orderType.cofinancers')
             
@@ -996,6 +1010,9 @@ class ValidationManager:
                 count_keys.append(f'lot_{current_lot_index}.orderType.cofinancerCount')
             elif lot_mode == 'single':
                 count_keys.append(f'lot_0.orderType.cofinancerCount')
+            elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
+                # For general step or when lot_mode is 'none', check general prefix
+                count_keys.append('general.orderType.cofinancerCount')
             else:
                 count_keys.append('general.orderType.cofinancerCount')
             
@@ -1032,9 +1049,13 @@ class ValidationManager:
                     prefixes.append(f'lot_{current_lot_index}.orderType')
                 elif lot_mode == 'single':
                     prefixes.append(f'lot_0.orderType')
+                elif lot_mode == 'none' or (current_step and 'general' in current_step.lower()):
+                    # For general step or when lot_mode is 'none', check general prefix first
+                    prefixes.append('general.orderType')
                 else:
                     prefixes.append('general.orderType')
                 
+                # Always also check root orderType as fallback
                 prefixes.append('orderType')
                 for prefix in prefixes:
                     i = 0
@@ -1097,14 +1118,21 @@ class ValidationManager:
                     # Build prefixes based on context
                     prefixes = []
                     
-                    if lot_mode == 'multiple' and current_lot_index is not None:
+                    # For general step or when lot_mode is 'none', check general prefix
+                    if (current_step and 'general' in current_step.lower()) or lot_mode == 'none':
+                        prefixes.append('general.orderType')
+                        prefixes.append('orderType')
+                    elif lot_mode == 'multiple' and current_lot_index is not None:
                         prefixes.append(f'lot_{current_lot_index}.orderType')
+                        prefixes.append('orderType')
                     elif lot_mode == 'single':
                         prefixes.append(f'lot_0.orderType')
+                        prefixes.append('orderType')
                     else:
                         prefixes.append('general.orderType')
+                        prefixes.append('orderType')
                     
-                    prefixes.append('orderType')
+                    logging.info(f"[validate_order_type] Checking cofinancer {idx} with prefixes: {prefixes}")
                     
                     for prefix in prefixes:
                         # New field structure
