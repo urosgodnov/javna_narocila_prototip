@@ -468,9 +468,16 @@ def render_quick_navigation():
             
             # Show overall progress
             total_steps = len(steps)
-            progress = (current + 1) / total_steps
+            # Ensure progress stays within [0.0, 1.0] range
+            # This can happen when loading a draft with different step configuration
+            if total_steps > 0:
+                progress = min(1.0, max(0.0, (current + 1) / total_steps))
+            else:
+                progress = 0.0
             st.progress(progress)
-            st.markdown(f"**Napredek:** Korak {current+1} od {total_steps}")
+            # Also clamp the displayed step number
+            display_current = min(current + 1, total_steps)
+            st.markdown(f"**Napredek:** Korak {display_current} od {total_steps}")
             
             # Current step indicator with step number
             current_name = step_names[current] if current < len(step_names) else f"Korak {current+1}"
@@ -642,7 +649,11 @@ def render_visual_progress_indicator():
                 )
     
     # Add progress bar below steps
-    progress_percentage = int(((current + 1) / num_steps) * 100)
+    # Ensure progress stays within valid range
+    if num_steps > 0:
+        progress_percentage = min(100, max(0, int(((current + 1) / num_steps) * 100)))
+    else:
+        progress_percentage = 0
     st.progress(progress_percentage / 100)
     st.caption(f"Korak {current + 1} od {num_steps} ({progress_percentage}% dokončano)")
 
@@ -658,7 +669,11 @@ def render_compact_progress_indicator():
     
     # Progress metrics
     completed_count = sum(1 for v in completed.values() if v)
-    progress_percent = int(((current + 1) / total) * 100)
+    # Ensure progress stays within valid range
+    if total > 0:
+        progress_percent = min(100, max(0, int(((current + 1) / total) * 100)))
+    else:
+        progress_percent = 0
     
     # Current step info
     current_name = step_names[current] if current < len(step_names) else f"Korak {current+1}"
@@ -1262,7 +1277,11 @@ def render_main_form():
                 render_progress_indicator(st.session_state.current_step, len(form_steps), step_names)
             else:
                 # Fallback progress indicator when modern form is not available
-                progress = (st.session_state.current_step + 1) / len(form_steps)
+                # Ensure progress stays within [0.0, 1.0] range
+                if len(form_steps) > 0:
+                    progress = min(1.0, max(0.0, (st.session_state.current_step + 1) / len(form_steps)))
+                else:
+                    progress = 0.0
                 st.progress(progress)
                 st.write(f"Korak {st.session_state.current_step + 1} od {len(form_steps)}: {step_names[st.session_state.current_step] if st.session_state.current_step < len(step_names) else 'Korak'}")
         
