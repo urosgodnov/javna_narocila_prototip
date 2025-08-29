@@ -47,11 +47,11 @@ load_dotenv()
 
 # Document type definitions
 DOCUMENT_TYPES = {
-    'pogodbe': '📝 Pogodbe',
-    'razpisi': '📋 Razpisi', 
-    'pravilniki': '📖 Pravilniki',
-    'navodila': '📘 Navodila',
-    'razno': '📂 Razno'
+    'pogodbe': 'Pogodbe',
+    'razpisi': 'Razpisi', 
+    'pravilniki': 'Pravilniki',
+    'navodila': 'Navodila',
+    'razno': 'Razno'
 }
 
 # Form section mappings for prompts
@@ -81,48 +81,52 @@ PROMPT_SECTIONS = {
 def render_ai_manager():
     """Unified AI and Vector Database Management"""
     
+    # Apply unified design system
+    from ui.admin_module_design import apply_design_system
+    apply_design_system()
+    
+    # Import modern components
+    from ui.components.modern_components import (
+        modern_card, error_message, info_banner
+    )
+    
     # Check environment configuration
     if not validate_environment():
-        st.error("❌ AI modul ni konfiguriran. Manjkajo API ključi v .env datoteki.")
-        st.info("Potrebni ključi: OPENAI_API_KEY, QDRANT_API_KEY (opcijsko)")
-        st.markdown("""
-        ### 📝 Navodila za konfiguracijo:
-        1. Ustvarite `.env` datoteko v korenski mapi projekta
-        2. Dodajte naslednje ključe:
-        ```
-        OPENAI_API_KEY=sk-...
-        QDRANT_API_KEY=your-key-here (opcijsko za vektorsko bazo)
-        QDRANT_URL=https://your-instance.qdrant.io
-        ```
-        3. Ponovno naložite aplikacijo
-        """)
+        error_message(
+            title="AI modul ni konfiguriran",
+            message="Manjkajo API ključi v .env datoteki.",
+            details="Potrebni ključi: OPENAI_API_KEY, QDRANT_API_KEY (opcijsko)"
+        )
+        info_banner(
+            message="Za konfiguracijo: 1) Ustvarite .env datoteko 2) Dodajte API ključe 3) Ponovno naložite aplikacijo",
+            dismissible=False
+        )
         return
     
     # Initialize database tables
     init_ai_tables()
     
-    inject_custom_css()
-    
     # Check vector database status
-    vector_db_status = "🟢 Aktivna"
+    vector_db_status = "Aktivna"
     try:
         from services.qdrant_crud_service import QdrantCRUDService
         crud = QdrantCRUDService()
         stats = crud.get_collection_stats()
         vector_info = f"{stats.get('total_vectors', 0)} vektorjev"
     except:
-        vector_db_status = "🟡 Omejena"
+        vector_db_status = "Omejena"
         vector_info = "Samo lokalno shranjevanje"
     
-    st.markdown(f"""
-    <div class="ai-header">
-        <h1>🤖 AI & Document Management</h1>
-        <p>Centralizirano upravljanje dokumentov in AI funkcionalnosti</p>
-        <p style="font-size: 0.9em; opacity: 0.8;">Vektorska baza: {vector_db_status} • {vector_info}</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # Header section
+    st.markdown("### AI & Document Management")
+    st.caption("Centralizirano upravljanje dokumentov in AI funkcionalnosti")
     
-    tabs = st.tabs(["📚 Dokumenti", "🔍 AI Iskanje", "📊 Analitika", "🤖 Sistemski pozivi", "⚙️ Nastavitve"])
+    # Status info
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.info(f"Vektorska baza: **{vector_db_status}** • {vector_info}")
+    
+    tabs = st.tabs(["Dokumenti", "AI Iskanje", "Analitika", "Sistemski pozivi", "Nastavitve"])
     
     with tabs[0]:
         render_document_management()
@@ -304,101 +308,110 @@ def init_ai_tables():
         conn.commit()
 
 def inject_custom_css():
-    """Inject gradient styling to match admin panel"""
+    """Inject modern minimal styling to match admin panel"""
     st.markdown("""
     <style>
         .ai-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 2rem;
-            border-radius: 10px;
-            color: white;
-            margin-bottom: 2rem;
+            background: var(--bg-secondary, #FAFAFA);
+            padding: 24px;
+            border-radius: var(--radius-lg, 8px);
+            border: 1px solid var(--border, #E5E5E5);
+            margin-bottom: 24px;
         }
         
         .ai-header h1 {
             margin: 0;
-            font-size: 2rem;
+            font-size: 20px;
+            font-weight: 600;
+            color: var(--text-primary, #000000);
+            letter-spacing: -0.02em;
         }
         
         .ai-header p {
-            margin: 0.5rem 0 0 0;
-            opacity: 0.9;
+            margin: 8px 0 0 0;
+            color: var(--text-secondary, #666666);
+            font-size: 14px;
         }
         
         .upload-zone {
-            border: 2px dashed rgba(102, 126, 234, 0.3);
-            border-radius: 10px;
-            padding: 40px;
+            border: 2px dashed var(--border, #E5E5E5);
+            border-radius: var(--radius-lg, 8px);
+            padding: 32px;
             text-align: center;
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
-            transition: all 0.3s ease;
+            background: var(--bg-secondary, #FAFAFA);
+            transition: all var(--transition-fast, 150ms ease);
         }
         
         .upload-zone:hover {
-            border-color: rgba(102, 126, 234, 0.5);
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            border-color: var(--border-hover, #CCCCCC);
+            background: var(--bg-tertiary, #F5F5F5);
         }
         
         .doc-card {
-            background: white;
-            border-left: 4px solid #667eea;
-            padding: 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: var(--bg-primary, #FFFFFF);
+            border: 1px solid var(--border, #E5E5E5);
+            padding: 16px;
+            border-radius: var(--radius-md, 6px);
+            margin-bottom: 12px;
+            transition: border-color var(--transition-fast, 150ms ease);
+        }
+        
+        .doc-card:hover {
+            border-color: var(--border-hover, #CCCCCC);
         }
         
         .prompt-card {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
-            border: 1px solid rgba(102, 126, 234, 0.2);
-            padding: 1.5rem;
-            border-radius: 10px;
-            margin-bottom: 1rem;
+            background: var(--bg-secondary, #FAFAFA);
+            border: 1px solid var(--border, #E5E5E5);
+            padding: 20px;
+            border-radius: var(--radius-md, 6px);
+            margin-bottom: 12px;
         }
         
         .status-badge {
             display: inline-block;
-            padding: 0.25rem 0.75rem;
-            border-radius: 15px;
-            font-size: 0.875rem;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm, 4px);
+            font-size: 12px;
             font-weight: 500;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
         }
         
         .status-pending {
-            background: #fef3c7;
-            color: #92400e;
+            background: rgba(245, 158, 11, 0.1);
+            color: #f59e0b;
         }
         
         .status-processing {
-            background: #dbeafe;
-            color: #1e40af;
+            background: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
         }
         
         .status-completed {
-            background: #d1fae5;
-            color: #065f46;
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
         }
         
         .status-failed {
-            background: #fee2e2;
-            color: #991b1b;
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
         }
     </style>
     """, unsafe_allow_html=True)
 
 def render_document_management():
     """Document management interface with type categorization"""
+    from ui.components.modern_components import modern_card, modern_button, status_badge
     
-    st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 2rem;">
-        <h2 style="margin: 0;">📚 Upravljanje dokumentov</h2>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Naložite dokumente za bazo znanja AI sistema</p>
-    </div>
-    """, unsafe_allow_html=True)
+    modern_card(
+        title="Upravljanje dokumentov",
+        content='<p style="color: var(--text-secondary);">Naložite dokumente za bazo znanja AI sistema</p>',
+        key="doc_mgmt_header"
+    )
     
     # Upload section
-    st.markdown("### 📤 Nalaganje dokumentov")
+    st.markdown("### Nalaganje dokumentov")
     
     col1, col2 = st.columns([2, 3])
     
@@ -439,16 +452,16 @@ def render_document_management():
         if uploaded_file:
             # Check file size
             if uploaded_file.size > 10 * 1024 * 1024:  # 10MB
-                st.error("❌ Datoteka je prevelika! Maksimalna velikost je 10MB.")
+                st.error(" Datoteka je prevelika! Maksimalna velikost je 10MB.")
             else:
                 # Display file info
                 st.info(f"""
-                📄 **Datoteka:** {uploaded_file.name}  
-                📊 **Velikost:** {uploaded_file.size / 1024:.1f} KB  
-                🏷️ **Tip:** {DOCUMENT_TYPES[tip_dokumenta]}
+                 **Datoteka:** {uploaded_file.name}  
+                 **Velikost:** {uploaded_file.size / 1024:.1f} KB  
+                 **Tip:** {DOCUMENT_TYPES[tip_dokumenta]}
                 """)
                 
-                if st.button("📤 Naloži dokument", type="primary", use_container_width=True):
+                if st.button(" Naloži dokument", type="primary", use_container_width=True):
                     with st.spinner("Nalagam dokument..."):
                         doc_id = save_document(
                             file=uploaded_file,
@@ -457,15 +470,15 @@ def render_document_management():
                             tags=tags
                         )
                         if doc_id:
-                            st.success(f"✅ Dokument uspešno naložen (ID: {doc_id})")
+                            st.success(f" Dokument uspešno naložen (ID: {doc_id})")
                             st.rerun()
                         else:
-                            st.error("❌ Napaka pri nalaganju dokumenta")
+                            st.error(" Napaka pri nalaganju dokumenta")
     
     st.divider()
     
     # Document list with filtering
-    st.markdown("### 📂 Naloženi dokumenti")
+    st.markdown("###  Naloženi dokumenti")
     
     # Filter controls
     filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 1])
@@ -488,7 +501,7 @@ def render_document_management():
     
     with filter_col3:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🔍 Išči", use_container_width=True):
+        if st.button(" Išči", use_container_width=True):
             st.session_state.search_active = True
     
     # Display filtered documents
@@ -527,7 +540,7 @@ def render_document_management():
                 with col3:
                     # Reprocess button for completed documents
                     if status == 'completed':
-                        if st.button("🔄 Ponovno procesiraj", key=f"reproc_{doc['id']}", use_container_width=True):
+                        if st.button(" Ponovno procesiraj", key=f"reproc_{doc['id']}", use_container_width=True):
                             with st.spinner("Ponovno procesiram..."):
                                 success = reprocess_document(doc['id'], doc.get('file_path'))
                                 if success:
@@ -536,7 +549,7 @@ def render_document_management():
                     
                     # Process button for pending/failed documents
                     elif status in ['pending', 'failed']:
-                        if st.button("⚙️ Procesiraj", key=f"proc_{doc['id']}", use_container_width=True):
+                        if st.button(" Procesiraj", key=f"proc_{doc['id']}", use_container_width=True):
                             with st.spinner("Procesiram dokument..."):
                                 success = reprocess_document(doc['id'], doc.get('file_path'))
                                 if success:
@@ -544,21 +557,22 @@ def render_document_management():
                                     st.rerun()
                     
                     # Delete button
-                    if st.button("🗑️ Izbriši", key=f"del_{doc['id']}", use_container_width=True):
+                    if st.button(" Izbriši", key=f"del_{doc['id']}", use_container_width=True):
                         if delete_document_with_vectors(doc['id'], doc.get('document_id')):
                             st.success("Dokument in vektorji izbrisani")
                             st.rerun()
     else:
-        st.info("🔍 Ni naloženih dokumentov ali ni rezultatov iskanja")
+        st.info(" Ni naloženih dokumentov ali ni rezultatov iskanja")
 
 def render_system_prompts_management():
     """Manage system prompts for form AI assistance"""
     
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 2rem;">
-        <h2 style="margin: 0;">🤖 Sistemski pozivi</h2>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Upravljanje s pozivi za AI asistenta v obrazcih</p>
+    <div style="background: var(--bg-secondary, #FAFAFA); 
+                padding: 20px; border-radius: var(--radius-lg, 8px); 
+                border: 1px solid var(--border, #E5E5E5); margin-bottom: 24px;">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 600; color: var(--text-primary, #000000);">Sistemski pozivi</h2>
+        <p style="margin: 8px 0 0 0; color: var(--text-secondary, #666666); font-size: 14px;">Upravljanje s pozivi za AI asistenta v obrazcih</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -566,7 +580,7 @@ def render_system_prompts_management():
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        st.markdown("### ➕ Dodaj/Uredi poziv")
+        st.markdown("###  Dodaj/Uredi poziv")
         
         # Select form section
         selected_section = st.selectbox(
@@ -590,10 +604,10 @@ def render_system_prompts_management():
         existing_prompt = get_prompt(prompt_key)
         
         if existing_prompt:
-            st.info(f"📝 Urejate obstoječi poziv (v{existing_prompt['version']})")
+            st.info(f" Urejate obstoječi poziv (v{existing_prompt['version']})")
     
     with col2:
-        st.markdown("### 📝 Vsebina poziva")
+        st.markdown("###  Vsebina poziva")
         
         # Prompt description
         prompt_description = st.text_input(
@@ -621,23 +635,23 @@ def render_system_prompts_management():
         )
         
         # Save button
-        if st.button("💾 Shrani poziv", type="primary", use_container_width=True):
+        if st.button(" Shrani poziv", type="primary", use_container_width=True):
             if save_prompt(prompt_key, selected_section, selected_field, prompt_text, prompt_description, is_active):
-                st.success("✅ Poziv uspešno shranjen")
+                st.success(" Poziv uspešno shranjen")
                 st.rerun()
             else:
-                st.error("❌ Napaka pri shranjevanju poziva")
+                st.error(" Napaka pri shranjevanju poziva")
     
     st.divider()
     
     # List existing prompts
-    st.markdown("### 📋 Obstoječi pozivi")
+    st.markdown("###  Obstoječi pozivi")
     
     prompts = load_all_prompts()
     
     if prompts:
         for prompt in prompts:
-            status_text = "🟢 Aktiven" if prompt['is_active'] else "🔴 Neaktiven"
+            status_text = " Aktiven" if prompt['is_active'] else " Neaktiven"
             
             with st.expander(f"{PROMPT_SECTIONS[prompt['form_section']]['title']} - {prompt['field_name']} {status_text}"):
                 col1, col2 = st.columns([3, 1])
@@ -651,26 +665,27 @@ def render_system_prompts_management():
                     st.code(prompt['prompt_text'], language="text")
                 
                 with col2:
-                    if st.button("🗑️ Izbriši", key=f"del_prompt_{prompt['id']}", use_container_width=True):
+                    if st.button(" Izbriši", key=f"del_prompt_{prompt['id']}", use_container_width=True):
                         if delete_prompt(prompt['id']):
                             st.success("Poziv izbrisan")
                             st.rerun()
     else:
-        st.info("🔍 Ni shranjenih pozivov")
+        st.info(" Ni shranjenih pozivov")
 
 def render_ai_search_interface():
     """Unified AI search interface for documents"""
     
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 2rem;">
-        <h2 style="margin: 0;">🔍 AI Iskanje po dokumentih</h2>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Semantično iskanje po vseh naloženih dokumentih</p>
+    <div style="background: var(--bg-secondary, #FAFAFA); 
+                padding: 20px; border-radius: var(--radius-lg, 8px);
+                border: 1px solid var(--border, #E5E5E5); margin-bottom: 24px;">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 600; color: var(--text-primary, #000000);">AI Iskanje po dokumentih</h2>
+        <p style="margin: 8px 0 0 0; color: var(--text-secondary, #666666); font-size: 14px;">Semantično iskanje po vseh naloženih dokumentih</p>
     </div>
     """, unsafe_allow_html=True)
     
     # Preset scenarios
-    st.markdown("### 🎯 Hitri scenariji")
+    st.markdown("###  Hitri scenariji")
     st.markdown("Izberite enega od pogostih scenarijev iskanja:")
     
     col1, col2, col3 = st.columns(3)
@@ -680,19 +695,19 @@ def render_ai_search_interface():
     preset_query = None
     
     with col1:
-        if st.button("📄 **Povzetek dokumenta**\n\nCeloten pregled", use_container_width=True, key="preset_summary", 
+        if st.button(" **Povzetek dokumenta**\n\nCeloten pregled", use_container_width=True, key="preset_summary", 
                      help="Dobi povzetek celotnega dokumenta z glavnimi točkami"):
             preset_query = "Povzemi trenutni dokument - kaj so glavni pogoji, roki, zahteve in merila?"
             trigger_search = True
     
     with col2:
-        if st.button("🏢 **Zahteve ponudnika**\n\nPogoji sodelovanja", use_container_width=True, key="preset_requirements",
+        if st.button(" **Zahteve ponudnika**\n\nPogoji sodelovanja", use_container_width=True, key="preset_requirements",
                      help="Preglej vse zahteve, reference in pogoje za ponudnike"):
             preset_query = "Kakšne so zahteve za ponudnike? Katere reference, certifikati in pogoji so potrebni?"
             trigger_search = True
     
     with col3:
-        if st.button("📅 **Roki in vrednosti**\n\nKljučni datumi", use_container_width=True, key="preset_deadlines",
+        if st.button(" **Roki in vrednosti**\n\nKljučni datumi", use_container_width=True, key="preset_deadlines",
                      help="Najdi vse pomembne roke in finančne vrednosti"):
             preset_query = "Kateri so pomembni roki (oddaja, veljavnost, izvedba)? Kakšna je ocenjena vrednost?"
             trigger_search = True
@@ -729,7 +744,7 @@ def render_ai_search_interface():
     
     with col3:
         st.markdown("<br>", unsafe_allow_html=True)
-        search_btn = st.button("🔍 Išči", type="primary", use_container_width=True)
+        search_btn = st.button(" Išči", type="primary", use_container_width=True)
     
     # Trigger search if preset was selected or search button clicked
     if (trigger_search and preset_query) or (search_btn and search_query):
@@ -739,9 +754,9 @@ def render_ai_search_interface():
     st.divider()
     col_title, col_clear = st.columns([3, 1])
     with col_title:
-        st.markdown("### 📌 Nedavna iskanja")
+        st.markdown("###  Nedavna iskanja")
     with col_clear:
-        if st.button("🗑️ Počisti vse", key="clear_all_queries", help="Izbriši vso zgodovino iskanj"):
+        if st.button(" Počisti vse", key="clear_all_queries", help="Izbriši vso zgodovino iskanj"):
             if delete_all_queries():
                 st.rerun()
     
@@ -767,7 +782,7 @@ def render_ai_search_interface():
                         if st.button("Ponovi", key=f"repeat_{query_id}", use_container_width=True):
                             perform_ai_search(query, "Vsi", 10)
                     with col3:
-                        if st.button("❌", key=f"delete_{query_id}", help="Izbriši to iskanje"):
+                        if st.button("", key=f"delete_{query_id}", help="Izbriši to iskanje"):
                             if delete_single_query(query_text=query):
                                 st.rerun()
             else:
@@ -824,7 +839,7 @@ def perform_ai_search(query: str, doc_type_filter: str, limit: int):
             
             if results:
                 # Always generate AI response (except for raw search)
-                st.info("🤖 Generiram odgovor...")
+                st.info(" Generiram odgovor...")
                 
                 # Generate AI response
                 ai_response = ai_service.generate_response(
@@ -837,35 +852,37 @@ def perform_ai_search(query: str, doc_type_filter: str, limit: int):
                 # Display AI response based on request type
                 if is_summary_request:
                     # For summaries - full width, no chunks shown by default
-                    st.markdown("### 📄 Povzetek dokumenta")
+                    st.markdown("###  Povzetek dokumenta")
                     st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                                padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
-                        {ai_response}
+                    <div style="background: var(--bg-secondary, #FAFAFA); 
+                                padding: 20px; border-radius: var(--radius-md, 6px); 
+                                border: 1px solid var(--border, #E5E5E5); margin: 20px 0;">
+                        <div style="color: var(--text-primary, #000000);">{ai_response}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
                     # Source chunks in expander for summaries
-                    with st.expander("📚 Viri (kosi dokumenta)", expanded=False):
+                    with st.expander(" Viri (kosi dokumenta)", expanded=False):
                         for i, result in enumerate(results[:5], 1):
                             st.markdown(f"**{i}. {result.get('original_filename', 'Neznano')}** (del {result.get('chunk_index', '?')})")
                             st.text(result.get('chunk_text', '')[:200] + "...")
                     
-                    st.success(f"✅ Povzetek ustvarjen iz {min(10, len(results))} delov dokumenta")
+                    st.success(f" Povzetek ustvarjen iz {min(10, len(results))} delov dokumenta")
                 else:
                     # For Q&A - show answer AND relevant chunks
-                    st.markdown("### 💡 Odgovor AI")
+                    st.markdown("###  Odgovor AI")
                     st.markdown(f"""
-                    <div style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%); 
-                                padding: 20px; border-radius: 10px; color: white; margin: 20px 0;">
-                        {ai_response}
+                    <div style="background: rgba(16, 185, 129, 0.05); 
+                                padding: 20px; border-radius: var(--radius-md, 6px); 
+                                border: 1px solid rgba(16, 185, 129, 0.2); margin: 20px 0;">
+                        <div style="color: var(--text-primary, #000000);">{ai_response}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    st.success(f"✅ Odgovor ustvarjen iz {min(10, len(results))} najdenih delov")
+                    st.success(f" Odgovor ustvarjen iz {min(10, len(results))} najdenih delov")
                     
                     # Show relevant chunks where answer was found
-                    st.markdown("### 📚 Relevantni deli dokumenta")
+                    st.markdown("###  Relevantni deli dokumenta")
                     st.info("Tukaj so deli dokumenta, kjer je bil najden odgovor:")
                     
                     # Display top 5 most relevant chunks with evidence
@@ -874,16 +891,16 @@ def perform_ai_search(query: str, doc_type_filter: str, limit: int):
                         
                         # Determine relevance indicator
                         if score > 0.8:
-                            relevance = "🟢 Visoka"
+                            relevance = " Visoka"
                             color = "green"
                         elif score > 0.6:
-                            relevance = "🟡 Srednja"  
+                            relevance = " Srednja"  
                             color = "yellow"
                         else:
-                            relevance = "🔴 Nizka"
+                            relevance = " Nizka"
                             color = "red"
                         
-                        with st.expander(f"📖 Del {result.get('chunk_index', '?')}: {result.get('original_filename', 'Neznano')} - {relevance} ({score:.2f})", expanded=(i==1)):
+                        with st.expander(f" Del {result.get('chunk_index', '?')}: {result.get('original_filename', 'Neznano')} - {relevance} ({score:.2f})", expanded=(i==1)):
                             # Show chunk metadata
                             col1, col2, col3 = st.columns([2, 1, 1])
                             
@@ -908,24 +925,24 @@ def perform_ai_search(query: str, doc_type_filter: str, limit: int):
                                     )
                             
                             st.markdown(
-                                f"<div style='padding: 15px; background: #f8f9fa; border-left: 4px solid {color}; border-radius: 5px; font-size: 14px;'>{highlighted}</div>",
+                                f"<div style='padding: 12px; background: var(--bg-secondary, #FAFAFA); border: 1px solid var(--border, #E5E5E5); border-radius: var(--radius-md, 6px); font-size: 14px;'>{highlighted}</div>",
                                 unsafe_allow_html=True
                             )
             else:
                 st.warning("😕 Ni najdenih rezultatov za to poizvedbo")
                 
     except ImportError:
-        st.error("❌ AI iskanje ni na voljo - manjkajo potrebne knjižnice")
+        st.error(" AI iskanje ni na voljo - manjkajo potrebne knjižnice")
         st.info("Namestite: pip install qdrant-client openai")
     except Exception as e:
-        st.error(f"❌ Napaka pri iskanju: {str(e)}")
+        st.error(f" Napaka pri iskanju: {str(e)}")
 
 def render_query_interface():
     """Render the query interface with chat UI"""
     
     st.markdown("""
     <div class="ai-header">
-        <h2>🔍 Iskanje po bazi znanja</h2>
+        <h2> Iskanje po bazi znanja</h2>
         <p>Postavite vprašanje v naravnem jeziku</p>
     </div>
     """, unsafe_allow_html=True)
@@ -948,7 +965,7 @@ def render_query_interface():
     
     with col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        search_button = st.button("🔍 Iskanje", key="search_btn", use_container_width=True)
+        search_button = st.button(" Iskanje", key="search_btn", use_container_width=True)
     
     # Recent queries (suggestions)
     if st.session_state.recent_queries:
@@ -996,7 +1013,7 @@ def render_query_interface():
         ">
         """, unsafe_allow_html=True)
         
-        st.markdown(f"### 💬 Odgovor")
+        st.markdown(f"###  Odgovor")
         st.write(latest_result['response'])
         
         # Metrics
@@ -1010,7 +1027,7 @@ def render_query_interface():
         
         # Sources
         if latest_result['sources']:
-            with st.expander("📚 Viri"):
+            with st.expander(" Viri"):
                 for doc_id, source in latest_result['sources'].items():
                     st.write(f"**{source['name']}**")
                     st.write(f"*Tip:* {DOCUMENT_TYPES.get(source.get('tip_dokumenta', 'unknown'), 'Neznano')}")
@@ -1024,12 +1041,12 @@ def render_query_interface():
         query_id = latest_result.get('query_id')
         
         with col1:
-            if st.button("📋 Kopiraj", key="copy_response"):
+            if st.button(" Kopiraj", key="copy_response"):
                 # In a real implementation, this would copy to clipboard
-                st.toast("Odgovor kopiran!", icon="✅")
+                st.toast("Odgovor kopiran!", icon="")
         
         with col2:
-            if st.button("⭐ Všeč mi je", key="like_response"):
+            if st.button(" Všeč mi je", key="like_response"):
                 if query_id:
                     update_query_feedback(query_id, 'positive')
                     st.success("Hvala za povratno informacijo!")
@@ -1041,7 +1058,7 @@ def render_query_interface():
                     st.info("Hvala, bomo izboljšali!")
         
         with col4:
-            if st.button("🔖 Shrani", key="bookmark_response"):
+            if st.button(" Shrani", key="bookmark_response"):
                 if query_id:
                     bookmark_query(query_id)
                     st.success("Odgovor shranjen!")
@@ -1058,7 +1075,7 @@ def render_query_interface():
             # Add clear all button at the top of the expander
             col1, col2 = st.columns([3, 1])
             with col2:
-                if st.button("🗑️ Počisti vse", key="clear_history_expander"):
+                if st.button(" Počisti vse", key="clear_history_expander"):
                     if delete_all_queries():
                         st.rerun()
             
@@ -1069,16 +1086,16 @@ def render_query_interface():
                 with col1:
                     query_text = item['query'][:80] + '...' if len(item['query']) > 80 else item['query']
                     st.markdown(f"**{query_text}**")
-                    st.caption(f"⏱️ {item['timestamp'].strftime('%H:%M:%S')} | "
+                    st.caption(f"⏱ {item['timestamp'].strftime('%H:%M:%S')} | "
                              f"💯 {item['confidence']:.0%} | "
-                             f"⚡ {item['response_time']:.2f}s")
+                             f" {item['response_time']:.2f}s")
                 
                 with col2:
                     if st.button("Ponovi", key=f"repeat_hist_{idx}"):
                         perform_ai_search(item['query'], "Vsi", 10)
                 
                 with col3:
-                    if st.button("❌", key=f"delete_hist_{idx}"):
+                    if st.button("", key=f"delete_hist_{idx}"):
                         if delete_single_query(query_text=item['query']):
                             st.rerun()
                 
@@ -1099,7 +1116,7 @@ def render_query_interface():
                     df = pd.DataFrame(history_data)
                     csv = df.to_csv(index=False)
                     st.download_button(
-                        label="📥 Izvozi zgodovino",
+                        label=" Izvozi zgodovino",
                         data=csv,
                         file_name=f"query_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                         mime="text/csv",
@@ -1192,11 +1209,11 @@ def delete_all_queries() -> bool:
             st.warning("Ali ste prepričani, da želite izbrisati vso zgodovino iskanj?")
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✅ Da, izbriši vse", key="confirm_yes"):
+                if st.button(" Da, izbriši vse", key="confirm_yes"):
                     st.session_state.confirm_delete_all = True
                     st.rerun()
             with col2:
-                if st.button("❌ Prekliči", key="confirm_no"):
+                if st.button(" Prekliči", key="confirm_no"):
                     return False
             return False
         
@@ -1257,37 +1274,38 @@ Period: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}
 def render_settings_panel():
     """Settings panel for configuration"""
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                padding: 1.5rem; border-radius: 10px; color: white; margin-bottom: 2rem;">
-        <h2 style="margin: 0;">⚙️ Nastavitve</h2>
-        <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">Konfiguracija AI sistema</p>
+    <div style="background: var(--bg-secondary, #FAFAFA); 
+                padding: 20px; border-radius: var(--radius-lg, 8px);
+                border: 1px solid var(--border, #E5E5E5); margin-bottom: 24px;">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 600; color: var(--text-primary, #000000);">Nastavitve</h2>
+        <p style="margin: 8px 0 0 0; color: var(--text-secondary, #666666); font-size: 14px;">Konfiguracija AI sistema</p>
     </div>
     """, unsafe_allow_html=True)
     
     # API Status
-    st.markdown("### 🔌 Status povezav")
+    st.markdown("###  Status povezav")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        openai_status = "🟢 Povezan" if os.getenv('OPENAI_API_KEY') else "🔴 Ni povezan"
+        openai_status = " Povezan" if os.getenv('OPENAI_API_KEY') else " Ni povezan"
         st.metric("OpenAI API", openai_status)
     
     with col2:
-        qdrant_status = "🟢 Povezan" if os.getenv('QDRANT_API_KEY') else "🔴 Ni povezan"
+        qdrant_status = " Povezan" if os.getenv('QDRANT_API_KEY') else " Ni povezan"
         st.metric("Qdrant API", qdrant_status)
     
     with col3:
-        processing_status = "🟢 Aktivno" if AI_PROCESSING_AVAILABLE else "🔴 Neaktivno"
+        processing_status = " Aktivno" if AI_PROCESSING_AVAILABLE else " Neaktivno"
         st.metric("AI Procesiranje", processing_status)
     
     st.divider()
     
     # Processing settings
-    st.markdown("### 🔧 Nastavitve procesiranja")
+    st.markdown("###  Nastavitve procesiranja")
     
     # Model selection
-    st.markdown("#### 🤖 OpenAI Model")
+    st.markdown("####  OpenAI Model")
     
     # Available OpenAI models with descriptions
     OPENAI_MODELS = {
@@ -1369,7 +1387,7 @@ def render_settings_panel():
     st.divider()
     
     # Other settings
-    st.markdown("#### 📝 Parametri procesiranja")
+    st.markdown("####  Parametri procesiranja")
     
     col1, col2 = st.columns(2)
     
@@ -1412,7 +1430,7 @@ def render_settings_panel():
         )
     
     # Save settings button
-    if st.button("💾 Shrani nastavitve", type="primary"):
+    if st.button(" Shrani nastavitve", type="primary"):
         # Update environment variables (in memory)
         os.environ['OPENAI_MODEL'] = selected_model
         os.environ['CHUNK_SIZE'] = str(chunk_size)
@@ -1464,20 +1482,20 @@ def render_settings_panel():
             with open(env_path, 'w') as f:
                 f.writelines(new_content)
             
-            st.success(f"✅ Nastavitve shranjene! Model: {selected_model}")
+            st.success(f" Nastavitve shranjene! Model: {selected_model}")
             
         except Exception as e:
-            st.error(f"❌ Napaka pri shranjevanju: {str(e)}")
-            st.info("💡 Nastavitve so shranjene v pomnilniku in se bodo uporabile do ponovnega zagona")
+            st.error(f" Napaka pri shranjevanju: {str(e)}")
+            st.info(" Nastavitve so shranjene v pomnilniku in se bodo uporabile do ponovnega zagona")
     
-    st.info("ℹ️ Nastavitve se bodo uporabile pri naslednjem procesiranju")
+    st.info(" Nastavitve se bodo uporabile pri naslednjem procesiranju")
 
 def render_analytics_dashboard():
     """Render analytics dashboard with charts and metrics"""
     
     st.markdown("""
     <div class="ai-header">
-        <h2>📊 Analitika AI sistema</h2>
+        <h2> Analitika AI sistema</h2>
         <p>Pregled uporabe in učinkovitosti</p>
     </div>
     """, unsafe_allow_html=True)
@@ -1501,7 +1519,7 @@ def render_analytics_dashboard():
     analytics = load_analytics_data(start_date, end_date)
     
     # Overview metrics
-    st.markdown("### 📈 Pregled")
+    st.markdown("###  Pregled")
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -1540,7 +1558,7 @@ def render_analytics_dashboard():
         st.warning("Plotly ni nameščen. Grafi niso na voljo.")
         return
         
-    tab1, tab2, tab3 = st.tabs(["🔍 Poizvedbe", "🤖 Prompti", "📊 Učinkovitost"])
+    tab1, tab2, tab3 = st.tabs([" Poizvedbe", " Prompti", " Učinkovitost"])
     
     with tab1:
         # Query volume over time
@@ -1571,10 +1589,10 @@ def render_analytics_dashboard():
             st.info("Ni podatkov o poizvedbah")
         
         # Bookmarked queries
-        st.markdown("#### ⭐ Shranjene poizvedbe")
+        st.markdown("####  Shranjene poizvedbe")
         if not analytics['bookmarked_queries'].empty:
             for _, query in analytics['bookmarked_queries'].iterrows():
-                with st.expander(f"📌 {query['query_text'][:80]}..."):
+                with st.expander(f" {query['query_text'][:80]}..."):
                     st.write(f"**Odgovor:** {query['response_text']}")
                     st.write(f"**Zanesljivost:** {query['confidence_score']:.0%}")
                     st.write(f"**Datum:** {query['created_at']}")
@@ -1594,7 +1612,7 @@ def render_analytics_dashboard():
             st.plotly_chart(fig, use_container_width=True)
         
         # Prompt performance
-        st.markdown("#### ⚡ Učinkovitost promptov")
+        st.markdown("####  Učinkovitost promptov")
         if not analytics['prompt_performance'].empty:
             st.dataframe(
                 analytics['prompt_performance'],
@@ -1949,24 +1967,24 @@ def save_document(file, tip_dokumenta: str, description: str = None, tags: str =
                             ))
                             conn.commit()
                         
-                        st.success(f"✅ Document processed: {result.get('chunks_created', 0)} chunks, {result.get('vectors_created', 0)} vectors created")
+                        st.success(f" Document processed: {result.get('chunks_created', 0)} chunks, {result.get('vectors_created', 0)} vectors created")
                     else:
                         error_msg = result.get('error', 'Unknown error')
                         if 'image' in error_msg.lower() or 'ocr' in error_msg.lower():
-                            st.warning("⚠️ Document saved but appears to be scanned/image PDF. OCR processing not available yet.")
-                            st.info("💡 The document is stored and can be manually reviewed.")
+                            st.warning(" Document saved but appears to be scanned/image PDF. OCR processing not available yet.")
+                            st.info(" The document is stored and can be manually reviewed.")
                         else:
-                            st.warning(f"⚠️ Document saved but vector processing incomplete: {error_msg}")
+                            st.warning(f" Document saved but vector processing incomplete: {error_msg}")
                         
             except ImportError:
-                st.info("ℹ️ Vector processing not available - document saved for regular use")
+                st.info(" Vector processing not available - document saved for regular use")
             except Exception as e:
                 error_str = str(e)
                 if 'pdf' in error_str.lower() and 'image' in error_str.lower():
-                    st.warning("⚠️ Document saved. This appears to be a scanned PDF that requires OCR.")
-                    st.info("💡 The document is stored for manual review. Text extraction from images will be added in future updates.")
+                    st.warning(" Document saved. This appears to be a scanned PDF that requires OCR.")
+                    st.info(" The document is stored for manual review. Text extraction from images will be added in future updates.")
                 else:
-                    st.warning(f"⚠️ Document saved but vector processing failed: {error_str}")
+                    st.warning(f" Document saved but vector processing failed: {error_str}")
                     
                 # Update status to indicate processing failed but document is saved
                 with sqlite3.connect(database.DATABASE_FILE) as conn:

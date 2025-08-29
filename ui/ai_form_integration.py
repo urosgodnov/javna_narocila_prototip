@@ -135,10 +135,10 @@ def render_ai_field(
             
             # Story 28.5: Show enhanced AI indicator  
             if AI_ENHANCED and context and context.get('form_id'):
-                button_label = "🤖📄 AI"
+                button_label = " AI"
                 button_help = "Generiraj predlog z AI (z dokumenti)"
             else:
-                button_label = "🤖 AI"
+                button_label = " AI"
                 button_help = "Generiraj predlog z AI"
             
             if st.button(button_label, key=button_key, help=button_help):
@@ -156,11 +156,11 @@ def render_ai_field(
                         
                         # Update session state with suggestion
                         st.session_state[field_key] = suggestion
-                        st.success("✅ AI predlog generiran!")
+                        st.success(" AI predlog generiran!")
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"❌ Napaka pri generiranju: {str(e)}")
+                        st.error(f" Napaka pri generiranju: {str(e)}")
     
     return value
 
@@ -226,10 +226,10 @@ def render_ai_text_input(
             
             # Story 28.5: Show enhanced AI indicator  
             if AI_ENHANCED and context and context.get('form_id'):
-                button_label = "🤖📄 AI"
+                button_label = " AI"
                 button_help = "Generiraj predlog z AI (z dokumenti)"
             else:
-                button_label = "🤖 AI"
+                button_label = " AI"
                 button_help = "Generiraj predlog z AI"
             
             if st.button(button_label, key=button_key, help=button_help):
@@ -247,11 +247,11 @@ def render_ai_text_input(
                         
                         # Update session state with suggestion
                         st.session_state[field_key] = suggestion
-                        st.success("✅ AI predlog generiran!")
+                        st.success(" AI predlog generiran!")
                         st.rerun()
                         
                     except Exception as e:
-                        st.error(f"❌ Napaka pri generiranju: {str(e)}")
+                        st.error(f" Napaka pri generiranju: {str(e)}")
     
     return value
 
@@ -272,7 +272,7 @@ def get_ai_status_badge() -> str:
             font-weight: 500;
             display: inline-block;
         ">
-            🤖 AI Aktiviran
+             AI Aktiviran
         </span>
         """
     else:
@@ -286,7 +286,7 @@ def get_ai_status_badge() -> str:
             font-weight: 500;
             display: inline-block;
         ">
-            🤖 AI Neaktiven
+             AI Neaktiven
         </span>
         """
 

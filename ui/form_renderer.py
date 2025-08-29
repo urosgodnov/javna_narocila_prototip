@@ -138,9 +138,9 @@ def render_competition_criteria_info(parent_key="contractInfo", lot_context=None
         
         if selected_criteria:
             criteria_text = ", ".join(selected_criteria)
-            st.info(f"ℹ️ **Pri odpiranju konkurence bodo uporabljena naslednja merila:**\n{criteria_text}")
+            st.info(f"ℹ **Pri odpiranju konkurence bodo uporabljena naslednja merila:**\n{criteria_text}")
         else:
-            st.warning("⚠️ Niste izbrali nobenih meril. Pri odpiranju konkurence morate imeti definirana merila.")
+            st.warning(" Niste izbrali nobenih meril. Pri odpiranju konkurence morate imeti definirana merila.")
 
 
 def display_criteria_ratios_total(parent_key="", lot_context=None):
@@ -198,7 +198,7 @@ def display_criteria_ratios_total(parent_key="", lot_context=None):
     
     # Display total if greater than 0
     if total > 0:
-        st.info(f"📊 **Skupaj točk razmerij:** {total}")
+        st.info(f" **Skupaj točk razmerij:** {total}")
     
     return total
 
@@ -448,7 +448,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
         real_time_validator = RealTimeValidator(validation_manager)
     # Debug: Show what we're rendering when contractInfo is involved
     if parent_key == '' and 'contractInfo' in schema_properties:
-        with st.expander("🔍 Debug: render_form input", expanded=False):
+        with st.expander(" Debug: render_form input", expanded=False):
             st.write(f"**Parent key:** '{parent_key}'")
             st.write(f"**Schema properties keys:** {list(schema_properties.keys())}")
             if 'contractInfo' in schema_properties:
@@ -519,15 +519,15 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 # Keep helpful expandable info for complex sections
                 if help_text:
                     if "Pravna podlaga" in label:
-                        with st.expander("ℹ️ Prikaži pravne podlage in predpise", expanded=False):
+                        with st.expander("ℹ Prikaži pravne podlage in predpise", expanded=False):
                             st.text(help_text)
                     elif "Tehnične zahteve" in label or "specifikacije" in label:
-                        with st.expander("ℹ️ Kaj so tehnične specifikacije?", expanded=False):
+                        with st.expander("ℹ Kaj so tehnične specifikacije?", expanded=False):
                             st.text(help_text)
                     elif "Opozorilo" in label:
                         st.warning(help_text)
                         return  # Don't render form fields for warning objects
-                    elif "Informacija" in label and label.startswith("ℹ️"):
+                    elif "Informacija" in label and label.startswith("ℹ"):
                         # Handle information tooltip objects
                         st.info(help_text)
                         # Continue processing other fields in this section
@@ -679,7 +679,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                             
                             st.markdown(f"**{display_name}**")
                         with col_remove:
-                            if st.button("❌", key=f"widget_remove_{session_key}_{i}", help=f"Odstrani"):
+                            if st.button("", key=f"widget_remove_{session_key}_{i}", help=f"Odstrani"):
                                 # Remove the item and ensure state is preserved
                                 st.session_state[session_key].pop(i)
                                 # Mark that we've made changes
@@ -735,7 +735,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     with col_remove:
                         # Add some vertical spacing to align with input field
                         st.write("")
-                        if st.button("❌", key=f"widget_remove_{session_key}_{i}", help="Odstrani to pravno podlago"):
+                        if st.button("", key=f"widget_remove_{session_key}_{i}", help="Odstrani to pravno podlago"):
                             st.session_state[session_key].pop(i)
                             st.rerun()
 
@@ -906,7 +906,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     available_options = get_selected_criteria_labels(parent_key, lot_context)
                     
                     if not available_options:
-                        st.info("ℹ️ Najprej izberite merila v točki A, da boste lahko določili merilo za prednost.")
+                        st.info("ℹ Najprej izberite merila v točki A, da boste lahko določili merilo za prednost.")
                         return
                 else:
                     # Handle dynamic filtering for mixed order component types
@@ -940,7 +940,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     
                     # Show info if no options are available (all types selected)
                     if not available_options:
-                        st.info("ℹ️ Vse vrste naročil (blago, storitve, gradnje) so že izbrane v drugih postavkah.")
+                        st.info("ℹ Vse vrste naročil (blago, storitve, gradnje) so že izbrane v drugih postavkah.")
                         return  # Skip rendering the selectbox
                 
                 # Enhanced selectbox with proper placeholder and filtered options
@@ -1033,7 +1033,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     if user_actively_selected and not st.session_state.get(user_clicked_key, False):
                         st.session_state[session_key] = "odprti postopek"
                         st.session_state[user_clicked_key] = True  # Mark that user interaction occurred
-                        st.info("ℹ️ Ker ste izbrali 'vseeno', smo avtomatsko nastavili 'odprti postopek', ki je najčešji in priporočeni postopek za večino javnih naročil.")
+                        st.info("ℹ Ker ste izbrali 'vseeno', smo avtomatsko nastavili 'odprti postopek', ki je najčešji in priporočeni postopek za večino javnih naročil.")
                         st.rerun()
                     
                     # Store current value for next comparison and clear navigation flag
@@ -1127,7 +1127,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 if existing_doc:
                     col1, col2 = st.columns([3, 1])
                     with col1:
-                        st.info(f"📄 Current file: {existing_doc['original_name']} ({existing_doc['file_size'] / 1024:.1f} KB)")
+                        st.info(f" Current file: {existing_doc['original_name']} ({existing_doc['file_size'] / 1024:.1f} KB)")
                     with col2:
                         if st.button("Remove", key=f"remove_{session_key}"):
                             # Mark for removal in session state
@@ -1166,7 +1166,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     }
                     
                     # Show upload feedback
-                    st.success(f"✅ {uploaded_file.name} ready to save ({uploaded_file.size / 1024:.1f} KB)")
+                    st.success(f" {uploaded_file.name} ready to save ({uploaded_file.size / 1024:.1f} KB)")
             elif prop_details.get("format") == "date":
                 # Initialize session state if it doesn't exist
                 if session_key not in st.session_state:
@@ -1262,7 +1262,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                             if numbers:
                                 years = int(numbers[0])
                                 if years > 4:
-                                    st.error("⚠️ Okvirni sporazum ne sme presegati 4 let!")
+                                    st.error(" Okvirni sporazum ne sme presegati 4 let!")
                         elif "mesec" in text_value.lower():
                             # Extract number before "mesec"
                             import re
@@ -1270,7 +1270,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                             if numbers:
                                 months = int(numbers[0])
                                 if months > 48:
-                                    st.error("⚠️ Okvirni sporazum ne sme presegati 4 let (48 mesecev)!")
+                                    st.error(" Okvirni sporazum ne sme presegati 4 let (48 mesecev)!")
                     except:
                         pass  # If parsing fails, don't show error
 
@@ -1432,7 +1432,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 # Render checkbox without help parameter
                 checkbox_value = st.checkbox(display_label, value=st.session_state[session_key], key=widget_key)
                 # Display help text as info box below checkbox for consistency
-                with st.expander("ℹ️ Kaj pomeni označitev?", expanded=False):
+                with st.expander("ℹ Kaj pomeni označitev?", expanded=False):
                     st.info(help_text)
             else:
                 # Regular checkbox with tooltip help for simple descriptions
@@ -1445,9 +1445,9 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
             # Special handling for wantsLogo to provide user feedback
             if prop_name == "wantsLogo" and checkbox_value != raw_default:
                 if checkbox_value:
-                    st.success("✅ Polje za nalaganje logotipov je sedaj na voljo spodaj.")
+                    st.success(" Polje za nalaganje logotipov je sedaj na voljo spodaj.")
                 else:
-                    st.info("ℹ️ Polje za nalaganje logotipov je skrito, ker niste izbrali te možnosti.")
+                    st.info("ℹ Polje za nalaganje logotipov je skrito, ker niste izbrali te možnosti.")
             
             # Removed help text expanders for criteria per Story 23.2 requirements
 
@@ -1467,7 +1467,7 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
     
     if not should_validate(current_step):
         # Show subtle indicator that validation is off
-        with st.expander("ℹ️ Validacija meril izklopljena", expanded=False):
+        with st.expander("ℹ Validacija meril izklopljena", expanded=False):
             st.caption("Validacija meril je trenutno izklopljena za ta korak")
         return
     
@@ -1522,7 +1522,7 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
         st.markdown("---")
         
         # Educational info box
-        with st.expander("ℹ️ **Zakaj so potrebna dodatna merila?**", expanded=False):
+        with st.expander("ℹ **Zakaj so potrebna dodatna merila?**", expanded=False):
             st.markdown("""
             **Pravna podlaga:** Zakon o javnem naročanju (ZJN-3) določa, da pri nekaterih 
             vrstah storitev cena ne sme biti edino merilo za izbor. To velja predvsem za:
@@ -1540,7 +1540,7 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
         suggestions = get_suggested_criteria_for_cpv(cpv_codes)
         
         if suggestions['recommended']:
-            st.info(f"💡 **Priporočilo:** {suggestions['explanation']}")
+            st.info(f" **Priporočilo:** {suggestions['explanation']}")
             
             # Auto-selection option
             col1, col2 = st.columns([3, 1])
@@ -1559,12 +1559,12 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
                             st.markdown(f"- {criteria_names[criteria]}")
             
             with col2:
-                if st.button("✨ Samodejno izberi", key=f"{parent_key}_auto_select", type="primary"):
+                if st.button(" Samodejno izberi", key=f"{parent_key}_auto_select", type="primary"):
                     # Auto-select suggested criteria
                     for criteria in suggestions['recommended']:
                         key = f"{criteria_prefix}.{criteria}"
                         st.session_state[key] = True
-                    st.success("✅ Priporočena merila so bila izbrana!")
+                    st.success(" Priporočena merila so bila izbrana!")
                     st.rerun()
     
     # Display validation messages - now using centralized validation results
@@ -1576,7 +1576,7 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
     
     # Display warnings even if validation is valid
     for warning in warnings:
-        st.warning(f"ℹ️ {warning}")
+        st.warning(f"ℹ {warning}")
     
     # Add override option for advanced users if there are errors
     if not is_valid and errors:
@@ -1585,7 +1585,7 @@ def render_criteria_validation(parent_key: str, lot_context: dict = None):
             override_key = f"{validation_key}_override"
             if st.checkbox("Prezri opozorilo", key=override_key, help="Nadaljuj na lastno odgovornost"):
                 st.session_state[validation_key] = True
-                st.caption("⚠️ Nadaljevanje na lastno odgovornost")
+                st.caption(" Nadaljevanje na lastno odgovornost")
     
     # Story 21.3: Validation summary
     render_validation_summary(cpv_codes, restricted_cpv, lot_context)
@@ -1599,7 +1599,7 @@ def render_validation_summary(cpv_codes: List, restricted_cpv: Dict, lot_context
     if cpv_codes and restricted_cpv:
         with st.container():
             st.markdown("---")
-            st.markdown("📊 **Povzetek pravil za izbrane CPV kode:**")
+            st.markdown(" **Povzetek pravil za izbrane CPV kode:**")
             
             summary = get_validation_summary(cpv_codes)
             
@@ -1612,10 +1612,10 @@ def render_validation_summary(cpv_codes: List, restricted_cpv: Dict, lot_context
                 is_valid = st.session_state.get(validation_key, True)
                 
                 if is_valid:
-                    st.success("✅ Vaša izbira meril je ustrezna")
+                    st.success(" Vaša izbira meril je ustrezna")
                 else:
                     override_key = f"{validation_key}_override"
                     if st.session_state.get(override_key, False):
-                        st.warning("⚠️ Opozorilo prezrto - nadaljevanje na lastno odgovornost")
+                        st.warning(" Opozorilo prezrto - nadaljevanje na lastno odgovornost")
                     else:
-                        st.error("❌ Izberite dodatna merila za nadaljevanje")
+                        st.error(" Izberite dodatna merila za nadaljevanje")

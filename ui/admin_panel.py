@@ -18,360 +18,84 @@ from utils.cpv_manager import (
     get_all_cpv_codes, get_cpv_by_id, create_cpv_code, 
     update_cpv_code, delete_cpv_code, get_cpv_count
 )
+from ui.admin_module_design import apply_design_system
 
 def render_admin_header():
     """Render the admin header with status and logout option."""
-    # Add modern styling similar to input form
-    st.markdown("""
-    <style>
-    /* CSS Variables for consistent theming */
-    :root {
-        --primary-500: #007bff;
-        --primary-600: #0056b3;
-        --success-500: #28a745;
-        --success-600: #218838;
-        --danger-500: #dc3545;
-        --danger-600: #c82333;
-        --warning-500: #ffc107;
-        --warning-600: #e0a800;
-        --info: #17a2b8;
-        --gray-300: #dee2e6;
-        --gray-50: #f8f9fa;
-        --primary-50: #e7f1ff;
-        --radius-sm: 4px;
-        --radius-lg: 8px;
-    }
+    # Apply unified design system
+    apply_design_system()
     
-    /* Modern Button Styles with Gradients */
-    .btn-primary {
-        background: linear-gradient(135deg, #28a745, #218838) !important;
-        border: none !important;
-        color: white !important;
-    }
-    
-    .btn-primary:hover {
-        background: linear-gradient(135deg, #218838, #1e7e34) !important;
-        box-shadow: 0 4px 8px rgba(40,167,69,0.3) !important;
-    }
-    
-    .btn-secondary {
-        background: linear-gradient(135deg, #6c757d, #5a6268) !important;
-        border: none !important;
-        color: white !important;
-    }
-    
-    .btn-secondary:hover {
-        background: linear-gradient(135deg, #5a6268, #495057) !important;
-        box-shadow: 0 4px 8px rgba(108,117,125,0.3) !important;
-    }
-    
-    .btn-danger {
-        background: linear-gradient(135deg, #dc3545, #c82333) !important;
-        border: none !important;
-        color: white !important;
-    }
-    
-    .btn-danger:hover {
-        background: linear-gradient(135deg, #c82333, #a71d2a) !important;
-        box-shadow: 0 4px 8px rgba(220,53,69,0.3) !important;
-    }
-    
-    .btn-info {
-        background: linear-gradient(135deg, #17a2b8, #20c997) !important;
-        border: none !important;
-        color: white !important;
-    }
-    
-    .btn-info:hover {
-        background: linear-gradient(135deg, #138496, #17a085) !important;
-        box-shadow: 0 4px 8px rgba(23,162,184,0.3) !important;
-    }
-    
-    .btn-warning {
-        background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
-        border: none !important;
-        color: #1e293b !important;
-    }
-    
-    .btn-warning:hover {
-        background: linear-gradient(135deg, #f59e0b, #ea580c) !important;
-        box-shadow: 0 4px 8px rgba(245,158,11,0.3) !important;
-    }
-    
-    /* Form Fields - Modern Style */
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea,
-    .stNumberInput > div > div > input {
-        border: 1px solid var(--gray-300) !important;
-        border-radius: var(--radius-sm) !important;
-        padding: 0.5rem 0.75rem !important;
-        font-size: 0.875rem !important;
-        transition: all 0.15s ease !important;
-        background: white !important;
-    }
-    
-    .stTextInput > div > div > input:focus,
-    .stTextArea > div > div > textarea:focus,
-    .stNumberInput > div > div > input:focus {
-        border-color: var(--info) !important;
-        box-shadow: 0 0 0 2px rgba(0,123,255,0.1) !important;
-        outline: none !important;
-    }
-    
-    /* Select boxes - Modern Style */
-    .stSelectbox > div > div {
-        border: 1px solid var(--gray-300) !important;
-        border-radius: var(--radius-sm) !important;
-        transition: all 0.15s ease !important;
-        font-size: 0.875rem !important;
-    }
-    
-    .stSelectbox > div > div:focus-within {
-        border-color: var(--info) !important;
-        box-shadow: 0 0 0 2px rgba(0,123,255,0.1) !important;
-    }
-    
-    /* File uploader - Modern Style */
-    .stFileUploader > div > div {
-        border: 2px dashed var(--gray-300) !important;
-        border-radius: var(--radius-lg) !important;
-        padding: 2rem !important;
-        background: var(--gray-50) !important;
-        transition: all 0.2s ease !important;
-    }
-    
-    .stFileUploader > div > div:hover {
-        border-color: var(--primary-500) !important;
-        background: var(--primary-50) !important;
-    }
-    
-    /* Tables and containers */
-    .stContainer {
-        background: white;
-        border-radius: var(--radius-lg);
-        padding: 1rem;
-    }
-    </style>
-    
-    <script>
-    // Dynamic button styling based on text content - similar to input form
-    function styleAdminButtons() {
-        const buttons = document.querySelectorAll('button');
-        buttons.forEach(button => {
-            const text = button.innerText.toLowerCase();
-            
-            // Apply styles based on button text
-            if (text.includes('odjava') || text.includes('logout')) {
-                button.classList.add('btn-danger');
-                button.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
-                button.style.border = 'none';
-                button.style.color = 'white';
-            } else if (text.includes('prijava') || text.includes('login')) {
-                button.classList.add('btn-primary');
-                button.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
-                button.style.border = 'none';
-                button.style.color = 'white';
-            } else if (text.includes('shrani') || text.includes('save')) {
-                button.classList.add('btn-success');
-                button.style.background = 'linear-gradient(135deg, #28a745, #218838)';
-                button.style.border = 'none';
-                button.style.color = 'white';
-            } else if (text.includes('izbriši') || text.includes('delete') || text.includes('počisti')) {
-                button.classList.add('btn-danger');
-                button.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-                button.style.border = 'none';
-                button.style.color = 'white';
-            } else if (text.includes('prekliči') || text.includes('cancel')) {
-                button.classList.add('btn-secondary');
-                button.style.background = 'linear-gradient(135deg, #6c757d, #5a6268)';
-                button.style.border = 'none';
-                button.style.color = 'white';
-            } else if (text.includes('uredi') || text.includes('edit')) {
-                button.classList.add('btn-warning');
-                button.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
-                button.style.border = 'none';
-                button.style.color = '#1e293b';
-            } else if (text.includes('varnostno') || text.includes('backup')) {
-                button.classList.add('btn-info');
-                button.style.background = 'linear-gradient(135deg, #17a2b8, #20c997)';
-                button.style.border = 'none';
-                button.style.color = 'white';
-            } else if (text.includes('dodaj') || text.includes('add') || text.includes('novo')) {
-                button.classList.add('btn-success');
-                button.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-                button.style.border = 'none';
-                button.style.color = 'white';
-            }
-            
-            // Add hover effects
-            button.onmouseover = function() {
-                this.style.transform = 'translateY(-1px)';
-                this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-            };
-            button.onmouseout = function() {
-                this.style.transform = '';
-                this.style.boxShadow = '';
-            };
-        });
-    }
-    
-    // Run periodically and observe DOM changes
-    setInterval(styleAdminButtons, 100);
-    const observer = new MutationObserver(styleAdminButtons);
-    observer.observe(document.body, { childList: true, subtree: true });
-    </script>
-    """, unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([3, 1])
+    # Clean, modern header
+    col1, col2 = st.columns([4, 1])
     with col1:
-        st.header("🔧 Administracija predlog")
+        st.markdown("""
+        <div class="page-header">
+            <h1>Administracija</h1>
+            <p>Upravljanje sistema javnih naročil</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
     with col2:
-        if st.button("🚪 Odjava", type="secondary"):
+        st.markdown("<div style='margin-top: 1.5rem;'></div>", unsafe_allow_html=True)
+        if st.button("Odjava", type="secondary", use_container_width=True):
             st.session_state["logged_in"] = False
             st.rerun()
 
 
 def render_login_form():
-    """Render the admin login form with same styling as main login."""
-    # Apply the same minimalistic styling as main login form
+    """Render the admin login form with unified design system."""
+    # Apply unified design system
+    apply_design_system()
+    
+    # Additional login-specific styling that complements the design system
     st.markdown("""
     <style>
-    /* Narrow Minimalistic Form - Same as main login */
-    h3 {
+    /* Login Form Container */
+    .login-container {
+        max-width: 400px;
+        margin: 0 auto;
+        padding: var(--spacing-2xl);
+    }
+    
+    .login-header {
         text-align: center;
-        color: #000;
-        font-weight: 300;
-        font-size: 1.4rem;
-        margin-bottom: 0.25rem;
-        letter-spacing: 3px;
+        margin-bottom: var(--spacing-2xl);
     }
     
-    .subtitle {
-        text-align: center;
-        color: #999;
-        font-size: 0.8rem;
-        margin-bottom: 3rem;
-        font-weight: 300;
-        letter-spacing: 1px;
+    .login-header h3 {
+        color: var(--color-dark);
+        font-size: var(--font-size-2xl);
+        font-weight: 600;
+        margin-bottom: var(--spacing-sm);
     }
     
-    /* Minimal inputs */
-    .stTextInput > label {
-        color: #666 !important;
-        font-weight: 400 !important;
-        font-size: 11px !important;
-        text-transform: uppercase !important;
-        letter-spacing: 1px !important;
+    .login-header p {
+        color: var(--color-gray);
+        font-size: var(--font-size-base);
     }
     
-    .stTextInput > div > div > input {
-        background: white !important;
-        border: none !important;
-        border-bottom: 1px solid #e0e0e0 !important;
-        border-radius: 0 !important;
-        padding: 0.5rem 0 !important;
-        font-size: 14px !important;
-        color: #000 !important;
-    }
-    
-    .stTextInput > div > div > input:focus {
-        border-bottom: 1px solid #000 !important;
-        box-shadow: none !important;
-        outline: none !important;
-    }
-    
-    .stTextInput > div > div > input::placeholder {
-        color: #999 !important;
-        font-size: 13px !important;
-    }
-    
-    /* Minimalistic button styling */
-    .stButton > button {
+    /* Override button width for login */
+    .login-container .stButton > button {
         width: 100%;
-        background: #000 !important;
-        color: white !important;
-        border: 1px solid #000 !important;
-        padding: 0.75rem !important;
-        font-size: 12px !important;
-        font-weight: 400 !important;
-        letter-spacing: 1px !important;
-        text-transform: uppercase !important;
-        border-radius: 0 !important;
-        margin-top: 2rem !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .stButton > button:hover {
-        background: #333 !important;
-        border-color: #333 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
-    }
-    
-    /* Error messages - subtle */
-    .stAlert {
-        background: transparent !important;
-        color: #d32f2f !important;
-        border: none !important;
-        padding: 0.5rem 0 !important;
-        font-size: 12px !important;
-    }
-    
-    /* Success messages - subtle */
-    div[data-baseweb="notification"] {
-        background: transparent !important;
-        color: #388e3c !important;
-        border: none !important;
-        font-size: 12px !important;
+        margin-top: var(--spacing-lg);
     }
     </style>
-    
-    <script>
-    // Same JavaScript as main form for button styling
-    function styleButton() {
-        const buttons = document.querySelectorAll('button');
-        buttons.forEach(button => {
-            const text = button.innerText.toLowerCase();
-            if (text.includes('prijava')) {
-                button.style.background = '#000';
-                button.style.color = 'white';
-                button.style.border = '1px solid #000';
-                button.style.borderRadius = '0';
-                button.style.textTransform = 'uppercase';
-                button.style.letterSpacing = '1px';
-                button.style.fontWeight = '400';
-                button.style.fontSize = '12px';
-                button.style.padding = '0.75rem';
-                button.style.transition = 'all 0.3s ease';
-                
-                button.onmouseover = function() {
-                    this.style.background = '#333';
-                    this.style.borderColor = '#333';
-                    this.style.transform = 'translateY(-1px)';
-                    this.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
-                };
-                button.onmouseout = function() {
-                    this.style.background = '#000';
-                    this.style.borderColor = '#000';
-                    this.style.transform = 'translateY(0)';
-                    this.style.boxShadow = 'none';
-                };
-            }
-        });
-    }
-    setInterval(styleButton, 100);
-    const observer = new MutationObserver(styleButton);
-    observer.observe(document.body, { childList: true, subtree: true });
-    </script>
     """, unsafe_allow_html=True)
     
-    # Use narrow columns to center and constrain width - same as main login
-    col1, col2, col3 = st.columns([1, 1, 1])
+    # Create login container
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    
+    # Use narrow columns to center and constrain width
+    col1, col2, col3 = st.columns([1, 2, 1])
     
     with col2:
-        # Minimalistic title - same style as main
-        st.markdown("### ADMINISTRACIJA")
-        st.markdown('<p class="subtitle">javna naročila</p>', unsafe_allow_html=True)
+        # Clean login header
+        st.markdown("""
+        <div class="login-header">
+            <h3>Administracija</h3>
+            <p>Vnesite geslo za dostop</p>
+        </div>
+        """, unsafe_allow_html=True)
         
         with st.form("admin_login_form", clear_on_submit=False):
             # Password field with same styling
@@ -407,116 +131,215 @@ def get_template_metadata(template_name, template_dir='templates'):
 
 
 def render_template_management_tab():
-    """Render the template management tab content."""
+    """Render the template management tab content with modern UI."""
+    from ui.components.modern_components import (
+        modern_card, search_input, modern_button, toast_notification, card_grid
+    )
+    
     with st.container():
-        st.markdown("### 📄 Upravljanje predlog Word")
-        
-        # Upload section
-        col1, col2 = st.columns([2, 1])
+        # Header with search and actions
+        col1, col2, col3 = st.columns([3, 2, 1])
         with col1:
-            uploaded_file = st.file_uploader(
-                "Naloži novo predlogo (.docx)", 
-                type=["docx"],
-                help="Izberite Word datoteko (.docx) za upload"
-            )
+            st.markdown("### Upravljanje predlog Word")
         with col2:
-            if uploaded_file:
-                overwrite_existing = st.checkbox("Prepiši obstoječo predlogo")
+            search = search_input("Išči predloge...", key="template_search")
+        with col3:
+            if st.button("Nova predloga", key="new_template", type="primary", use_container_width=True):
+                st.session_state.show_upload = True
         
-        if uploaded_file:
-            with st.spinner("Nalagam predlogo..."):
-                success, message = template_service.save_template(uploaded_file, overwrite=overwrite_existing)
-                if success:
-                    st.success(f"✅ {message}")
-                else:
-                    st.error(f"❌ {message}")
+        # Upload section with modern card
+        if st.session_state.get('show_upload', False):
+            modern_card(
+                title="Naloži novo predlogo",
+                content="""
+                <p style="color: var(--text-secondary);">
+                    Izberite Word datoteko (.docx) za nalaganje
+                </p>
+                """,
+                key="upload_card"
+            )
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                uploaded_file = st.file_uploader(
+                    "Izberi datoteko", 
+                    type=["docx"],
+                    label_visibility="collapsed"
+                )
+            with col2:
+                if uploaded_file:
+                    overwrite_existing = st.checkbox("Prepiši obstoječo")
+            
+            if uploaded_file:
+                with st.spinner("Nalagam predlogo..."):
+                    success, message = template_service.save_template(uploaded_file, overwrite=overwrite_existing)
+                    if success:
+                        toast_notification(message, "success")
+                        st.session_state.show_upload = False
+                        st.rerun()
+                    else:
+                        toast_notification(message, "error")
         
         st.markdown("--- ")
         
-        # Templates list section
-        st.markdown("### 📋 Seznam obstoječih predlog")
+        # Templates list section with modern cards
+        st.markdown("### Seznam obstoječih predlog")
         templates = template_service.list_templates()
         
+        # Filter templates based on search
+        if search:
+            templates = [t for t in templates if search.lower() in t.lower()]
+        
         if templates:
-            # Header for the table
-            col1, col2, col3, col4 = st.columns([3, 1, 2, 1])
-            with col1:
-                st.markdown("**Ime datoteke**")
-            with col2:
-                st.markdown("**Velikost**")
-            with col3:
-                st.markdown("**Zadnja sprememba**")
-            with col4:
-                st.markdown("**Tip**")
-            
-            st.markdown("--- ")
-            
-            for template in templates:
-                metadata = get_template_metadata(template)
-                with st.container():
-                    col1, col2, col3, col4 = st.columns([3, 1, 2, 1])
-                    with col1:
-                        st.markdown(f"📄 **{template}**")
-                    with col2:
-                        if metadata:
-                            size_kb = metadata['size'] / 1024
-                            st.markdown(f"{size_kb:.1f} KB")
-                    with col3:
-                        if metadata:
-                            st.markdown(f"{metadata['modified']}")
-                    with col4:
-                        st.markdown("Word")
+            # Display templates in a grid with 3 columns
+            cols = st.columns(3)
+            for idx, template in enumerate(templates):
+                with cols[idx % 3]:
+                    metadata = get_template_metadata(template)
+                    size_text = f"{metadata['size'] / 1024:.1f} KB" if metadata else "N/A"
+                    modified_text = metadata['modified'] if metadata else "N/A"
+                    
+                    # Create a clean card container
+                    with st.container():
+                        st.markdown(f"""
+                        <div style="background: var(--bg-primary, #FFFFFF); 
+                                    border: 1px solid var(--border, #E5E5E5); 
+                                    border-radius: var(--radius-md, 6px); 
+                                    padding: 16px; 
+                                    margin-bottom: 16px;
+                                    min-height: 150px;">
+                            <h4 style="margin: 0 0 12px 0; 
+                                      font-size: 15px; 
+                                      font-weight: 600; 
+                                      color: var(--text-primary, #000000);
+                                      word-break: break-all;">
+                                {template}
+                            </h4>
+                            <div style="font-size: 13px; 
+                                       color: var(--text-secondary, #666666); 
+                                       line-height: 1.6;">
+                                <div>Velikost: <strong>{size_text}</strong></div>
+                                <div>Spremenjena: <strong>{modified_text}</strong></div>
+                                <div>Tip: <strong>Word (.docx)</strong></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Action buttons
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("Prenesi", key=f"download_{template}", use_container_width=True):
+                                # Handle download
+                                st.info(f"Prenesem {template}")
+                        with col2:
+                            if st.button("Izbriši", key=f"delete_{template}", use_container_width=True, type="secondary"):
+                                # Handle delete
+                                st.warning(f"Brišem {template}")
         else:
-            st.info("📭 Ni najdenih predlog. Naložite prvo predlogo zgoraj.")
+            st.info("Ni najdenih predlog. Naložite prvo predlogo zgoraj.")
 
 
 def render_draft_management_tab():
-    """Render the draft management tab content."""
+    """Render the draft management tab content with modern UI."""
+    from ui.components.modern_components import (
+        modern_card, modern_button, toast_notification, 
+        info_banner, error_message, success_message
+    )
+    
     with st.container():
-        st.markdown("### 💾 Upravljanje osnutkov")
+        st.markdown("### Upravljanje osnutkov")
+        
+        # Info banner
+        st.info("Osnutki so začasno shranjeni dokumenti, ki čakajo na dokončanje.")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("#### 🗑️ Počisti osnutke")
-            st.markdown("Izbriše vse shranjene osnutke iz baze podatkov.")
+            # Clean draft card without modern_card
+            st.markdown("""
+            <div style="background: var(--bg-primary, #FFFFFF); 
+                        border: 1px solid var(--border, #E5E5E5); 
+                        border-radius: var(--radius-md, 6px); 
+                        padding: 20px; 
+                        margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px 0; 
+                          font-size: 16px; 
+                          font-weight: 600; 
+                          color: var(--text-primary, #000000);">
+                    Počisti osnutke
+                </h3>
+                <div style="color: var(--text-secondary, #666666); 
+                           font-size: 14px; 
+                           line-height: 1.5;">
+                    Izbriše vse shranjene osnutke iz baze podatkov.
+                    <div style="margin-top: 8px; 
+                               color: var(--warning-amber, #f59e0b); 
+                               font-size: 13px;">
+                        ⚠️ Ta akcija je nepovratna.
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
             # Initialize confirmation state
             if "confirm_clear_drafts" not in st.session_state:
                 st.session_state.confirm_clear_drafts = False
             
             if not st.session_state.confirm_clear_drafts:
-                if st.button("Počisti vse osnutke", type="secondary", use_container_width=True):
+                if modern_button("Počisti vse osnutke", variant="secondary", key="clear_drafts_btn"):
                     st.session_state.confirm_clear_drafts = True
                     st.rerun()
             else:
-                st.warning("⚠️ Ste prepričani, da želite izbrisati vse osnutke? Ta akcija je nepovratna.")
+                st.warning("Ste prepričani, da želite izbrisati vse osnutke? Ta akcija je nepovratna.")
                 col_confirm, col_cancel = st.columns(2)
                 with col_confirm:
-                    if st.button("🗑️ Da, izbriši", type="primary", use_container_width=True):
+                    if st.button("Da, izbriši", key="confirm_clear", type="primary"):
                         with st.spinner("Brišem osnutke..."):
                             success, message = template_service.clear_drafts()
                             if success:
-                                st.success(f"✅ {message}")
+                                toast_notification(message, "success")
                             else:
-                                st.error(f"❌ {message}")
+                                toast_notification(message, "error")
                         st.session_state.confirm_clear_drafts = False
                         st.rerun()
                 with col_cancel:
-                    if st.button("❌ Prekliči", type="secondary", use_container_width=True):
+                    if modern_button("Prekliči", variant="secondary", key="cancel_clear"):
                         st.session_state.confirm_clear_drafts = False
                         st.rerun()
         
         with col2:
-            st.markdown("#### 💼 Varnostno kopiranje")
-            st.markdown("Ustvari varnostno kopijo vseh osnutkov.")
-            if st.button("Varnostno kopiraj osnutke", type="primary", use_container_width=True):
+            # Clean backup card without modern_card
+            st.markdown("""
+            <div style="background: var(--bg-primary, #FFFFFF); 
+                        border: 1px solid var(--border, #E5E5E5); 
+                        border-radius: var(--radius-md, 6px); 
+                        padding: 20px; 
+                        margin-bottom: 16px;">
+                <h3 style="margin: 0 0 12px 0; 
+                          font-size: 16px; 
+                          font-weight: 600; 
+                          color: var(--text-primary, #000000);">
+                    Varnostno kopiranje
+                </h3>
+                <div style="color: var(--text-secondary, #666666); 
+                           font-size: 14px; 
+                           line-height: 1.5;">
+                    Ustvari varnostno kopijo vseh osnutkov za kasnejšo obnovitev.
+                    <div style="margin-top: 8px; 
+                               color: var(--success-green, #10b981); 
+                               font-size: 13px;">
+                        ✓ Priporočeno pred brisanjem
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("Varnostno kopiraj", key="backup_drafts_btn", type="primary", use_container_width=True):
                 with st.spinner("Ustvarjam varnostno kopijo..."):
                     success, message = template_service.backup_drafts()
                     if success:
-                        st.success(f"✅ {message}")
+                        st.success(message)
                     else:
-                        st.error(f"❌ {message}")
+                        st.error(message)
 
 
 def render_database_management_tab():
@@ -525,48 +348,71 @@ def render_database_management_tab():
     render_database_manager()
 
 def render_organization_management_tab():
-    """Render the organization management tab content (Story 2: with password support)."""
+    """Render the organization management tab content with modern UI."""
     import hashlib
+    from ui.components.modern_components import (
+        modern_card, modern_button, toast_notification,
+        status_badge, search_input, card_grid, empty_state
+    )
     
     # Ensure demo organization exists
     database.ensure_demo_organization_exists()
     
     with st.container():
-        st.markdown("### 🏢 Upravljanje organizacij")
+        # Header with search
+        col1, col2, col3 = st.columns([3, 2, 1])
+        with col1:
+            st.markdown("### Upravljanje organizacij")
+        with col2:
+            org_search = search_input("Išči organizacije...", key="org_search")
+        with col3:
+            if st.button("Nova organizacija", key="new_org", type="primary", use_container_width=True):
+                st.session_state.show_add_org = True
 
-        # Add new organization form with password field
-        with st.form(key='add_organization_form'):
-            col1, col2 = st.columns(2)
-            with col1:
-                new_org_name = st.text_input("Naziv nove organizacije")
-            with col2:
-                new_org_password = st.text_input("Geslo organizacije", type="password", 
-                                                help="Pustite prazno za organizacije brez gesla")
+        # Add new organization form with modern card
+        if st.session_state.get('show_add_org', False):
+            modern_card(
+                title="Dodaj novo organizacijo",
+                content="""
+                <p style="color: var(--text-secondary);">
+                    Vnesite podatke za novo organizacijo
+                </p>
+                """,
+                key="add_org_card"
+            )
             
-            submitted = st.form_submit_button("➕ Dodaj organizacijo", use_container_width=True)
-            if submitted and new_org_name:
-                # Check if organization already exists
-                existing_org = database.get_organization_by_name(new_org_name)
-                if existing_org:
-                    st.warning(f"Organizacija '{new_org_name}' že obstaja.")
-                else:
-                    # Hash password if provided
-                    password_hash = None
-                    if new_org_password:
-                        password_hash = hashlib.sha256(new_org_password.encode()).hexdigest()
-                    
-                    # Create organization
-                    org_id = database.create_organization(new_org_name, password_hash)
-                    if org_id:
-                        st.success(f"✅ Organizacija '{new_org_name}' uspešno dodana.")
-                        if new_org_password:
-                            st.info("Geslo je bilo varno shranjeno.")
-                        st.rerun()
-                    else:
-                        st.error("Napaka pri dodajanju organizacije.")
+            with st.form(key='add_organization_form'):
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_org_name = st.text_input("Naziv organizacije")
+                with col2:
+                    new_org_password = st.text_input("Geslo (opcijsko)", type="password", 
+                                                    help="Pustite prazno za organizacije brez gesla")
+                
+                if st.form_submit_button("Dodaj organizacijo", type="primary", use_container_width=True):
+                        if new_org_name:
+                            # Check if organization already exists
+                            existing_org = database.get_organization_by_name(new_org_name)
+                            if existing_org:
+                                toast_notification(f"Organizacija '{new_org_name}' že obstaja.", "warning")
+                            else:
+                                # Hash password if provided
+                                password_hash = None
+                                if new_org_password:
+                                    password_hash = hashlib.sha256(new_org_password.encode()).hexdigest()
+                                
+                                # Create organization
+                                org_id = database.create_organization(new_org_name, password_hash)
+                                if org_id:
+                                    st.success(f"Organizacija '{new_org_name}' uspešno dodana.")
+                                    if new_org_password:
+                                        st.info("Geslo je bilo varno shranjeno.")
+                                    st.rerun()
+                                else:
+                                    st.error("Napaka pri dodajanju organizacije.")
 
         st.markdown("---")
-        st.markdown("### 📋 Seznam obstoječih organizacij")
+        st.markdown("###  Seznam obstoječih organizacij")
         
         # Get all organizations from database
         organizations = database.get_all_organizations()
@@ -584,19 +430,19 @@ def render_organization_management_tab():
                     with col2:
                         # Password status
                         if org['password_hash']:
-                            st.success("🔐 Geslo nastavljeno")
+                            st.success(" Geslo nastavljeno")
                         else:
-                            st.warning("⚠️ Brez gesla")
+                            st.warning(" Brez gesla")
                     
                     with col3:
                         # Update password button
-                        if st.button(f"🔑 Spremeni geslo", key=f"change_pwd_{org['id']}"):
+                        if st.button("Spremeni geslo", key=f"change_pwd_{org['id']}"):
                             st.session_state[f"editing_pwd_{org['id']}"] = True
                     
                     with col4:
                         # Delete button (except for demo)
                         if org['name'] != 'demo_organizacija':
-                            if st.button(f"🗑️", key=f"delete_org_{org['id']}"):
+                            if st.button("Izbriši", key=f"delete_org_{org['id']}", type="secondary"):
                                 if database.delete_organization(org['id']):
                                     st.success(f"Organizacija izbrisana.")
                                     st.rerun()
@@ -610,7 +456,7 @@ def render_organization_management_tab():
                             
                             col_save, col_cancel = st.columns(2)
                             with col_save:
-                                if st.form_submit_button("💾 Shrani", use_container_width=True):
+                                if st.form_submit_button("Shrani", use_container_width=True, type="primary"):
                                     if new_password != confirm_password:
                                         st.error("Gesli se ne ujemata!")
                                     elif new_password:
@@ -628,7 +474,7 @@ def render_organization_management_tab():
                                             st.rerun()
                             
                             with col_cancel:
-                                if st.form_submit_button("❌ Prekliči", use_container_width=True):
+                                if st.form_submit_button("Prekliči", use_container_width=True, type="secondary"):
                                     del st.session_state[f"editing_pwd_{org['id']}"]
                                     st.rerun()
                     
@@ -639,11 +485,13 @@ def render_organization_management_tab():
 
 def render_cpv_management_tab():
     """Render the CPV codes management tab content."""
+    from ui.components.modern_components import modern_card
+    
     with st.container():
-        st.markdown("### 🔢 Upravljanje CPV kod in meril")
+        st.markdown("### Upravljanje CPV kod in meril")
         
         # Create sub-tabs for CPV management and criteria
-        cpv_tab1, cpv_tab2 = st.tabs(["📝 CPV kode", "⚖️ Merila za CPV"])
+        cpv_tab1, cpv_tab2 = st.tabs(["CPV kode", "Merila za CPV"])
         
         with cpv_tab1:
             render_cpv_codes_section()
@@ -654,13 +502,22 @@ def render_cpv_management_tab():
 
 def render_cpv_codes_section():
     """Render the CPV codes management section."""
+    from ui.components.modern_components import (
+        modern_card, modern_button, search_input, 
+        empty_state, status_badge
+    )
+    
     with st.container():
-        # Statistics
+        # Statistics card
         total_cpv = get_cpv_count()
-        st.info(f"📊 Skupno CPV kod v bazi: **{total_cpv}**")
+        modern_card(
+            title="Statistika CPV kod",
+            content=f'<div style="text-align: center;"><p style="font-size: 2rem; font-weight: bold; color: var(--accent-blue);">{total_cpv}</p><p style="color: var(--text-secondary);">Skupno CPV kod v bazi</p></div>',
+            key="cpv_stats_card"
+        )
         
-        # Add new CPV code
-        st.markdown("#### ➕ Dodaj novo CPV kodo")
+        # Add new CPV code section
+        st.markdown("#### Dodaj novo CPV kodo")
         with st.form(key='add_cpv_form'):
             col1, col2 = st.columns([1, 3])
             with col1:
@@ -668,41 +525,45 @@ def render_cpv_codes_section():
             with col2:
                 new_desc = st.text_input("Opis", placeholder="npr. Pisarniški material")
             
-            submitted = st.form_submit_button("Dodaj CPV kodo")
+            submitted = st.form_submit_button("Dodaj CPV kodo", type="primary")
             if submitted and new_code and new_desc:
                 cpv_id = create_cpv_code(new_code, new_desc)
                 if cpv_id:
-                    st.success(f"✅ CPV koda {new_code} uspešno dodana")
+                    st.success(f"CPV koda {new_code} uspešno dodana")
                     st.rerun()
                 else:
-                    st.error(f"❌ CPV koda {new_code} že obstaja")
+                    st.error(f"CPV koda {new_code} že obstaja")
         
         st.markdown("---")
         
         # Search and list CPV codes
-        st.markdown("#### 🔍 Iskanje in upravljanje CPV kod")
+        st.markdown("#### Iskanje in upravljanje CPV kod")
         
-        # Search
-        search_term = st.text_input("🔍 Išči po kodi ali opisu", key="cpv_search")
+        # Search with modern component
+        search_term = search_input(
+            placeholder="Išči po kodi ali opisu...",
+            key="cpv_search"
+        )
         
         # Pagination
         if 'cpv_page' not in st.session_state:
             st.session_state.cpv_page = 1
         
-        # Get CPV codes
+        # Get CPV codes - reduced to 10 per page for better UX
+        per_page = 10
         cpv_codes, total_count = get_all_cpv_codes(
             search_term=search_term,
             page=st.session_state.cpv_page,
-            per_page=50
+            per_page=per_page
         )
         
         if cpv_codes:
             # Pagination controls
-            total_pages = (total_count + 49) // 50
+            total_pages = (total_count + per_page - 1) // per_page
             col1, col2, col3 = st.columns([1, 2, 1])
             
             with col1:
-                if st.button("⬅️ Prejšnja", disabled=st.session_state.cpv_page <= 1):
+                if st.button("Prejšnja", disabled=st.session_state.cpv_page <= 1):
                     st.session_state.cpv_page -= 1
                     st.rerun()
             
@@ -710,7 +571,7 @@ def render_cpv_codes_section():
                 st.markdown(f"Stran {st.session_state.cpv_page} od {total_pages}")
             
             with col3:
-                if st.button("Naslednja ➡️", disabled=st.session_state.cpv_page >= total_pages):
+                if st.button("Naslednja", disabled=st.session_state.cpv_page >= total_pages):
                     st.session_state.cpv_page += 1
                     st.rerun()
             
@@ -727,20 +588,20 @@ def render_cpv_codes_section():
                             
                             col_save, col_delete = st.columns(2)
                             with col_save:
-                                if st.form_submit_button("💾 Shrani spremembe"):
+                                if st.form_submit_button("Shrani spremembe", type="primary"):
                                     if update_cpv_code(cpv['id'], edited_code, edited_desc):
-                                        st.success("✅ Uspešno posodobljeno")
+                                        st.success("Uspešno posodobljeno")
                                         st.rerun()
                                     else:
-                                        st.error("❌ Napaka pri posodabljanju")
+                                        st.error("Napaka pri posodabljanju")
                             
                             with col_delete:
-                                if st.form_submit_button("🗑️ Izbriši", type="secondary"):
+                                if st.form_submit_button("Izbriši", type="secondary"):
                                     if delete_cpv_code(cpv['id']):
-                                        st.success("✅ Uspešno izbrisano")
+                                        st.success("Uspešno izbrisano")
                                         st.rerun()
                                     else:
-                                        st.error("❌ Napaka pri brisanju")
+                                        st.error("Napaka pri brisanju")
                     
                     with col2:
                         st.markdown(f"**ID:** {cpv['id']}")
@@ -901,8 +762,10 @@ def render_criteria_management_tab():
 
 def render_cpv_criteria_section():
     """Render the CPV criteria management section."""
+    from ui.components.modern_components import info_banner, modern_card
+    
     with st.container():
-        st.markdown("#### ⚖️ Upravljanje meril za CPV kode")
+        st.markdown("#### Upravljanje meril za CPV kode")
         st.info("Določite CPV kode, kjer veljajo posebna merila za ocenjevanje ponudb.")
         
         # Ensure CPV data is initialized (should already be done at app startup)
@@ -924,9 +787,9 @@ def render_cpv_criteria_section():
             with st.spinner("Migriram obstoječe nastavitve v bazo podatkov..."):
                 migration_result = criteria_manager.migrate_from_json()
                 if migration_result['success']:
-                    st.success(f"✅ Uspešno migrirano: {migration_result['migrated_price']} cenovnih meril, {migration_result['migrated_social']} socialnih meril")
+                    st.success(f" Uspešno migrirano: {migration_result['migrated_price']} cenovnih meril, {migration_result['migrated_social']} socialnih meril")
                 elif migration_result['error'] and migration_result['error'] != 'No JSON file to migrate':
-                    st.warning(f"⚠️ Migracija delno uspešna: {migration_result['error']}")
+                    st.warning(f" Migracija delno uspešna: {migration_result['error']}")
         
         # Load current settings from database
         settings = load_criteria_settings()
@@ -937,7 +800,7 @@ def render_cpv_criteria_section():
         # Check if we have CPV data
         cpv_count = get_cpv_count()
         if cpv_count == 0:
-            st.warning("⚠️ Ni CPV kod v bazi. Prosimo, uvozite CPV kode preko CPV upravljanja.")
+            st.warning(" Ni CPV kod v bazi. Prosimo, uvozite CPV kode preko CPV upravljanja.")
             return
         
         all_cpv_codes, _ = get_all_cpv_codes(page=1, per_page=15000)  # Get all codes
@@ -964,14 +827,18 @@ def render_cpv_criteria_section():
             save_criteria_settings(settings)
         
         # Create tabs for better organization
-        tab1, tab2, tab3 = st.tabs(["💰 Cenovna merila", "👥 Socialna merila", "📊 Pregled"])
+        tab1, tab2, tab3 = st.tabs(["Cenovna merila", "Socialna merila", "Pregled"])
         
         with tab1:
             st.markdown("#### Merila - cena")
             st.markdown("*CPV kode, kjer cena ne sme biti edino merilo za izbor*")
             
-            # Show current selection count
-            st.info(f"Trenutno izbranih: **{len(settings['price_criteria'])}** CPV kod")
+            # Show current selection count with modern card
+            modern_card(
+                title="Trenutno izbranih",
+                content=f'<p style="font-size: 1.5rem; font-weight: bold; color: var(--accent-blue);">{len(settings["price_criteria"])} CPV kod</p>',
+                key="price_criteria_count"
+            )
             
             # Prepare options for price criteria
             price_options = []
@@ -1001,7 +868,7 @@ def render_cpv_criteria_section():
             
             # Show selected codes in an expander
             if selected_price_codes:
-                with st.expander(f"📋 Seznam izbranih kod ({len(selected_price_codes)})", expanded=False):
+                with st.expander(f" Seznam izbranih kod ({len(selected_price_codes)})", expanded=False):
                     for code in sorted(selected_price_codes):
                         st.write(f"• **{code}** - {cpv_map[code]}")
         
@@ -1009,8 +876,12 @@ def render_cpv_criteria_section():
             st.markdown("#### Merila - socialna merila")
             st.markdown("*CPV kode, kjer veljajo socialna merila*")
             
-            # Show current selection count
-            st.info(f"Trenutno izbranih: **{len(settings['social_criteria'])}** CPV kod")
+            # Show current selection count with modern card  
+            modern_card(
+                title="Trenutno izbranih",
+                content=f'<p style="font-size: 1.5rem; font-weight: bold; color: var(--accent-blue);">{len(settings["social_criteria"])} CPV kod</p>',
+                key="social_criteria_count"
+            )
             
             # Prepare options for social criteria
             social_options = []
@@ -1040,17 +911,17 @@ def render_cpv_criteria_section():
             
             # Show selected codes in an expander
             if selected_social_codes:
-                with st.expander(f"📋 Seznam izbranih kod ({len(selected_social_codes)})", expanded=False):
+                with st.expander(f" Seznam izbranih kod ({len(selected_social_codes)})", expanded=False):
                     for code in sorted(selected_social_codes):
                         st.write(f"• **{code}** - {cpv_map[code]}")
         
         with tab3:
-            st.markdown("#### 📊 Pregled trenutnih nastavitev")
+            st.markdown("####  Pregled trenutnih nastavitev")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("##### 💰 Cenovna merila")
+                st.markdown("#####  Cenovna merila")
                 st.metric("Število kod", len(settings['price_criteria']))
                 
                 if settings['price_criteria']:
@@ -1064,7 +935,7 @@ def render_cpv_criteria_section():
                     st.info("Ni izbranih kod")
             
             with col2:
-                st.markdown("##### 👥 Socialna merila")
+                st.markdown("#####  Socialna merila")
                 st.metric("Število kod", len(settings['social_criteria']))
                 
                 if settings['social_criteria']:
@@ -1080,7 +951,7 @@ def render_cpv_criteria_section():
             # Check for overlaps
             overlap = set(settings['price_criteria']) & set(settings['social_criteria'])
             if overlap:
-                st.warning(f"⚠️ **Opozorilo:** {len(overlap)} kod je izbranih v obeh kategorijah!")
+                st.warning(f" **Opozorilo:** {len(overlap)} kod je izbranih v obeh kategorijah!")
                 with st.expander("Prikaži prekrivanje"):
                     for code in sorted(overlap):
                         st.write(f"• {code} - {cpv_map.get(code, 'Opis ni na voljo')}")
@@ -1091,7 +962,7 @@ def render_cpv_criteria_section():
         col1, col2, col3 = st.columns([1, 1, 2])
         
         with col1:
-            if st.button("💾 Shrani nastavitve", type="primary", use_container_width=True):
+            if st.button("Shrani nastavitve", type="primary", use_container_width=True):
                 # Get the selected codes based on which tab was active
                 if 'selected_price_codes' not in locals():
                     selected_price_codes = settings['price_criteria']
@@ -1104,11 +975,11 @@ def render_cpv_criteria_section():
                     "social_criteria": selected_social_codes
                 }
                 save_criteria_settings(new_settings)
-                st.success("✅ Nastavitve uspešno shranjene!")
+                st.success("Nastavitve uspešno shranjene!")
                 st.rerun()
         
         with col2:
-            if st.button("🔄 Ponastavi na privzeto", type="secondary", use_container_width=True):
+            if st.button("Ponastavi na privzeto", type="secondary", use_container_width=True):
                 # Reset to defaults (filtered to existing codes)
                 default_price = get_default_price_criteria_codes()
                 default_social = get_default_social_criteria_codes()
@@ -1118,13 +989,18 @@ def render_cpv_criteria_section():
                     "social_criteria": [code for code in default_social if code in cpv_map]
                 }
                 save_criteria_settings(default_settings)
-                st.success("✅ Nastavitve ponastavljene na privzete vrednosti!")
+                st.success("Nastavitve ponastavljene na privzete vrednosti!")
                 st.rerun()
 
 
 def render_logging_management_tab():
     """Render the logging management tab with viewing, filtering, and export capabilities."""
-    st.subheader("📋 Upravljanje dnevniških zapisov")
+    from ui.components.modern_components import (
+        modern_card, modern_button, search_input,
+        status_badge, info_banner
+    )
+    
+    st.subheader("Upravljanje dnevniških zapisov")
     
     # Import LogQueryBuilder for optimized queries
     from utils.log_query_builder import LogQueryBuilder
@@ -1144,27 +1020,27 @@ def render_logging_management_tab():
         }
     
     # Filters section in main content area
-    with st.expander("🔍 Filtri", expanded=True):
-        # Quick filters row (NEW)
+    with st.expander("Filtri", expanded=True):
+        # Quick filters row
         st.markdown("**Hitri filtri:**")
         qcol1, qcol2, qcol3, qcol4, qcol5 = st.columns(5)
         
         with qcol1:
-            if st.button("📅 Danes", use_container_width=True, key="quick_today"):
+            if modern_button("Danes", variant="secondary", size="small", key="quick_today", use_container_width=True):
                 st.session_state.log_filters['date_from'] = datetime.now().date()
                 st.session_state.log_filters['date_to'] = datetime.now().date()
                 st.session_state.log_filters['use_quick_filter'] = 'today'
                 st.rerun()
         
         with qcol2:
-            if st.button("⏰ 24 ur", use_container_width=True, key="quick_24h"):
+            if modern_button("24 ur", variant="secondary", size="small", key="quick_24h", use_container_width=True):
                 st.session_state.log_filters['date_from'] = (datetime.now() - timedelta(days=1)).date()
                 st.session_state.log_filters['date_to'] = datetime.now().date()
                 st.session_state.log_filters['use_quick_filter'] = '24h'
                 st.rerun()
         
         with qcol3:
-            if st.button("📆 Ta teden", use_container_width=True, key="quick_week"):
+            if modern_button("Ta teden", variant="secondary", size="small", key="quick_week", use_container_width=True):
                 today = datetime.now().date()
                 start_week = today - timedelta(days=today.weekday())
                 st.session_state.log_filters['date_from'] = start_week
@@ -1173,14 +1049,14 @@ def render_logging_management_tab():
                 st.rerun()
         
         with qcol4:
-            if st.button("📊 Zadnjih 100", use_container_width=True, key="quick_last100"):
+            if modern_button("Zadnjih 100", variant="secondary", size="small", key="quick_last100", use_container_width=True):
                 st.session_state.log_filters['date_from'] = None
                 st.session_state.log_filters['date_to'] = None
                 st.session_state.log_filters['use_quick_filter'] = 'last100'
                 st.rerun()
         
         with qcol5:
-            if st.button("🔴 Samo napake", use_container_width=True, key="quick_errors"):
+            if modern_button("Samo napake", variant="secondary", size="small", key="quick_errors", use_container_width=True):
                 st.session_state.log_filters['log_levels'] = ['ERROR', 'CRITICAL']
                 st.session_state.log_filters['use_quick_filter'] = 'errors'
                 st.rerun()
@@ -1256,14 +1132,14 @@ def render_logging_management_tab():
         
         with tcol3:
             # Business hours preset
-            if st.button("🏢 Delovni čas (8-17)", use_container_width=True):
+            if modern_button("Delovni čas (8-17)", variant="secondary", size="small", key="business_hours", use_container_width=True):
                 st.session_state.log_filters['time_from'] = datetime.strptime("08:00", "%H:%M").time()
                 st.session_state.log_filters['time_to'] = datetime.strptime("17:00", "%H:%M").time()
                 st.rerun()
         
         with tcol4:
             # Night hours preset
-            if st.button("🌙 Nočni čas (22-06)", use_container_width=True):
+            if modern_button("Nočni čas (22-06)", variant="secondary", size="small", key="night_hours", use_container_width=True):
                 st.session_state.log_filters['time_from'] = datetime.strptime("22:00", "%H:%M").time()
                 st.session_state.log_filters['time_to'] = datetime.strptime("06:00", "%H:%M").time()
                 st.rerun()
@@ -1282,7 +1158,7 @@ def render_logging_management_tab():
         
         with col2:
             # Apply filters button
-            if st.button("🔄 Uporabi filtre", type="primary", use_container_width=True):
+            if st.button(" Uporabi filtre", type="primary", use_container_width=True):
                 st.session_state.log_filters = {
                     'log_levels': log_levels,
                     'organization_name': organization_name,
@@ -1298,7 +1174,7 @@ def render_logging_management_tab():
         
         with col3:
             # Clear filters button
-            if st.button("🗑️ Počisti filtre", use_container_width=True):
+            if modern_button("Počisti filtre", variant="secondary", key="clear_filters", use_container_width=True):
                 st.session_state.log_filters = {
                     'log_levels': [],
                     'organization_name': None,
@@ -1316,17 +1192,17 @@ def render_logging_management_tab():
     col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:
-        st.markdown("### 📊 Pregled zapisov")
+        st.markdown("###  Pregled zapisov")
     
     with col2:
         # Auto-refresh toggle
-        auto_refresh = st.checkbox("🔄 Samodejno osveževanje", value=False)
+        auto_refresh = st.checkbox(" Samodejno osveževanje", value=False)
         if auto_refresh:
             st.rerun()
     
     with col3:
         # Export button
-        if st.button("📥 Izvozi CSV", use_container_width=True):
+        if st.button(" Izvozi CSV", use_container_width=True):
             export_logs_to_csv()
     
     # Fetch and display logs
@@ -1342,7 +1218,7 @@ def render_logging_management_tab():
     
     if not filters_applied:
         # No filters applied - show recent logs
-        st.info("📋 Prikazujem zadnjih 100 zapisov. Uporabite filtre za prilagojeno iskanje.")
+        st.info(" Prikazujem zadnjih 100 zapisov. Uporabite filtre za prilagojeno iskanje.")
         with sqlite3.connect(database.DATABASE_FILE) as conn:
             logs_df = pd.read_sql_query("""
                 SELECT * FROM application_logs 
@@ -1358,7 +1234,7 @@ def render_logging_management_tab():
     
     if not logs_df.empty:
         # Statistics
-        st.markdown("#### 📈 Statistika")
+        st.markdown("####  Statistika")
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -1428,7 +1304,7 @@ def render_logging_management_tab():
         st.dataframe(styled_df, use_container_width=True, height=400)
         
         # Log details expander
-        with st.expander("🔍 Podrobnosti izbranega zapisa"):
+        with st.expander(" Podrobnosti izbranega zapisa"):
             selected_idx = st.number_input(
                 "ID zapisa",
                 min_value=0,
@@ -1469,7 +1345,7 @@ def render_logging_management_tab():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("🗑️ Počisti potekle zapise", use_container_width=True):
+        if st.button(" Počisti potekle zapise", use_container_width=True):
             deleted = database.cleanup_expired_logs()
             st.success(f"Izbrisanih {deleted} poteklih zapisov.")
     
@@ -1483,7 +1359,7 @@ def render_logging_management_tab():
             st.success(f"Izbrisanih {deleted} DEBUG zapisov.")
     
     with col3:
-        if st.button("⚠️ Počisti vse zapise", type="secondary", use_container_width=True):
+        if st.button(" Počisti vse zapise", type="secondary", use_container_width=True):
             if st.checkbox("Potrdi brisanje vseh zapisov"):
                 with sqlite3.connect(database.DATABASE_FILE) as conn:
                     cursor = conn.cursor()
@@ -1494,7 +1370,7 @@ def render_logging_management_tab():
     
     # Storage statistics
     st.markdown("---")
-    st.markdown("### 💾 Statistika shranjevanja")
+    st.markdown("###  Statistika shranjevanja")
     
     with sqlite3.connect(database.DATABASE_FILE) as conn:
         cursor = conn.cursor()
@@ -1593,7 +1469,7 @@ def export_logs_to_csv():
         
         # Download button
         st.download_button(
-            label="💾 Prenesi CSV",
+            label=" Prenesi CSV",
             data=csv_data,
             file_name=f"logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
@@ -1614,9 +1490,9 @@ def render_admin_panel():
         
         # Tabbed interface for different admin sections
         tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-            "📄 Predloge", "💾 Osnutki", "🗄️ Baza podatkov", 
-            "🏢 Organizacije", "🔢 CPV kode & Merila", "📋 Dnevnik", 
-            "🤖 AI Management"
+            "Predloge", "Osnutki", "Baza podatkov", 
+            "Organizacije", "CPV kode & Merila", "Dnevnik", 
+            "AI Management"
         ])
         
         with tab1:

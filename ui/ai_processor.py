@@ -657,8 +657,8 @@ def process_document_async(document_id: int):
     success = processor.process_uploaded_document(document_id)
     
     if success:
-        st.success(f"✅ Dokument {document_id} uspešno procesiran")
+        st.success(f" Dokument {document_id} uspešno procesiran")
     else:
-        st.error(f"❌ Napaka pri procesiranju dokumenta {document_id}")
+        st.error(f" Napaka pri procesiranju dokumenta {document_id}")
     
     return success

@@ -79,185 +79,92 @@ TABLE_NAMES = {
 
 # Table categories for grouping in UI
 TABLE_CATEGORIES = {
-    '🏢 Osnovno': CORE_TABLES,
-    '📋 CPV klasifikacija': CPV_TABLES,
-    '🤖 AI sistem': AI_TABLES,
-    '📄 Dokumenti': DOCUMENT_TABLES,
-    '⚙️ Sistem': SYSTEM_TABLES
+    'Osnovno': CORE_TABLES,
+    'CPV klasifikacija': CPV_TABLES,
+    'AI sistem': AI_TABLES,
+    'Dokumenti': DOCUMENT_TABLES,
+    'Sistem': SYSTEM_TABLES
 }
 
 def inject_custom_css():
-    """Inject custom CSS for beautiful UI."""
+    """Inject custom CSS for modern UI."""
     st.markdown("""
     <style>
-        /* Gradient headers */
+        /* Modern headers */
         .db-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg-secondary, #F8F9FA);
             padding: 2rem;
-            border-radius: 10px;
-            color: white;
+            border-radius: var(--radius-lg, 8px);
+            border: 1px solid var(--border, #E5E5E5);
             margin-bottom: 2rem;
         }
         
         /* Card containers */
         .db-card {
             background: white;
-            border-radius: 8px;
+            border-radius: var(--radius-md, 6px);
             padding: 1.5rem;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: 1px solid var(--border, #E5E5E5);
             margin-bottom: 1rem;
             transition: transform 0.2s;
         }
         
         .db-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            box-shadow: var(--shadow-lg);
         }
         
         /* Enhanced table styling */
         .dataframe {
             border: none !important;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', sans-serif;
         }
         
         .dataframe thead th {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            color: white !important;
+            background: var(--bg-secondary, #F8F9FA);
+            color: var(--text-primary, #000000) !important;
             font-weight: 600;
             text-transform: uppercase;
             font-size: 0.85rem;
             letter-spacing: 0.5px;
             padding: 12px !important;
+            border-bottom: 2px solid var(--border, #E5E5E5);
         }
         
         .dataframe tbody tr:nth-child(even) {
-            background-color: #f8f9fa;
+            background-color: var(--bg-secondary, #F8F9FA);
         }
         
         .dataframe tbody tr:hover {
-            background-color: #e9ecef !important;
+            background-color: var(--bg-tertiary, #F5F5F5) !important;
             cursor: pointer;
             transition: background-color 0.2s;
         }
         
         .dataframe tbody td {
             padding: 10px !important;
-        }
-        
-        /* Enhanced buttons */
-        .stButton > button {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 5px;
-            font-weight: 500;
-            transition: all 0.3s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .stButton > button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
-        
-        /* Success/Error messages */
-        .success-msg {
-            background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
-            padding: 1rem;
-            border-radius: 5px;
-            color: #155724;
-            font-weight: 500;
-            margin: 1rem 0;
-        }
-        
-        .error-msg {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            padding: 1rem;
-            border-radius: 5px;
-            color: #721c24;
-            font-weight: 500;
-            margin: 1rem 0;
-        }
-        
-        /* Tab styling enhancements */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-            background: linear-gradient(to right, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
-            padding: 10px;
-            border-radius: 10px;
-        }
-        
-        .stTabs [data-baseweb="tab"] {
-            background-color: transparent;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-weight: 500;
-            transition: all 0.3s;
-        }
-        
-        .stTabs [aria-selected="true"] {
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-        }
-        
-        /* Metrics styling */
-        [data-testid="metric-container"] {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 1rem;
-            border-radius: 10px;
-            color: white;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        [data-testid="metric-container"] [data-testid="metric-label"] {
-            color: rgba(255, 255, 255, 0.9) !important;
-        }
-        
-        [data-testid="metric-container"] [data-testid="metric-value"] {
-            color: white !important;
-        }
-        
-        /* Form styling */
-        .stForm {
-            background: linear-gradient(to bottom right, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid rgba(102, 126, 234, 0.2);
-        }
-        
-        /* Selectbox styling */
-        .stSelectbox > div > div {
-            background: linear-gradient(to right, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
-            border-radius: 5px;
-        }
-        
-        /* Input fields */
-        .stTextInput > div > div > input,
-        .stNumberInput > div > div > input {
-            border: 1px solid rgba(102, 126, 234, 0.3);
-            border-radius: 5px;
-            transition: border-color 0.3s;
-        }
-        
-        .stTextInput > div > div > input:focus,
-        .stNumberInput > div > div > input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+            border-bottom: 1px solid var(--border, #E5E5E5);
         }
     </style>
     """, unsafe_allow_html=True)
 
 def render_database_manager():
     """Main function called from admin_panel.py"""
-    st.markdown("### 🗄️ Upravljanje podatkovne baze")
+    # Apply unified design system
+    from ui.admin_module_design import apply_design_system
+    apply_design_system()
     
-    # Inject custom CSS for beautiful UI
-    inject_custom_css()
+    # Import modern components
+    from ui.components.modern_components import (
+        modern_card, modern_button, modern_table, status_badge,
+        search_input, empty_state, info_banner, success_message, error_message
+    )
+    from ui.components.loading_manager import LoadingStateManager
+    
+    st.markdown("### Upravljanje podatkovne baze")
     
     # Create main tabs
-    tab1, tab2, tab3 = st.tabs(["📊 Shema baze", "📝 Podatki", "🔧 Orodja"])
+    tab1, tab2, tab3 = st.tabs(["Shema baze", "Podatki", "Orodja"])
     
     with tab1:
         render_schema_visualization()
@@ -271,23 +178,40 @@ def render_database_manager():
 
 def render_schema_visualization():
     """Render database schema information."""
+    from ui.components.modern_components import modern_card, status_badge, info_banner
     
-    st.markdown("## 📊 Shema podatkovne baze")
+    st.markdown("## Shema podatkovne baze")
     st.markdown("Pregled vseh tabel in njihovih struktur")
     
-    # Show statistics summary
+    # Show statistics summary with modern cards
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("📦 Skupno tabel", len(TABLES))
+        modern_card(
+            title="Skupno tabel",
+            content=f'<div style="font-size: 2rem; font-weight: bold;">{len(TABLES)}</div>',
+            key="total_tables_card"
+        )
     with col2:
-        st.metric("🏢 Osnovne tabele", len(CORE_TABLES))
+        modern_card(
+            title="Osnovne tabele",
+            content=f'<div style="font-size: 2rem; font-weight: bold;">{len(CORE_TABLES)}</div>',
+            key="core_tables_card"
+        )
     with col3:
-        st.metric("🤖 AI tabele", len(AI_TABLES))
+        modern_card(
+            title="AI tabele",
+            content=f'<div style="font-size: 2rem; font-weight: bold;">{len(AI_TABLES)}</div>',
+            key="ai_tables_card"
+        )
     with col4:
-        st.metric("📄 Dokumentne tabele", len(DOCUMENT_TABLES))
+        modern_card(
+            title="Dokumentne tabele",
+            content=f'<div style="font-size: 2rem; font-weight: bold;">{len(DOCUMENT_TABLES)}</div>',
+            key="doc_tables_card"
+        )
     
     # Table details section organized by category
-    st.markdown("### 📋 Podrobnosti tabel po kategorijah")
+    st.markdown("### Podrobnosti tabel po kategorijah")
     
     # Create tabs for each category
     category_tabs = st.tabs(list(TABLE_CATEGORIES.keys()))
@@ -340,7 +264,7 @@ def render_table_details(table_name: str):
     # Create DataFrame for columns
     if columns:
         df_columns = pd.DataFrame(columns)
-        df_columns['Ključ'] = df_columns['pk'].apply(lambda x: '🔑 PK' if x else '')
+        df_columns['Ključ'] = df_columns['pk'].apply(lambda x: ' PK' if x else '')
         df_columns['Obvezno'] = df_columns['notnull'].apply(lambda x: '✓' if x else '')
         
         # Reorder and rename columns
@@ -387,42 +311,12 @@ def get_table_schema(table_name: str) -> List[Dict[str, Any]]:
 
 def render_table_management():
     """Render CRUD interface for database tables."""
-    st.markdown("## 📝 Upravljanje podatkov")
+    from ui.components.modern_components import modern_card, search_input, modern_button
     
-    # Add custom styling for beautiful UI
-    st.markdown("""
-    <style>
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-        }
-        .stTabs [data-baseweb="tab"] {
-            height: 50px;
-            padding-left: 20px;
-            padding-right: 20px;
-            background-color: #f0f2f6;
-            border-radius: 8px;
-        }
-        .stTabs [aria-selected="true"] {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        .dataframe tbody tr:hover {
-            background-color: #f5f5f5;
-            cursor: pointer;
-        }
-        .metric-card {
-            padding: 15px;
-            border-radius: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-align: center;
-            margin-bottom: 20px;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+    st.markdown("## Upravljanje podatkov")
     
-    # Category selector
-    st.markdown("### 🗂️ Izberi kategorijo tabel")
+    # Category selector with modern styling
+    st.markdown("### Izberi kategorijo tabel")
     selected_category = st.selectbox(
         "Kategorija",
         options=list(TABLE_CATEGORIES.keys()),
@@ -435,13 +329,17 @@ def render_table_management():
     # Create tabs for tables in selected category
     if category_tables:
         st.markdown(f"### {selected_category}")
-        tabs = st.tabs([f"📁 {TABLE_NAMES.get(table, table)}" for table in category_tables])
+        tabs = st.tabs([TABLE_NAMES.get(table, table) for table in category_tables])
         
         for idx, (tab, table) in enumerate(zip(tabs, category_tables)):
             with tab:
                 render_single_table_management(table)
     else:
-        st.info("V tej kategoriji ni tabel.")
+        from ui.components.modern_components import empty_state
+        empty_state(
+            title="Ni tabel",
+            description="V tej kategoriji ni tabel."
+        )
 
 
 def render_single_table_management(table_name: str):
@@ -451,6 +349,11 @@ def render_single_table_management(table_name: str):
     Args:
         table_name: Name of the table to manage
     """
+    from ui.components.modern_components import (
+        modern_card, search_input, modern_button, modern_table,
+        status_badge
+    )
+    
     # Initialize session state for this table
     if f'{table_name}_page' not in st.session_state:
         st.session_state[f'{table_name}_page'] = 0
@@ -460,35 +363,38 @@ def render_single_table_management(table_name: str):
     # Get row count
     row_count = get_row_count(table_name)
     
-    # Display table header with metrics
-    st.markdown(f"""
-    <div class="metric-card">
-        <h3>📊 {TABLE_NAMES.get(table_name, table_name)}</h3>
-        <p style="font-size: 24px; margin: 10px 0;">{row_count} zapisov</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # Display table header with modern card
+    modern_card(
+        title=TABLE_NAMES.get(table_name, table_name),
+        content=f'''
+        <div style="text-align: center;">
+            <p style="font-size: 2rem; font-weight: bold; color: var(--accent-blue);">{row_count}</p>
+            <p style="color: var(--text-secondary);">Število zapisov</p>
+        </div>
+        ''',
+        key=f"{table_name}_header_card"
+    )
     
     # Action buttons row
     col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
     
     with col1:
-        search_term = st.text_input(
-            "🔍 Iskanje", 
-            key=f"{table_name}_search_input",
-            placeholder="Vnesi iskalni niz..."
+        search_term = search_input(
+            placeholder="Vnesi iskalni niz...",
+            key=f"{table_name}_search_input"
         )
         st.session_state[f'{table_name}_search'] = search_term
     
     with col2:
-        if st.button("➕ Dodaj", key=f"{table_name}_add_btn", use_container_width=True):
+        if st.button("Dodaj", key=f"{table_name}_add_btn", type="primary", use_container_width=True):
             st.session_state[f'{table_name}_show_add'] = True
     
     with col3:
-        if st.button("🔄 Osveži", key=f"{table_name}_refresh_btn", use_container_width=True):
+        if modern_button("Osveži", variant="secondary", key=f"{table_name}_refresh_btn", use_container_width=True):
             st.rerun()
     
     with col4:
-        export_csv = st.button("📥 Izvozi CSV", key=f"{table_name}_export_btn", use_container_width=True)
+        export_csv = modern_button("Izvozi CSV", variant="secondary", key=f"{table_name}_export_btn", use_container_width=True)
     
     # Show add form if requested
     if st.session_state.get(f'{table_name}_show_add', False):
@@ -507,12 +413,12 @@ def render_single_table_management(table_name: str):
     
     if df is not None and not df.empty:
         # Create a container for the table with actions
-        st.markdown("### 📋 Podatki tabele")
+        st.markdown("### Podatki tabele")
         
         # Add action columns to dataframe
         df_display = df.copy()
         
-        # Display the dataframe
+        # Display the dataframe with modern styling
         st.dataframe(
             df_display,
             use_container_width=True,
@@ -521,7 +427,7 @@ def render_single_table_management(table_name: str):
         )
         
         # Action buttons section
-        st.markdown("### ⚙️ Akcije za zapise")
+        st.markdown("### Akcije za zapise")
         
         # Create selection for row operations
         col1, col2, col3 = st.columns([2, 1, 1])
@@ -547,12 +453,12 @@ def render_single_table_management(table_name: str):
                     
                     if selected_row is not None:
                         with col2:
-                            if st.button("✏️ Uredi", key=f"{table_name}_edit_selected", use_container_width=True):
+                            if st.button(" Uredi", key=f"{table_name}_edit_selected", use_container_width=True):
                                 st.session_state[f'{table_name}_edit_record'] = selected_row.to_dict()
                                 st.session_state[f'{table_name}_show_edit'] = True
                         
                         with col3:
-                            if st.button("🗑️ Izbriši", key=f"{table_name}_delete_selected", use_container_width=True):
+                            if st.button(" Izbriši", key=f"{table_name}_delete_selected", use_container_width=True):
                                 st.session_state[f'{table_name}_delete_record'] = selected_row.to_dict()
                                 st.session_state[f'{table_name}_show_delete'] = True
         
@@ -591,7 +497,7 @@ def render_single_table_management(table_name: str):
         if export_csv:
             csv = df.to_csv(index=False)
             st.download_button(
-                label="💾 Prenesi CSV",
+                label=" Prenesi CSV",
                 data=csv,
                 file_name=f"{table_name}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
@@ -660,7 +566,7 @@ def render_add_form(table_name: str):
     Args:
         table_name: Name of the table
     """
-    st.markdown("### ➕ Dodaj nov zapis")
+    st.markdown("###  Dodaj nov zapis")
     
     columns = get_table_schema(table_name)
     
@@ -734,14 +640,14 @@ def render_add_form(table_name: str):
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.form_submit_button("💾 Shrani", use_container_width=True):
+            if st.form_submit_button(" Shrani", use_container_width=True):
                 if save_record(table_name, values):
-                    st.success("✅ Zapis uspešno dodan!")
+                    st.success(" Zapis uspešno dodan!")
                     st.session_state[f'{table_name}_show_add'] = False
                     st.rerun()
         
         with col2:
-            if st.form_submit_button("❌ Prekliči", use_container_width=True):
+            if st.form_submit_button(" Prekliči", use_container_width=True):
                 st.session_state[f'{table_name}_show_add'] = False
                 st.rerun()
 
@@ -771,7 +677,7 @@ def save_record(table_name: str, values: dict) -> bool:
         
         if not is_valid:
             for error in errors:
-                st.error(f"❌ {error}")
+                st.error(f" {error}")
             return False
         
         with sqlite3.connect(database.DATABASE_FILE) as conn:
@@ -803,7 +709,7 @@ def render_edit_form(table_name: str, record: dict):
         table_name: Name of the table
         record: Dictionary containing the current record values
     """
-    st.markdown("### ✏️ Uredi zapis")
+    st.markdown("###  Uredi zapis")
     
     columns = get_table_schema(table_name)
     
@@ -882,14 +788,14 @@ def render_edit_form(table_name: str, record: dict):
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.form_submit_button("💾 Shrani spremembe", use_container_width=True):
+            if st.form_submit_button(" Shrani spremembe", use_container_width=True):
                 if update_record(table_name, values, primary_key, primary_key_value):
-                    st.success("✅ Zapis uspešno posodobljen!")
+                    st.success(" Zapis uspešno posodobljen!")
                     st.session_state[f'{table_name}_show_edit'] = False
                     st.rerun()
         
         with col2:
-            if st.form_submit_button("❌ Prekliči", use_container_width=True):
+            if st.form_submit_button(" Prekliči", use_container_width=True):
                 st.session_state[f'{table_name}_show_edit'] = False
                 st.rerun()
 
@@ -921,7 +827,7 @@ def update_record(table_name: str, values: dict, primary_key: str, primary_key_v
         
         if not is_valid:
             for error in errors:
-                st.error(f"❌ {error}")
+                st.error(f" {error}")
             return False
         
         with sqlite3.connect(database.DATABASE_FILE) as conn:
@@ -954,7 +860,7 @@ def render_delete_confirmation(table_name: str, record: dict):
         table_name: Name of the table
         record: Dictionary containing the record to delete
     """
-    st.markdown("### ⚠️ Potrditev brisanja")
+    st.markdown("###  Potrditev brisanja")
     st.warning("Ali ste prepričani, da želite izbrisati ta zapis?")
     
     # Display record details
@@ -963,7 +869,7 @@ def render_delete_confirmation(table_name: str, record: dict):
     col1, col2 = st.columns(2)
     
     with col1:
-        if st.button("🗑️ Da, izbriši", key=f"{table_name}_confirm_delete", use_container_width=True):
+        if st.button(" Da, izbriši", key=f"{table_name}_confirm_delete", use_container_width=True):
             # Find primary key
             columns = get_table_schema(table_name)
             primary_key = None
@@ -977,14 +883,14 @@ def render_delete_confirmation(table_name: str, record: dict):
             
             if primary_key and primary_key_value is not None:
                 if delete_record(table_name, primary_key, primary_key_value):
-                    st.success("✅ Zapis uspešno izbrisan!")
+                    st.success(" Zapis uspešno izbrisan!")
                     st.session_state[f'{table_name}_show_delete'] = False
                     st.rerun()
             else:
                 st.error("Ni mogoče najti primarnega ključa za brisanje")
     
     with col2:
-        if st.button("❌ Prekliči", key=f"{table_name}_cancel_delete", use_container_width=True):
+        if st.button(" Prekliči", key=f"{table_name}_cancel_delete", use_container_width=True):
             st.session_state[f'{table_name}_show_delete'] = False
             st.rerun()
 
@@ -1096,7 +1002,7 @@ def get_foreign_key_options(table_name: str) -> List[Dict[str, Any]]:
 
 def render_database_tools():
     """Database maintenance and analysis tools."""
-    st.markdown("## 🔧 Orodja za bazo podatkov")
+    st.markdown("##  Orodja za bazo podatkov")
     
     # Add tool cards
     col1, col2 = st.columns(2)
@@ -1110,7 +1016,7 @@ def render_database_tools():
             color: white;
             margin-bottom: 20px;
         ">
-            <h3>🔍 Preverjanje integritete</h3>
+            <h3> Preverjanje integritete</h3>
             <p>Preveri povezanost podatkov in tuje ključe</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1127,7 +1033,7 @@ def render_database_tools():
             color: white;
             margin-bottom: 20px;
         ">
-            <h3>📊 Statistika baze</h3>
+            <h3> Statistika baze</h3>
             <p>Pregled velikosti in uporabe baze podatkov</p>
         </div>
         """, unsafe_allow_html=True)
@@ -1141,21 +1047,21 @@ def render_database_tools():
     col3, col4, col5 = st.columns(3)
     
     with col3:
-        if st.button("🗑️ Počisti prazne zapise", key="clean_empty", use_container_width=True):
+        if st.button(" Počisti prazne zapise", key="clean_empty", use_container_width=True):
             clean_empty_records()
     
     with col4:
-        if st.button("🔄 Optimiziraj bazo", key="optimize_db", use_container_width=True):
+        if st.button(" Optimiziraj bazo", key="optimize_db", use_container_width=True):
             optimize_database()
     
     with col5:
-        if st.button("📥 Izvozi celotno bazo", key="export_full", use_container_width=True):
+        if st.button(" Izvozi celotno bazo", key="export_full", use_container_width=True):
             export_full_database()
 
 
 def check_database_integrity():
     """Check database integrity including foreign keys and constraints."""
-    st.markdown("### 🔍 Preverjanje integritete podatkovne baze")
+    st.markdown("###  Preverjanje integritete podatkovne baze")
     
     integrity_issues = []
     
@@ -1175,7 +1081,7 @@ def check_database_integrity():
             """)
             orphaned_cpv = cursor.fetchall()
             if orphaned_cpv:
-                integrity_issues.append(f"❌ Najdenih {len(orphaned_cpv)} zapisov v cpv_criteria z neobstoječimi CPV kodami")
+                integrity_issues.append(f" Najdenih {len(orphaned_cpv)} zapisov v cpv_criteria z neobstoječimi CPV kodami")
             
             cursor.execute("""
                 SELECT cc.id, cc.criteria_type_id
@@ -1185,7 +1091,7 @@ def check_database_integrity():
             """)
             orphaned_criteria = cursor.fetchall()
             if orphaned_criteria:
-                integrity_issues.append(f"❌ Najdenih {len(orphaned_criteria)} zapisov v cpv_criteria z neobstoječimi tipi meril")
+                integrity_issues.append(f" Najdenih {len(orphaned_criteria)} zapisov v cpv_criteria z neobstoječimi tipi meril")
             
             # Check application_logs foreign keys
             cursor.execute("""
@@ -1196,7 +1102,7 @@ def check_database_integrity():
             """)
             orphaned_logs = cursor.fetchall()
             if orphaned_logs:
-                integrity_issues.append(f"❌ Najdenih {len(orphaned_logs)} zapisov v application_logs z neobstoječimi organizacijami")
+                integrity_issues.append(f" Najdenih {len(orphaned_logs)} zapisov v application_logs z neobstoječimi organizacijami")
             
             # Check for duplicate primary keys (shouldn't happen with SQLite)
             for table in TABLES:
@@ -1208,7 +1114,7 @@ def check_database_integrity():
                 """)
                 duplicates = cursor.fetchall()
                 if duplicates:
-                    integrity_issues.append(f"❌ Tabela {table} ima {len(duplicates)} podvojenih primarnih ključev")
+                    integrity_issues.append(f" Tabela {table} ima {len(duplicates)} podvojenih primarnih ključev")
             
             # Check for NULL values in required fields
             required_fields = {
@@ -1222,7 +1128,7 @@ def check_database_integrity():
                     cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {field} IS NULL OR {field} = ''")
                     null_count = cursor.fetchone()[0]
                     if null_count > 0:
-                        integrity_issues.append(f"⚠️ Tabela {table} ima {null_count} zapisov s praznim poljem {field}")
+                        integrity_issues.append(f" Tabela {table} ima {null_count} zapisov s praznim poljem {field}")
         
         # Display results
         if integrity_issues:
@@ -1230,7 +1136,7 @@ def check_database_integrity():
             for issue in integrity_issues:
                 st.write(issue)
         else:
-            st.success("✅ Integriteta baze podatkov je v redu! Ni najdenih težav.")
+            st.success(" Integriteta baze podatkov je v redu! Ni najdenih težav.")
             
     except Exception as e:
         st.error(f"Napaka pri preverjanju integritete: {str(e)}")
@@ -1238,7 +1144,7 @@ def check_database_integrity():
 
 def show_database_statistics():
     """Show database statistics and usage information."""
-    st.markdown("### 📊 Statistika podatkovne baze")
+    st.markdown("###  Statistika podatkovne baze")
     
     try:
         with sqlite3.connect(database.DATABASE_FILE) as conn:
@@ -1267,7 +1173,7 @@ def show_database_statistics():
                 st.metric("Skupno zapisov", total_records)
             
             # Table-specific statistics
-            st.markdown("#### 📋 Statistika po tabelah")
+            st.markdown("####  Statistika po tabelah")
             
             stats_data = []
             for table in TABLES:
@@ -1300,7 +1206,7 @@ def show_database_statistics():
             st.dataframe(df_stats, use_container_width=True, hide_index=True)
             
             # Growth chart (if we have timestamp data)
-            st.markdown("#### 📈 Rast podatkov")
+            st.markdown("####  Rast podatkov")
             
             growth_data = []
             for table in ['javna_narocila', 'application_logs', 'drafts']:
@@ -1337,7 +1243,7 @@ def show_database_statistics():
 
 def clean_empty_records():
     """Clean empty or orphaned records from the database."""
-    st.markdown("### 🗑️ Čiščenje praznih zapisov")
+    st.markdown("###  Čiščenje praznih zapisov")
     
     try:
         with sqlite3.connect(database.DATABASE_FILE) as conn:
@@ -1359,7 +1265,7 @@ def clean_empty_records():
             conn.commit()
             
             if cleaned_count > 0:
-                st.success(f"✅ Počiščenih {cleaned_count} praznih ali zastarelih zapisov")
+                st.success(f" Počiščenih {cleaned_count} praznih ali zastarelih zapisov")
             else:
                 st.info("Ni najdenih praznih zapisov za čiščenje")
                 
@@ -1369,7 +1275,7 @@ def clean_empty_records():
 
 def optimize_database():
     """Optimize database by running VACUUM and ANALYZE."""
-    st.markdown("### 🔄 Optimizacija baze podatkov")
+    st.markdown("###  Optimizacija baze podatkov")
     
     try:
         with sqlite3.connect(database.DATABASE_FILE) as conn:
@@ -1393,9 +1299,9 @@ def optimize_database():
             
             if size_saved > 0:
                 size_saved_mb = size_saved / (1024 * 1024)
-                st.success(f"✅ Optimizacija končana! Prihranjen prostor: {size_saved_mb:.2f} MB")
+                st.success(f" Optimizacija končana! Prihranjen prostor: {size_saved_mb:.2f} MB")
             else:
-                st.success("✅ Optimizacija končana! Baza je že optimalna.")
+                st.success(" Optimizacija končana! Baza je že optimalna.")
                 
     except Exception as e:
         st.error(f"Napaka pri optimizaciji: {str(e)}")
@@ -1403,7 +1309,7 @@ def optimize_database():
 
 def export_full_database():
     """Export the entire database to CSV files."""
-    st.markdown("### 📥 Izvoz celotne baze podatkov")
+    st.markdown("###  Izvoz celotne baze podatkov")
     
     try:
         import zipfile
@@ -1437,13 +1343,13 @@ Total tables: {len(TABLES)}
         # Offer download
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         st.download_button(
-            label="💾 Prenesi izvoz baze (ZIP)",
+            label=" Prenesi izvoz baze (ZIP)",
             data=zip_buffer.getvalue(),
             file_name=f"database_export_{timestamp}.zip",
             mime="application/zip"
         )
         
-        st.success("✅ Izvoz pripravljen! Kliknite gumb za prenos.")
+        st.success(" Izvoz pripravljen! Kliknite gumb za prenos.")
         
     except Exception as e:
         st.error(f"Napaka pri izvozu: {str(e)}")

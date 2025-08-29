@@ -14,7 +14,7 @@ from utils.loading_state import set_loading_state, LOADING_MESSAGES
 def update_status_callback(procurement_id, new_status):
     """Callback function to update procurement status."""
     if database.update_procurement_status(procurement_id, new_status):
-        st.success(f"✅ Status uspešno spremenjen na: {new_status}")
+        st.success(f" Status uspešno spremenjen na: {new_status}")
 
 def calculate_procurement_value(proc):
     """
@@ -405,7 +405,7 @@ def render_dashboard():
     
     with col_logout:
         st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
-        if st.button("🚪 Odjava", use_container_width=True, key="logout_button"):
+        if st.button(" Odjava", use_container_width=True, key="logout_button"):
             # Clear authentication
             for key in ['authenticated', 'organization']:
                 if key in st.session_state:
