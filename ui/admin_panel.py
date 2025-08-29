@@ -21,6 +21,207 @@ from utils.cpv_manager import (
 
 def render_admin_header():
     """Render the admin header with status and logout option."""
+    # Add modern styling similar to input form
+    st.markdown("""
+    <style>
+    /* CSS Variables for consistent theming */
+    :root {
+        --primary-500: #007bff;
+        --primary-600: #0056b3;
+        --success-500: #28a745;
+        --success-600: #218838;
+        --danger-500: #dc3545;
+        --danger-600: #c82333;
+        --warning-500: #ffc107;
+        --warning-600: #e0a800;
+        --info: #17a2b8;
+        --gray-300: #dee2e6;
+        --gray-50: #f8f9fa;
+        --primary-50: #e7f1ff;
+        --radius-sm: 4px;
+        --radius-lg: 8px;
+    }
+    
+    /* Modern Button Styles with Gradients */
+    .btn-primary {
+        background: linear-gradient(135deg, #28a745, #218838) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #218838, #1e7e34) !important;
+        box-shadow: 0 4px 8px rgba(40,167,69,0.3) !important;
+    }
+    
+    .btn-secondary {
+        background: linear-gradient(135deg, #6c757d, #5a6268) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-secondary:hover {
+        background: linear-gradient(135deg, #5a6268, #495057) !important;
+        box-shadow: 0 4px 8px rgba(108,117,125,0.3) !important;
+    }
+    
+    .btn-danger {
+        background: linear-gradient(135deg, #dc3545, #c82333) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-danger:hover {
+        background: linear-gradient(135deg, #c82333, #a71d2a) !important;
+        box-shadow: 0 4px 8px rgba(220,53,69,0.3) !important;
+    }
+    
+    .btn-info {
+        background: linear-gradient(135deg, #17a2b8, #20c997) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-info:hover {
+        background: linear-gradient(135deg, #138496, #17a085) !important;
+        box-shadow: 0 4px 8px rgba(23,162,184,0.3) !important;
+    }
+    
+    .btn-warning {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+        border: none !important;
+        color: #1e293b !important;
+    }
+    
+    .btn-warning:hover {
+        background: linear-gradient(135deg, #f59e0b, #ea580c) !important;
+        box-shadow: 0 4px 8px rgba(245,158,11,0.3) !important;
+    }
+    
+    /* Form Fields - Modern Style */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stNumberInput > div > div > input {
+        border: 1px solid var(--gray-300) !important;
+        border-radius: var(--radius-sm) !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.875rem !important;
+        transition: all 0.15s ease !important;
+        background: white !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus,
+    .stNumberInput > div > div > input:focus {
+        border-color: var(--info) !important;
+        box-shadow: 0 0 0 2px rgba(0,123,255,0.1) !important;
+        outline: none !important;
+    }
+    
+    /* Select boxes - Modern Style */
+    .stSelectbox > div > div {
+        border: 1px solid var(--gray-300) !important;
+        border-radius: var(--radius-sm) !important;
+        transition: all 0.15s ease !important;
+        font-size: 0.875rem !important;
+    }
+    
+    .stSelectbox > div > div:focus-within {
+        border-color: var(--info) !important;
+        box-shadow: 0 0 0 2px rgba(0,123,255,0.1) !important;
+    }
+    
+    /* File uploader - Modern Style */
+    .stFileUploader > div > div {
+        border: 2px dashed var(--gray-300) !important;
+        border-radius: var(--radius-lg) !important;
+        padding: 2rem !important;
+        background: var(--gray-50) !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stFileUploader > div > div:hover {
+        border-color: var(--primary-500) !important;
+        background: var(--primary-50) !important;
+    }
+    
+    /* Tables and containers */
+    .stContainer {
+        background: white;
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+    }
+    </style>
+    
+    <script>
+    // Dynamic button styling based on text content - similar to input form
+    function styleAdminButtons() {
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(button => {
+            const text = button.innerText.toLowerCase();
+            
+            // Apply styles based on button text
+            if (text.includes('odjava') || text.includes('logout')) {
+                button.classList.add('btn-danger');
+                button.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+            } else if (text.includes('prijava') || text.includes('login')) {
+                button.classList.add('btn-primary');
+                button.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+            } else if (text.includes('shrani') || text.includes('save')) {
+                button.classList.add('btn-success');
+                button.style.background = 'linear-gradient(135deg, #28a745, #218838)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+            } else if (text.includes('izbriši') || text.includes('delete') || text.includes('počisti')) {
+                button.classList.add('btn-danger');
+                button.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+            } else if (text.includes('prekliči') || text.includes('cancel')) {
+                button.classList.add('btn-secondary');
+                button.style.background = 'linear-gradient(135deg, #6c757d, #5a6268)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+            } else if (text.includes('uredi') || text.includes('edit')) {
+                button.classList.add('btn-warning');
+                button.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
+                button.style.border = 'none';
+                button.style.color = '#1e293b';
+            } else if (text.includes('varnostno') || text.includes('backup')) {
+                button.classList.add('btn-info');
+                button.style.background = 'linear-gradient(135deg, #17a2b8, #20c997)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+            } else if (text.includes('dodaj') || text.includes('add') || text.includes('novo')) {
+                button.classList.add('btn-success');
+                button.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+            }
+            
+            // Add hover effects
+            button.onmouseover = function() {
+                this.style.transform = 'translateY(-1px)';
+                this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+            };
+            button.onmouseout = function() {
+                this.style.transform = '';
+                this.style.boxShadow = '';
+            };
+        });
+    }
+    
+    // Run periodically and observe DOM changes
+    setInterval(styleAdminButtons, 100);
+    const observer = new MutationObserver(styleAdminButtons);
+    observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+    """, unsafe_allow_html=True)
+    
     col1, col2 = st.columns([3, 1])
     with col1:
         st.header("🔧 Administracija predlog")
@@ -31,37 +232,166 @@ def render_admin_header():
 
 
 def render_login_form():
-    """Render the admin login form with improved styling."""
-    # Add some vertical spacing
-    st.markdown("<br>", unsafe_allow_html=True)
+    """Render the admin login form with same styling as main login."""
+    # Apply the same minimalistic styling as main login form
+    st.markdown("""
+    <style>
+    /* Narrow Minimalistic Form - Same as main login */
+    h3 {
+        text-align: center;
+        color: #000;
+        font-weight: 300;
+        font-size: 1.4rem;
+        margin-bottom: 0.25rem;
+        letter-spacing: 3px;
+    }
     
-    # Center the login form with improved styling
-    col1, col2, col3 = st.columns([1, 2, 1])
+    .subtitle {
+        text-align: center;
+        color: #999;
+        font-size: 0.8rem;
+        margin-bottom: 3rem;
+        font-weight: 300;
+        letter-spacing: 1px;
+    }
+    
+    /* Minimal inputs */
+    .stTextInput > label {
+        color: #666 !important;
+        font-weight: 400 !important;
+        font-size: 11px !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px !important;
+    }
+    
+    .stTextInput > div > div > input {
+        background: white !important;
+        border: none !important;
+        border-bottom: 1px solid #e0e0e0 !important;
+        border-radius: 0 !important;
+        padding: 0.5rem 0 !important;
+        font-size: 14px !important;
+        color: #000 !important;
+    }
+    
+    .stTextInput > div > div > input:focus {
+        border-bottom: 1px solid #000 !important;
+        box-shadow: none !important;
+        outline: none !important;
+    }
+    
+    .stTextInput > div > div > input::placeholder {
+        color: #999 !important;
+        font-size: 13px !important;
+    }
+    
+    /* Minimalistic button styling */
+    .stButton > button {
+        width: 100%;
+        background: #000 !important;
+        color: white !important;
+        border: 1px solid #000 !important;
+        padding: 0.75rem !important;
+        font-size: 12px !important;
+        font-weight: 400 !important;
+        letter-spacing: 1px !important;
+        text-transform: uppercase !important;
+        border-radius: 0 !important;
+        margin-top: 2rem !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stButton > button:hover {
+        background: #333 !important;
+        border-color: #333 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+    }
+    
+    /* Error messages - subtle */
+    .stAlert {
+        background: transparent !important;
+        color: #d32f2f !important;
+        border: none !important;
+        padding: 0.5rem 0 !important;
+        font-size: 12px !important;
+    }
+    
+    /* Success messages - subtle */
+    div[data-baseweb="notification"] {
+        background: transparent !important;
+        color: #388e3c !important;
+        border: none !important;
+        font-size: 12px !important;
+    }
+    </style>
+    
+    <script>
+    // Same JavaScript as main form for button styling
+    function styleButton() {
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(button => {
+            const text = button.innerText.toLowerCase();
+            if (text.includes('prijava')) {
+                button.style.background = '#000';
+                button.style.color = 'white';
+                button.style.border = '1px solid #000';
+                button.style.borderRadius = '0';
+                button.style.textTransform = 'uppercase';
+                button.style.letterSpacing = '1px';
+                button.style.fontWeight = '400';
+                button.style.fontSize = '12px';
+                button.style.padding = '0.75rem';
+                button.style.transition = 'all 0.3s ease';
+                
+                button.onmouseover = function() {
+                    this.style.background = '#333';
+                    this.style.borderColor = '#333';
+                    this.style.transform = 'translateY(-1px)';
+                    this.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = '#000';
+                    this.style.borderColor = '#000';
+                    this.style.transform = 'translateY(0)';
+                    this.style.boxShadow = 'none';
+                };
+            }
+        });
+    }
+    setInterval(styleButton, 100);
+    const observer = new MutationObserver(styleButton);
+    observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+    """, unsafe_allow_html=True)
+    
+    # Use narrow columns to center and constrain width - same as main login
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
     with col2:
-        # Create a styled container for the login form
-        with st.container():
-            st.markdown("""
-            <div style=\"
-                padding: 30px; 
-                border-radius: 10px; 
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                background-color: #f8f9fa;
-                margin: 20px 0;
-            \">
-            """, unsafe_allow_html=True)
+        # Minimalistic title - same style as main
+        st.markdown("### ADMINISTRACIJA")
+        st.markdown('<p class="subtitle">javna naročila</p>', unsafe_allow_html=True)
+        
+        with st.form("admin_login_form", clear_on_submit=False):
+            # Password field with same styling
+            password = st.text_input(
+                "Geslo",
+                type="password",
+                placeholder="Vnesite admin geslo",
+                help="Vnesite administratorsko geslo"
+            )
             
-            st.markdown("### 🔐 Prijava v administracijo")
-            password = st.text_input("Geslo", type="password", placeholder="Vnesite admin geslo")
+            # Submit button - same as main form
+            submitted = st.form_submit_button("Prijava", use_container_width=True)
             
-            if st.button("Prijava", type="primary", use_container_width=True):
+            if submitted:
                 if password == ADMIN_PASSWORD:
                     st.session_state["logged_in"] = True
                     st.success("Uspešna prijava!")
                     st.rerun()
                 else:
                     st.error("Napačno geslo.")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
 def get_template_metadata(template_name, template_dir='templates'):

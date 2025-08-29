@@ -293,7 +293,20 @@ def _check_single_condition(render_if, parent_key="", lot_context=None, session_
                         'lotsInfo', 'lots', 'lotConfiguration']
         is_global_field = any(condition_field.startswith(gf) for gf in global_fields)
         
-        if is_global_field:
+        # Special handling: If parent_key already contains lot prefix (e.g., lot_0.executionDeadline)
+        # and condition_field is relative to parent (e.g., executionDeadline.type),
+        # we need to build the correct path
+        if parent_key and parent_key.startswith('lot_') and '.' in parent_key:
+            # Extract lot prefix from parent_key (e.g., lot_0 from lot_0.executionDeadline)
+            lot_prefix = parent_key.split('.')[0]
+            # Build the full condition field path
+            if '.' not in condition_field or not condition_field.startswith(lot_prefix):
+                # Only add lot prefix if not already present
+                actual_session_key = f"{lot_prefix}.{condition_field}"
+            else:
+                actual_session_key = condition_field
+            current_field_value = st.session_state.get(actual_session_key)
+        elif is_global_field:
             actual_session_key = condition_field
             current_field_value = st.session_state.get(actual_session_key)
         elif session_key_prefix:
@@ -334,6 +347,32 @@ def _check_single_condition(render_if, parent_key="", lot_context=None, session_
     
     # Handle 'value' condition (exact match)
     if condition_value is not None and condition_field:
+        # Debug logging for contractInfo fields
+        if "contractInfo" in condition_field:
+            import logging
+            logging.info(f"[render_if debug] Checking condition: {condition_field} == {condition_value}")
+            logging.info(f"[render_if debug] Actual session key used: {actual_session_key}")
+            logging.info(f"[render_if debug] Actual value in session: {current_field_value}")
+            logging.info(f"[render_if debug] Parent key: {parent_key}")
+            logging.info(f"[render_if debug] Result: {current_field_value == condition_value}")
+        
+        # CRITICAL FIX: For contractInfo fields in lot context, 
+        # the condition_field in schema is "contractInfo.type" but 
+        # actual session key might be "lot_0.contractInfo.type"
+        # We need to check if we're comparing the right values
+        if "contractInfo" in str(condition_field) and parent_key and parent_key.startswith("lot_"):
+            # Extract just the field part without lot prefix for comparison
+            field_parts = condition_field.split('.')
+            if len(field_parts) >= 2:
+                # Get the actual value from the lot-prefixed key
+                lot_prefix = parent_key.split('.')[0]  # e.g., "lot_0"
+                corrected_key = f"{lot_prefix}.{condition_field}"
+                actual_value = st.session_state.get(corrected_key, current_field_value)
+                if actual_value != current_field_value:
+                    import logging
+                    logging.info(f"[render_if debug] Using corrected value from {corrected_key}: {actual_value}")
+                    current_field_value = actual_value
+        
         return current_field_value == condition_value
     
     # Handle 'not_in' condition (value should not be in list)
@@ -540,8 +579,18 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
             
             # Array of objects
             elif items_schema.get("type") == "object":
+                # Debug: Check what's in session state for clients
+                if 'clients' in session_key:
+                    import logging
+                    logging.info(f"[form_renderer] Rendering {session_key}, current value: {st.session_state.get(session_key, 'NOT FOUND')}")
+                
+                # Initialize array only if it doesn't exist
+                # This preserves existing data when navigating back
                 if session_key not in st.session_state:
                     st.session_state[session_key] = []
+                    if 'clients' in session_key:
+                        import logging
+                        logging.info(f"[form_renderer] Initialized empty array for {session_key}")
 
                 for i in range(len(st.session_state[session_key])):
                     # Create container with header row for remove button
@@ -551,10 +600,90 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                         col_header, col_remove = st.columns([5, 1])
                         with col_header:
                             item_title = items_schema.get('title', 'element')
-                            st.markdown(f"**{item_title} {i + 1}**")
+                            
+                            # Try to get a meaningful name from the item data
+                            display_name = None
+                            
+                            # For clients - use name field
+                            if 'clients' in session_key:
+                                name_key = f"{session_key}.{i}.name"
+                                display_name = st.session_state.get(name_key, '')
+                                if display_name:
+                                    display_name = f"{display_name}"
+                                else:
+                                    display_name = f"{item_title} {i + 1} (brez imena)"
+                            
+                            # For cofinancers - use name field
+                            elif 'cofinancers' in session_key:
+                                name_key = f"{session_key}.{i}.name"
+                                display_name = st.session_state.get(name_key, '')
+                                if display_name:
+                                    # Also show percentage if available
+                                    percentage_key = f"{session_key}.{i}.percentage"
+                                    percentage = st.session_state.get(percentage_key, '')
+                                    if percentage:
+                                        display_name = f"{display_name} ({percentage}%)"
+                                    else:
+                                        display_name = f"{display_name}"
+                                else:
+                                    display_name = f"{item_title} {i + 1} (brez imena)"
+                            
+                            # For lots - use name field
+                            elif session_key == 'lots':
+                                name_key = f"{session_key}.{i}.name"
+                                display_name = st.session_state.get(name_key, '')
+                                if display_name:
+                                    display_name = f"{display_name}"
+                                else:
+                                    display_name = f"Sklop {i + 1}"
+                            
+                            # For inspection dates - use date and time
+                            elif 'inspectionDates' in session_key:
+                                date_key = f"{session_key}.{i}.date"
+                                time_key = f"{session_key}.{i}.time"
+                                date = st.session_state.get(date_key, '')
+                                time = st.session_state.get(time_key, '')
+                                if date:
+                                    if time:
+                                        display_name = f"Ogled: {date} ob {time}"
+                                    else:
+                                        display_name = f"Ogled: {date}"
+                                else:
+                                    display_name = f"Termin ogleda {i + 1}"
+                            
+                            # For specification documents - use filename
+                            elif 'specificationDocuments' in session_key:
+                                filename_key = f"{session_key}.{i}.filename"
+                                filename = st.session_state.get(filename_key, '')
+                                if filename:
+                                    display_name = f"Dokument: {filename}"
+                                else:
+                                    display_name = f"Dokument {i + 1}"
+                            
+                            # For mixed order components - use description
+                            elif 'mixedOrderComponents' in session_key:
+                                desc_key = f"{session_key}.{i}.description"
+                                description = st.session_state.get(desc_key, '')
+                                if description:
+                                    # Truncate if too long
+                                    if len(description) > 50:
+                                        display_name = f"{description[:47]}..."
+                                    else:
+                                        display_name = description
+                                else:
+                                    display_name = f"Postavka {i + 1}"
+                            
+                            # Default fallback
+                            if not display_name:
+                                display_name = f"{item_title} {i + 1}"
+                            
+                            st.markdown(f"**{display_name}**")
                         with col_remove:
-                            if st.button("❌", key=f"widget_remove_{session_key}_{i}", help=f"Odstrani {item_title.lower()} {i + 1}"):
+                            if st.button("❌", key=f"widget_remove_{session_key}_{i}", help=f"Odstrani"):
+                                # Remove the item and ensure state is preserved
                                 st.session_state[session_key].pop(i)
+                                # Mark that we've made changes
+                                st.session_state['unsaved_changes'] = True
                                 st.rerun()
                         
                         # Render the form fields for this object
@@ -572,6 +701,8 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     button_text = "➕ Dodaj sklop"
                 elif "inspectionDates" in full_key:
                     button_text = "➕ Dodaj nov termin ogleda"
+                elif "specificationDocuments" in full_key:
+                    button_text = "➕ Dodaj dokument s tehničnimi zahtevami"
                 else:
                     button_text = f"➕ Dodaj {item_title.lower()}"
                 
@@ -697,7 +828,63 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 
                 # Sync widget value back to session state
                 if selected_value != st.session_state.get(session_key):
+                    old_value = st.session_state.get(session_key)
                     st.session_state[session_key] = selected_value
+                    
+                    # Clear dependent fields when contractInfo.type changes
+                    if "contractInfo.type" in session_key or session_key.endswith(".contractInfo.type"):
+                        # Clear fields that depend on contractInfo.type
+                        prefix = session_key.replace(".type", "")
+                        
+                        # If switching away from "pogodba", clear contract-specific fields
+                        if old_value == "pogodba" and selected_value != "pogodba":
+                            fields_to_clear = [
+                                f"{prefix}.contractPeriodType",
+                                f"{prefix}.contractValidity",
+                                f"{prefix}.contractDateFrom",
+                                f"{prefix}.contractDateTo"
+                            ]
+                            for field in fields_to_clear:
+                                if field in st.session_state:
+                                    del st.session_state[field]
+                                    import logging
+                                    logging.info(f"[contractInfo] Cleared {field} after type change from pogodba")
+                        
+                        # If switching away from "okvirni sporazum", clear framework-specific fields  
+                        if old_value == "okvirni sporazum" and selected_value != "okvirni sporazum":
+                            fields_to_clear = [
+                                f"{prefix}.frameworkAgreementType",
+                                f"{prefix}.frameworkDuration"
+                            ]
+                            for field in fields_to_clear:
+                                if field in st.session_state:
+                                    del st.session_state[field]
+                                    import logging
+                                    logging.info(f"[contractInfo] Cleared {field} after type change from okvirni sporazum")
+                    
+                    # Clear dependent fields when contractPeriodType changes
+                    if "contractPeriodType" in session_key:
+                        prefix = session_key.replace(".contractPeriodType", "")
+                        
+                        # If switching away from "z veljavnostjo", clear validity field
+                        if old_value == "z veljavnostjo" and selected_value != "z veljavnostjo":
+                            field_to_clear = f"{prefix}.contractValidity"
+                            if field_to_clear in st.session_state:
+                                del st.session_state[field_to_clear]
+                                import logging
+                                logging.info(f"[contractInfo] Cleared {field_to_clear} after contractPeriodType change")
+                        
+                        # If switching away from "za obdobje od-do", clear date fields
+                        if old_value == "za obdobje od-do" and selected_value != "za obdobje od-do":
+                            fields_to_clear = [
+                                f"{prefix}.contractDateFrom",
+                                f"{prefix}.contractDateTo"
+                            ]
+                            for field in fields_to_clear:
+                                if field in st.session_state:
+                                    del st.session_state[field]
+                                    import logging
+                                    logging.info(f"[contractInfo] Cleared {field} after contractPeriodType change")
                     
             elif "enum" in prop_details:
                 # Story 3.0.2: Add legal article references to procurement procedures

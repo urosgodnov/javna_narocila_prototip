@@ -26,7 +26,49 @@ def calculate_procurement_value(proc):
     if proc.get('form_data') and isinstance(proc['form_data'], dict):
         form_data = proc['form_data']
         
-        # Check if this procurement has lots
+        # Check for new lot structure first (lot_0, lot_1, etc.)
+        lot_mode = form_data.get('lot_mode', '')
+        num_lots = form_data.get('num_lots', 0)
+        
+        # Auto-detect num_lots if not set
+        if lot_mode == 'multiple' and num_lots == 0:
+            # Count lot_X fields to determine num_lots
+            lot_indices = set()
+            for key in form_data.keys():
+                if key.startswith('lot_') and '.' in key:
+                    lot_part = key.split('.')[0]
+                    if '_' in lot_part:
+                        idx = lot_part.split('_')[1]
+                        if idx.isdigit():
+                            lot_indices.add(int(idx))
+            num_lots = len(lot_indices)
+        
+        if lot_mode == 'multiple' and num_lots > 0:
+            # New structure: sum values from lot_X fields
+            total_value = 0
+            for i in range(num_lots):
+                # Try different possible field names for lot values
+                value_fields = [
+                    f'lot_{i}.orderType.estimatedValue',
+                    f'lot_{i}.priceInfo.estimatedValue',
+                    f'lot_{i}_orderType_estimatedValue',  # Old underscore format
+                    f'lot_{i}_priceInfo_estimatedValue'   # Old underscore format
+                ]
+                
+                for field in value_fields:
+                    if field in form_data:
+                        lot_value = form_data.get(field, 0)
+                        try:
+                            if isinstance(lot_value, str):
+                                lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
+                            total_value += lot_value
+                            break  # Use first found value field for this lot
+                        except (ValueError, AttributeError):
+                            continue
+            
+            return total_value if total_value > 0 else proc.get('vrednost', 0)
+        
+        # Old structure fallback - check if this procurement has lots
         has_lots = form_data.get('lotsInfo', {}).get('hasLots', False)
         
         if has_lots and 'lots' in form_data:
@@ -68,11 +110,11 @@ def render_dashboard():
         --border-color: #e2e8f0;
     }
     
-    /* Clean modern buttons - stronger gray for secondary buttons */
+    /* Clean modern buttons - matching input form gray for secondary buttons */
     .stButton > button[kind="secondary"] {
-        background-color: #64748b;
+        background: linear-gradient(135deg, #6c757d, #5a6268) !important;
         color: white !important;
-        border: 1px solid #64748b;
+        border: none !important;
         padding: 0.5rem 1.5rem;
         border-radius: 6px;
         font-weight: 500;
@@ -81,10 +123,9 @@ def render_dashboard():
     }
     
     .stButton > button[kind="secondary"]:hover {
-        background-color: #475569;
-        border-color: #475569;
+        background: linear-gradient(135deg, #5a6268, #495057) !important;
         transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 8px rgba(108,117,125,0.3) !important;
     }
     
     /* Primary button - light green for Novo naročilo */
@@ -231,6 +272,108 @@ def render_dashboard():
         animation: pulse 2s infinite;
     }
     </style>
+    
+    <script>
+    // Dynamic button styling based on text content - similar to input form
+    function styleButtons() {
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(button => {
+            const text = button.innerText.toLowerCase();
+            
+            // Apply styles based on button text
+            if (text.includes('odjava') || text.includes('logout')) {
+                button.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+                button.onmouseover = function() {
+                    this.style.background = 'linear-gradient(135deg, #c82333, #a71d2a)';
+                    this.style.boxShadow = '0 4px 8px rgba(220,53,69,0.3)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
+                    this.style.boxShadow = '';
+                };
+            } else if (text.includes('osveži') || text.includes('refresh')) {
+                button.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+                button.onmouseover = function() {
+                    this.style.background = 'linear-gradient(135deg, #0056b3, #004494)';
+                    this.style.boxShadow = '0 4px 8px rgba(0,123,255,0.3)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = 'linear-gradient(135deg, #007bff, #0056b3)';
+                    this.style.boxShadow = '';
+                };
+            } else if (text.includes('uvoz') || text.includes('import')) {
+                button.style.background = 'linear-gradient(135deg, #17a2b8, #20c997)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+                button.onmouseover = function() {
+                    this.style.background = 'linear-gradient(135deg, #138496, #17a085)';
+                    this.style.boxShadow = '0 4px 8px rgba(23,162,184,0.3)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = 'linear-gradient(135deg, #17a2b8, #20c997)';
+                    this.style.boxShadow = '';
+                };
+            } else if (text.includes('nastavitve') || text.includes('settings')) {
+                button.style.background = 'linear-gradient(135deg, #6c757d, #5a6268)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+                button.onmouseover = function() {
+                    this.style.background = 'linear-gradient(135deg, #5a6268, #495057)';
+                    this.style.boxShadow = '0 4px 8px rgba(108,117,125,0.3)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = 'linear-gradient(135deg, #6c757d, #5a6268)';
+                    this.style.boxShadow = '';
+                };
+            } else if (text.includes('uredi') || text.includes('edit')) {
+                button.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
+                button.style.border = 'none';
+                button.style.color = '#1e293b';
+                button.onmouseover = function() {
+                    this.style.background = 'linear-gradient(135deg, #f59e0b, #ea580c)';
+                    this.style.boxShadow = '0 4px 8px rgba(245,158,11,0.3)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = 'linear-gradient(135deg, #fbbf24, #f59e0b)';
+                    this.style.boxShadow = '';
+                };
+            } else if (text.includes('kopiraj') || text.includes('copy')) {
+                button.style.background = 'linear-gradient(135deg, #8b5cf6, #7c3aed)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+                button.onmouseover = function() {
+                    this.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
+                    this.style.boxShadow = '0 4px 8px rgba(139,92,246,0.3)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = 'linear-gradient(135deg, #8b5cf6, #7c3aed)';
+                    this.style.boxShadow = '';
+                };
+            } else if (text.includes('izbriši') || text.includes('delete')) {
+                button.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                button.style.border = 'none';
+                button.style.color = 'white';
+                button.onmouseover = function() {
+                    this.style.background = 'linear-gradient(135deg, #dc2626, #b91c1c)';
+                    this.style.boxShadow = '0 4px 8px rgba(239,68,68,0.3)';
+                };
+                button.onmouseout = function() {
+                    this.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                    this.style.boxShadow = '';
+                };
+            }
+        });
+    }
+    
+    // Run periodically and observe DOM changes
+    setInterval(styleButtons, 100);
+    const observer = new MutationObserver(styleButtons);
+    observer.observe(document.body, { childList: true, subtree: true });
+    </script>
     """, unsafe_allow_html=True)
     
     # Clean professional header with narrower logout button
@@ -764,12 +907,16 @@ def load_procurement_to_form(procurement_id):
         
         # Load all form data into session state
         def flatten_dict(d, parent_key='', sep='.'):
-            """Flatten nested dictionary into dot-notation keys."""
+            """Flatten nested dictionary into dot-notation keys, preserving lists."""
             items = []
             for k, v in d.items():
                 new_key = f"{parent_key}{sep}{k}" if parent_key else k
                 if isinstance(v, dict):
                     items.extend(flatten_dict(v, new_key, sep=sep).items())
+                elif isinstance(v, list):
+                    # Preserve lists as-is (don't flatten them)
+                    # This is important for arrays like customers, cofinancers, etc.
+                    items.append((new_key, v))
                 else:
                     items.append((new_key, v))
             return dict(items)
@@ -778,10 +925,17 @@ def load_procurement_to_form(procurement_id):
         flattened_data = flatten_dict(form_data)
         
         # Check if we have lots configuration
-        has_lots = flattened_data.get('lotsInfo.hasLots', False)
+        has_lots = flattened_data.get('lotsInfo.hasLots', False) or form_data.get('lot_mode') == 'multiple'
         
-        # Set lot mode based on has_lots
-        if not has_lots:
+        # Check for lot-specific fields to handle new lot structure
+        lot_mode = form_data.get('lot_mode', '')
+        num_lots = form_data.get('num_lots', 0)
+        
+        # Set lot mode based on has_lots or lot_mode
+        if lot_mode == 'multiple':
+            st.session_state.lot_mode = 'multiple'
+            st.session_state.num_lots = num_lots
+        elif not has_lots:
             st.session_state.lot_mode = 'none'
         else:
             lots = flattened_data.get('lots', [])
@@ -792,14 +946,42 @@ def load_procurement_to_form(procurement_id):
             else:
                 st.session_state.lot_mode = 'none'
         
-        logging.info(f"Has lots: {has_lots}, lot_mode: {st.session_state.lot_mode}")
+        logging.info(f"Has lots: {has_lots}, lot_mode: {st.session_state.get('lot_mode')}, num_lots: {num_lots}")
         logging.info(f"Loading {len(flattened_data)} keys into session state")
-        logging.info(f"Sample keys: {list(flattened_data.keys())[:5]}")
+        logging.info(f"Sample keys: {list(flattened_data.keys())[:10]}")
+        
+        # Debug: Check for customer/client data
+        customer_keys = [k for k in flattened_data.keys() if 'customer' in k.lower() or 'client' in k.lower()]
+        logging.info(f"Customer/Client-related keys found: {customer_keys}")
+        for ck in customer_keys:
+            logging.info(f"  {ck} = {flattened_data[ck]}")
+        
+        # Specifically check clientInfo.clients (will be handled in main loop below)
+        if 'clientInfo.clients' in flattened_data:
+            logging.info(f"[load_procurement_to_form] Found clientInfo.clients with {len(flattened_data['clientInfo.clients'])} items")
         
         for key, value in flattened_data.items():
             # Skip special keys that shouldn't have prefix
             special_keys = ['lots', 'lot_names', 'lot_mode', 'current_lot_index', 
                           'lotsInfo.hasLots', 'current_step', 'completed_steps']
+            
+            # Special handling for clientInfo.clients - always preserve it as-is
+            if key == 'clientInfo.clients':
+                st.session_state[key] = value
+                logging.info(f"[load_procurement_to_form] Preserved {key} = {value}")
+                # Also set with general prefix if needed
+                if not has_lots:
+                    st.session_state[f'general.{key}'] = value
+                    
+                # CRITICAL FIX: Also set individual fields for each client
+                if isinstance(value, list):
+                    for i, client in enumerate(value):
+                        if isinstance(client, dict):
+                            for field_name, field_value in client.items():
+                                individual_key = f'clientInfo.clients.{i}.{field_name}'
+                                st.session_state[individual_key] = field_value
+                                logging.info(f"[load_procurement_to_form] Set individual field {individual_key} = {field_value}")
+                continue
             
             if not has_lots and not key.startswith('lot_') and key not in special_keys and not key.startswith('_'):
                 # In general mode, add "general." prefix for non-special keys

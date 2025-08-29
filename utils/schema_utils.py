@@ -44,15 +44,92 @@ def get_form_data_from_session():
     Reconstructs the nested form data dictionary from Streamlit's flat session_state.
     Handles both regular fields and lot-specific fields.
     """
+    import logging
+    
     form_data = {}
     schema_properties = st.session_state.get('schema', {}).get('properties', {})
     if not schema_properties:
         return {}
+    
+    # Debug: Check if clients data exists in session state
+    if 'clientInfo.clients' in st.session_state:
+        logging.info(f"[get_form_data_from_session] clientInfo.clients found: {st.session_state['clientInfo.clients']}")
+    else:
+        logging.info("[get_form_data_from_session] clientInfo.clients NOT in session state")
+    
+    # Debug: Check for any client-related keys
+    client_keys = [k for k in st.session_state.keys() if 'client' in k.lower()]
+    if client_keys:
+        logging.info(f"[get_form_data_from_session] All client-related keys: {client_keys}")
+        for key in client_keys:
+            value = st.session_state[key]
+            if isinstance(value, list):
+                logging.info(f"  {key} = list with {len(value)} items")
+                if value:
+                    logging.info(f"    First item: {value[0]}")
+            else:
+                logging.info(f"  {key} = {value}")
 
+    # First, reconstruct array objects from nested keys (e.g., clientInfo.clients.0.name)
+    array_data = {}  # Track array items
+    
+    for key in st.session_state.keys():
+        # Pattern: parentKey.arrayName.index.field (e.g., clientInfo.clients.0.name)
+        if '.' in key and any(part.isdigit() for part in key.split('.')):
+            parts = key.split('.')
+            # Find array index
+            for i, part in enumerate(parts):
+                if part.isdigit():
+                    # This is an array element
+                    array_key = '.'.join(parts[:i])  # e.g., clientInfo.clients
+                    index = int(part)
+                    field_path = '.'.join(parts[i+1:]) if i+1 < len(parts) else None
+                    
+                    if array_key not in array_data:
+                        array_data[array_key] = {}
+                    if index not in array_data[array_key]:
+                        array_data[array_key][index] = {}
+                    
+                    if field_path:
+                        # Navigate nested structure
+                        d = array_data[array_key][index]
+                        field_parts = field_path.split('.')
+                        for fp in field_parts[:-1]:
+                            d = d.setdefault(fp, {})
+                        d[field_parts[-1]] = st.session_state[key]
+                    else:
+                        # Direct value
+                        array_data[array_key][index] = st.session_state[key]
+                    break
+    
+    # Convert array_data to proper arrays
+    for array_key, indices_dict in array_data.items():
+        # Sort by index and create array
+        max_index = max(indices_dict.keys()) if indices_dict else -1
+        array_list = []
+        for i in range(max_index + 1):
+            if i in indices_dict:
+                array_list.append(indices_dict[i])
+            else:
+                array_list.append({})  # Fill gaps with empty objects
+        
+        # Set the array in form_data
+        parts = array_key.split('.')
+        d = form_data
+        for part in parts[:-1]:
+            d = d.setdefault(part, {})
+        d[parts[-1]] = array_list
+        
+        logging.info(f"[get_form_data_from_session] Reconstructed array {array_key} with {len(array_list)} items")
+    
     # Process regular fields
     for key, value in st.session_state.items():
         # Skip file info keys - they contain binary data that can't be serialized
         if '_file_info' in key:
+            continue
+        
+        # Skip array element keys (already processed above)
+        if '.' in key and any(part.isdigit() for part in key.split('.')):
             continue
             
         top_level_key = key.split('.')[0]
@@ -69,7 +146,9 @@ def get_form_data_from_session():
             else:
                 # Only set the final value if we successfully navigated the structure
                 if isinstance(d, dict):
-                    d[parts[-1]] = value
+                    # Don't overwrite arrays we just reconstructed
+                    if parts[-1] not in d or not isinstance(d[parts[-1]], list):
+                        d[parts[-1]] = value
         
         # Handle general lot fields (general.fieldname)
         elif top_level_key == 'general':
@@ -151,6 +230,25 @@ def get_form_data_from_session():
         if 'lotsInfo' not in form_data:
             form_data['lotsInfo'] = {}
         form_data['lotsInfo']['hasLots'] = st.session_state['lotsInfo.hasLots']
+    
+    # Save lot_mode and num_lots for proper value calculation
+    if 'lot_mode' in st.session_state:
+        form_data['lot_mode'] = st.session_state['lot_mode']
+    
+    # Calculate and save num_lots
+    if lot_mode == 'multiple':
+        # Count actual number of lots
+        lot_indices = set()
+        for key in st.session_state.keys():
+            if key.startswith('lot_') and '.' in key:
+                lot_part = key.split('.')[0]
+                if '_' in lot_part:
+                    idx = lot_part.split('_')[1]
+                    if idx.isdigit():
+                        lot_indices.add(int(idx))
+        form_data['num_lots'] = len(lot_indices)
+    else:
+        form_data['num_lots'] = 0
     
     return form_data
 

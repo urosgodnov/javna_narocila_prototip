@@ -152,7 +152,19 @@ def get_lot_progress_info():
         current_step_keys = st.session_state.get("current_step_keys", [])
         context = get_current_lot_context(current_step_keys)
         
-        current_lot_index = context.get('lot_index') or 0  # Handle None properly
+        # Check if we're actually on a lot-specific step
+        is_lot_specific = context.get('mode') == 'lots' and context.get('lot_index') is not None
+        
+        if not is_lot_specific:
+            # We have lots but we're on general steps (base steps)
+            return {
+                'mode': 'general',
+                'total_lots': len(lots),
+                'current_lot': 1,
+                'lot_name': 'Splošni podatki'  # General data that applies to all lots
+            }
+        
+        current_lot_index = context.get('lot_index') or 0
         
         return {
             'mode': 'lots',

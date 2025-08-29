@@ -452,7 +452,7 @@ def _set_navigation_flags():
             navigation_key = f"{key}_navigation_flag"
             st.session_state[navigation_key] = True
 
-def save_form_draft(include_files=True, show_success=True, location="navigation", is_confirmation=False):
+def save_form_draft(include_files=True, show_success=True, location="navigation", is_confirmation=False, stay_in_form=False):
     """Unified function to save current form state as a draft.
     
     Args:
@@ -460,6 +460,7 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
         show_success: Whether to show success message (default: True)
         location: Where the save was triggered from ("navigation" or "sidebar")
         is_confirmation: Whether this save is from the confirmation step (default: False)
+        stay_in_form: Whether to stay in form after save (default: False)
     
     Returns:
         draft_id if successful, None otherwise
@@ -482,38 +483,39 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
             'save_location': location
         }
         
-        # Check if we're already working on a draft
-        if 'current_draft_id' in st.session_state and st.session_state.current_draft_id:
-            # Check if we're in edit mode for an existing procurement
-            if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
-                # Update the existing procurement, not the draft
-                draft_id = st.session_state.edit_record_id
-                success = database.update_procurement(draft_id, form_data)
-                if not success:
-                    draft_id = None
-                else:
-                    import logging
-                    logging.info(f"Updated existing procurement ID: {draft_id}")
+        # Simplified: Always work with procurements, no separate drafts
+        if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
+            # Update existing procurement
+            procurement_id = st.session_state.edit_record_id
+            success = database.update_procurement(procurement_id, form_data)
+            if success:
+                import logging
+                logging.info(f"Updated procurement ID: {procurement_id}")
+                draft_id = procurement_id
             else:
-                # Update existing draft using the new update_draft function
-                draft_id = st.session_state.current_draft_id
-                success = database.update_draft(draft_id, form_data)
-                if success:
-                    import logging
-                    logging.info(f"Updated existing draft ID: {draft_id}")
-                else:
-                    # If update fails (draft was deleted?), create new one
-                    import logging
-                    logging.warning(f"Failed to update draft {draft_id}, creating new one")
-                    draft_id = database.save_draft(form_data)
-                    st.session_state.current_draft_id = draft_id
-                    logging.info(f"Created new draft ID: {draft_id}")
+                draft_id = None
+        elif 'current_procurement_id' in st.session_state and st.session_state.current_procurement_id:
+            # Update existing procurement being worked on
+            procurement_id = st.session_state.current_procurement_id
+            success = database.update_procurement(procurement_id, form_data)
+            if success:
+                import logging
+                logging.info(f"Updated procurement ID: {procurement_id}")
+                draft_id = procurement_id
+            else:
+                # If update fails, create new one
+                import logging
+                logging.warning(f"Failed to update procurement {procurement_id}, creating new one")
+                draft_id = database.create_procurement(form_data)
+                st.session_state.current_procurement_id = draft_id
+                logging.info(f"Created new procurement ID: {draft_id}")
         else:
-            # Create new draft
-            draft_id = database.save_draft(form_data)
-            st.session_state.current_draft_id = draft_id
+            # Create new procurement with "Delno izpolnjeno" status
+            form_data['status'] = form_data.get('status', 'Delno izpolnjeno')
+            draft_id = database.create_procurement(form_data)
+            st.session_state.current_procurement_id = draft_id
             import logging
-            logging.info(f"Created initial draft ID: {draft_id}")
+            logging.info(f"Created new procurement ID: {draft_id}")
         
         if draft_id:
             
@@ -629,7 +631,8 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
 def save_form_progress():
     """Save current form state to persistent storage without validation.
     This is a wrapper for backward compatibility."""
-    return save_form_draft(include_files=True, show_success=True, location="navigation")
+    # TODO(human): Modify this function to save but stay in form
+    return save_form_draft(include_files=True, show_success=True, location="navigation", stay_in_form=True)
 
 def render_confirmation_step():
     """Render the final confirmation step."""
@@ -765,11 +768,11 @@ def render_quick_navigation():
     
     if accessible_steps and len(accessible_steps) > 1:
         with st.sidebar:
-            st.markdown("### 🧭 Hitra navigacija")
+            st.markdown("##### Hitra navigacija")
             if is_edit_mode:
-                st.info("Pri urejanju lahko skočite na katerikoli korak")
+                st.caption("Pri urejanju lahko skočite na katerikoli korak")
             else:
-                st.info("Skočite na že izpolnjene korake")
+                st.caption("Skočite na že izpolnjene korake")
             
             # Show overall progress
             total_steps = len(steps)
@@ -838,13 +841,23 @@ def get_step_names(steps):
                     lot_name = f"Sklop {lot_index + 1}"
                 step_name = lot_name
             elif field_name.startswith("lot_"):
-                # Extract the actual field name from lot_0_orderType
-                parts = field_name.split('_', 2)
-                if len(parts) >= 3:
-                    base_field = parts[2]
-                    step_name = name_map.get(base_field, f"Korak {i+1}")
+                # Extract the actual field name from lot_0.orderType (using dot notation)
+                if '.' in field_name:
+                    # Split by dot to get lot_0 and orderType
+                    parts = field_name.split('.')
+                    if len(parts) >= 2:
+                        base_field = parts[1]
+                        step_name = name_map.get(base_field, f"Korak {i+1}")
+                    else:
+                        step_name = f"Korak {i+1}"
                 else:
-                    step_name = f"Korak {i+1}"
+                    # Fallback for underscore notation (backward compatibility)
+                    parts = field_name.split('_', 2)
+                    if len(parts) >= 3:
+                        base_field = parts[2]
+                        step_name = name_map.get(base_field, f"Korak {i+1}")
+                    else:
+                        step_name = f"Korak {i+1}"
             else:
                 step_name = name_map.get(field_name, f"Korak {i+1}")
             
@@ -1322,8 +1335,9 @@ def render_main_form():
                 print(f"⚠️ Modern form renderer not available: {e}")
     
     database.init_db()
-    draft_metadata = database.get_all_draft_metadata()
-    draft_options = {f"{ts} (ID: {id})": id for id, ts in draft_metadata}
+    # Draft metadata removed - no longer needed
+    # draft_metadata = database.get_all_draft_metadata()
+    draft_options = {}  # Kept for backward compatibility, will be removed
 
     # Add custom CSS for better styling
     add_custom_css()
@@ -1355,45 +1369,38 @@ def render_main_form():
                 st.rerun()
     
     with col_title:
+        # Simplified header - show project name if available
         if st.session_state.edit_mode:
-            st.title(f"✏️ Urejanje naročila ID: {st.session_state.edit_record_id}")
+            # Try to get project name from session state
+            project_name = st.session_state.get('projectInfo.projectName', 
+                          st.session_state.get('general.projectInfo.projectName', 
+                          f"Naročilo {st.session_state.edit_record_id}"))
+            st.markdown(f"#### Javno naročilo: {project_name}")
         else:
-            st.title("➕ Novo javno naročilo")
+            st.markdown("#### Novo javno naročilo")
 
-    col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns([5, 1])
 
     with col1:
         # Get dynamic form steps based on lots
         dynamic_form_steps = get_dynamic_form_steps(st.session_state)
         
-        # Enhanced header with step information
+        # Calculate progress
         current_step_num = st.session_state.current_step + 1
         total_steps = len(dynamic_form_steps)
         
-        # Get lot progress info for enhanced header
+        # Get lot progress info
         lot_progress = get_lot_progress_info()
         
-        # Enhanced header with lot context
-        header_content = f"<h1>{st.session_state.schema.get('title', 'Obrazec')}</h1>"
+        # Minimal context header - only show current section, no step numbers
         if lot_progress['mode'] == 'lots':
-            header_content += f"<h3>📦 {lot_progress['lot_name']} ({lot_progress['current_lot']}/{lot_progress['total_lots']})</h3>"
+            st.markdown(f"##### 📦 {lot_progress['lot_name']}")
         elif lot_progress['mode'] == 'general':
-            header_content += f"<h3>📄 {lot_progress['lot_name']}</h3>"
+            st.markdown(f"##### 📄 {lot_progress['lot_name']}")
         
-        st.markdown(f"""
-        <div class="form-header">
-            {header_content}
-            <div class="step-indicator">
-                {format_step_indicator(st.session_state.current_step, total_steps)}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Enhanced Progress Bar with step labels
-        # Ensure progress percentage is between 0 and 1
+        # Thin progress bar only - no text duplication
         progress_percentage = min(1.0, current_step_num / total_steps)
-        # Show accurate step count even if it exceeds expected total
-        st.progress(progress_percentage, text=f"{get_text('progress')}: {current_step_num}/{max(total_steps, current_step_num)}")
+        st.progress(progress_percentage)
         
         # Lot visibility header (Rule of Three: Location 1)
         render_lot_header()
@@ -1513,76 +1520,6 @@ def render_main_form():
                     
                     current_step_properties[key] = prop_copy
         
-        # Debug section to troubleshoot contractInfo visibility
-        if st.checkbox("🐛 Show Debug Info", key="debug_toggle"):
-            st.write("**Debug Information:**")
-            st.write(f"**Current Step:** {st.session_state.current_step + 1} of {len(dynamic_form_steps)}")
-            st.write(f"**Step Keys:** {current_step_keys}")
-            st.write(f"**Current Step Properties Keys:** {list(current_step_properties.keys())}")
-            
-            # Check if we're on priceInfo step for debugging validation
-            price_info_keys = [k for k in current_step_keys if 'priceInfo' in k]
-            if price_info_keys:
-                st.checkbox("🔍 Debug price validation", key="debug_price_validation")
-                if st.session_state.get('debug_price_validation'):
-                    st.write(f"✓ This is a priceInfo step: {price_info_keys}")
-                    st.write("**Session state keys for price clause:**")
-                    for key in st.session_state:
-                        if 'priceInfo' in key and 'priceClause' in key:
-                            st.write(f"  - {key}: {st.session_state[key]}")
-                    st.write(f"**Current lot index:** {st.session_state.get('current_lot_index', 'Not set')}")
-            
-            # Check if we're on orderType or lot_*_orderType step
-            order_type_keys = [k for k in current_step_keys if 'orderType' in k]
-            if order_type_keys:
-                st.success(f"✓ This is an orderType step: {order_type_keys}")
-                for order_key in order_type_keys:
-                    if order_key in current_step_properties:
-                        order_props = current_step_properties[order_key]
-                        st.write(f"**{order_key} structure:**")
-                        st.write(f"  - Has $ref: {'$ref' in order_props}")
-                        st.write(f"  - Has type: {'type' in order_props}")
-                        if 'type' in order_props:
-                            st.write(f"  - Type value: {order_props['type']}")
-                        st.write(f"  - Has properties: {'properties' in order_props}")
-                        if 'properties' in order_props:
-                            prop_count = len(order_props['properties'])
-                            st.write(f"  - Number of properties: {prop_count}")
-                            if prop_count > 0:
-                                st.write("  - First 5 properties:")
-                                for prop_name in list(order_props['properties'].keys())[:5]:
-                                    st.write(f"    • {prop_name}")
-                        else:
-                            st.error(f"✗ {order_key} has no properties!")
-                        
-                        # Show full structure for debugging
-                        with st.expander("Full orderType structure"):
-                            st.json({k: v for k, v in order_props.items() if k != 'properties'})
-                    else:
-                        st.error(f"✗ {order_key} NOT in current_step_properties!")
-            
-            # Check if we're on contractInfo step
-            if 'contractInfo' in current_step_keys:
-                st.success("✓ This is the contractInfo step")
-                if 'contractInfo' in current_step_properties:
-                    contract_props = current_step_properties['contractInfo'].get('properties', {})
-                    st.write(f"✓ contractInfo loaded with {len(contract_props)} properties")
-                    
-                    # Show what properties are in contractInfo
-                    st.write("**contractInfo properties:**")
-                    for prop_name in list(contract_props.keys())[:5]:
-                        st.write(f"  - {prop_name}")
-                    if len(contract_props) > 5:
-                        st.write(f"  ... and {len(contract_props) - 5} more")
-                else:
-                    st.error("✗ contractInfo NOT in current_step_properties!")
-            
-            # Show what's in session state for contractInfo
-            contract_keys = [k for k in st.session_state.keys() if 'contract' in k.lower()]
-            if contract_keys:
-                st.write("**Contract-related session state keys:**")
-                for key in contract_keys:
-                    st.write(f"- `{key}`: {st.session_state[key]}")
 
         # Render modern progress indicator if available
         if use_modern_form:
@@ -1763,19 +1700,17 @@ def render_main_form():
                     st.session_state.current_page = 'dashboard'
                     st.rerun()
 
-    with col2:
-        render_drafts_sidebar(draft_options)
+    # Drafts sidebar removed - no longer needed
+    # with col2:
+    #     render_drafts_sidebar(draft_options)
 
 def add_custom_css():
-    """Add premium custom CSS for professional government application styling."""
+    """Add minimalistic CSS for clean, professional form styling."""
     st.markdown("""
     <style>
-    /* Import Inter font for modern, professional typography */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-    
-    /* === CSS VARIABLES - DESIGN SYSTEM === */
+    /* === CSS VARIABLES - MINIMAL DESIGN SYSTEM === */
     :root {
-        /* Primary Colors - Government Professional */
+        /* Primary Colors - Subtle Blues */
         --primary-900: #1e3a8a;
         --primary-700: #1d4ed8;
         --primary-500: #3b82f6;
@@ -1791,232 +1726,160 @@ def add_custom_css():
         --gray-50: #f9fafb;
         --white: #ffffff;
         
-        /* Semantic Colors */
-        --success: #059669;
-        --success-light: #d1fae5;
-        --warning: #d97706;
-        --warning-light: #fef3c7;
-        --error: #dc2626;
-        --error-light: #fee2e2;
-        --info: #0ea5e9;
-        --info-light: #e0f2fe;
+        /* Semantic Colors for Buttons */
+        --success: #28a745;
+        --success-hover: #218838;
+        --warning: #ffc107;
+        --warning-hover: #e0a800;
+        --error: #dc3545;
+        --error-hover: #c82333;
+        --info: #007bff;
+        --info-hover: #0056b3;
         
-        /* Shadows */
+        /* Shadows - Subtle */
         --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-        --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 2px 4px 0 rgba(0, 0, 0, 0.06);
         
         /* Border radius */
-        --radius-sm: 0.375rem;
-        --radius-md: 0.5rem;
-        --radius-lg: 0.75rem;
-        --radius-xl: 1rem;
+        --radius-sm: 4px;
+        --radius-md: 6px;
     }
     
-    /* === GLOBAL TYPOGRAPHY === */
+    /* === GLOBAL TYPOGRAPHY - SMALLER FONTS === */
     html, body, [class*="css"] {
-        font-family: 'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        color: var(--gray-900);
-        line-height: 1.6;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        color: var(--gray-700);
+        line-height: 1.5;
+        font-size: 14px !important;
     }
     
-    /* Typography Hierarchy */
+    /* Smaller Typography Hierarchy */
     h1 { 
-        font-size: 2.5rem; 
-        font-weight: 700; 
-        line-height: 1.2; 
+        font-size: 1.5rem !important; 
+        font-weight: 500 !important; 
         color: var(--gray-900);
-        margin-bottom: 1rem;
-    }
-    h2 { 
-        font-size: 2rem; 
-        font-weight: 600; 
-        line-height: 1.3; 
-        color: var(--primary-900);
         margin-bottom: 0.75rem;
     }
-    h3 { 
-        font-size: 1.5rem; 
-        font-weight: 600; 
-        line-height: 1.4; 
-        color: var(--primary-700);
+    h2 { 
+        font-size: 1.25rem !important; 
+        font-weight: 500 !important; 
+        color: var(--gray-800);
         margin-bottom: 0.5rem;
+    }
+    h3 { 
+        font-size: 1.1rem !important; 
+        font-weight: 500 !important; 
+        color: var(--gray-700);
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Smaller labels */
+    label {
+        font-size: 0.875rem !important;
+        font-weight: 400 !important;
+        color: var(--gray-600) !important;
     }
     
     /* === MAIN LAYOUT === */
     .main .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
+        padding-top: 1rem;
+        padding-bottom: 1rem;
         max-width: 1200px;
     }
     
-    /* === FORM HEADER === */
+    /* === FORM HEADER - MINIMALISTIC === */
     .form-header {
-        background: linear-gradient(135deg, var(--primary-900) 0%, var(--primary-700) 100%);
-        color: white;
-        padding: 2rem;
-        border-radius: var(--radius-lg);
-        margin-bottom: 2rem;
-        box-shadow: var(--shadow-xl);
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .form-header::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%),
-                    linear-gradient(-45deg, rgba(255,255,255,0.1) 25%, transparent 25%),
-                    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.1) 75%),
-                    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.1) 75%);
-        background-size: 20px 20px;
-        background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-        opacity: 0.3;
-        pointer-events: none;
+        background: var(--gray-50);
+        color: var(--gray-900);
+        padding: 1rem 1.5rem;
+        border-radius: var(--radius-md);
+        margin-bottom: 1rem;
+        border-left: 4px solid var(--info);
+        box-shadow: var(--shadow-sm);
     }
     
     .form-header h1 {
         margin: 0;
-        font-size: 2.25rem;
-        font-weight: 700;
-        position: relative;
-        z-index: 1;
+        font-size: 1.5rem !important;
+        font-weight: 500;
+        color: var(--gray-900);
     }
     
     .form-header h3 {
-        margin: 0.5rem 0 0 0;
-        font-size: 1.125rem;
-        font-weight: 500;
-        opacity: 0.9;
-        position: relative;
-        z-index: 1;
-        color: var(--primary-50);
+        margin: 0.25rem 0 0 0;
+        font-size: 1rem !important;
+        font-weight: 400;
+        color: var(--gray-600);
     }
     
     .step-indicator {
-        font-size: 0.875rem;
-        font-weight: 500;
-        opacity: 0.9;
-        margin-top: 0.75rem;
-        position: relative;
-        z-index: 1;
-        background: rgba(255,255,255,0.2);
-        padding: 0.5rem 1rem;
-        border-radius: var(--radius-md);
+        font-size: 0.75rem;
+        font-weight: 400;
+        color: var(--gray-600);
+        margin-top: 0.5rem;
+        background: var(--white);
+        padding: 0.25rem 0.75rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--gray-200);
         display: inline-block;
     }
     
-    /* === PROGRESS BAR === */
+    /* === PROGRESS BAR - SUBTLE === */
     .stProgress .st-bo {
-        background-color: var(--primary-100) !important;
-        height: 1rem !important;
-        border-radius: var(--radius-md) !important;
-        overflow: hidden;
+        background-color: var(--gray-100) !important;
+        height: 0.5rem !important;
+        border-radius: var(--radius-sm) !important;
     }
     
     .stProgress .st-bp {
-        background: linear-gradient(90deg, var(--primary-500), var(--primary-700)) !important;
-        border-radius: var(--radius-md) !important;
-        position: relative;
+        background: var(--info) !important;
+        border-radius: var(--radius-sm) !important;
     }
     
-    .stProgress .st-bp::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-        animation: shimmer 2s infinite;
-    }
-    
-    @keyframes shimmer {
-        0% { transform: translateX(-100%); }
-        100% { transform: translateX(100%); }
-    }
-    
-    /* === BREADCRUMBS === */
+    /* === BREADCRUMBS - MINIMALISTIC === */
     .step-breadcrumbs {
         display: flex;
         justify-content: center;
-        margin: 1.5rem 0 2rem 0;
+        margin: 1rem 0;
         flex-wrap: wrap;
-        gap: 0.5rem;
+        gap: 0.25rem;
     }
     
     .breadcrumb-item {
-        padding: 0.625rem 1.25rem;
-        border-radius: var(--radius-lg);
-        font-size: 0.875rem;
-        font-weight: 500;
-        transition: all 0.2s ease;
-        border: 2px solid transparent;
-        position: relative;
-        overflow: hidden;
+        padding: 0.375rem 0.75rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.75rem;
+        font-weight: 400;
+        transition: all 0.15s ease;
+        border: 1px solid var(--gray-200);
     }
     
     .breadcrumb-item.completed {
-        background: var(--success-light);
+        background: #e8f5e9;
         color: var(--success);
         border-color: var(--success);
-        box-shadow: var(--shadow-sm);
     }
     
     .breadcrumb-item.current {
-        background: var(--primary-700);
+        background: var(--info);
         color: white;
-        border-color: var(--primary-700);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
-    }
-    
-    .breadcrumb-item.current::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(45deg, rgba(255,255,255,0.2), transparent);
+        border-color: var(--info);
     }
     
     .breadcrumb-item.pending {
-        background: var(--gray-100);
-        color: var(--gray-500);
-        border-color: var(--gray-300);
+        background: var(--gray-50);
+        color: var(--gray-400);
+        border-color: var(--gray-200);
     }
     
-    .breadcrumb-item:hover {
-        transform: translateY(-1px);
-        box-shadow: var(--shadow-md);
-    }
-    
-    /* === FORM CONTENT === */
+    /* === FORM CONTENT - CLEAN === */
     .form-content {
         background: white;
-        padding: 2.5rem;
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-lg);
+        padding: 1.5rem;
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-sm);
         border: 1px solid var(--gray-200);
-        margin-bottom: 2rem;
-        position: relative;
-    }
-    
-    .form-content::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
-        background: linear-gradient(90deg, var(--primary-500), var(--primary-700));
-        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+        margin-bottom: 1rem;
     }
     
     /* === NAVIGATION BUTTONS === */
@@ -2024,68 +1887,138 @@ def add_custom_css():
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1.5rem 0;
-        margin-top: 2rem;
-        border-top: 1px solid var(--gray-200);
+        padding: 1rem 0;
+        margin-top: 1rem;
+        border-top: 1px solid var(--gray-100);
     }
     
-    /* === STREAMLIT COMPONENT OVERRIDES === */
+    /* === COLORFUL BUTTON STYLES === */
     
-    /* Buttons */
-    .stButton button {
-        background: linear-gradient(135deg, var(--primary-700), var(--primary-500)) !important;
+    /* Force button text color for specific content */
+    button p {
+        color: inherit !important;
+    }
+    
+    /* Primary buttons - Blue (Streamlit's primary type) */
+    button[kind="primary"],
+    div[data-testid="baseButton-primary"] button {
+        background: linear-gradient(135deg, #007bff, #0069d9) !important;
         border: none !important;
-        border-radius: var(--radius-md) !important;
-        font-weight: 600 !important;
-        padding: 0.75rem 2rem !important;
-        font-size: 1rem !important;
-        transition: all 0.2s ease !important;
-        box-shadow: var(--shadow-sm) !important;
         color: white !important;
-        text-transform: none !important;
+        font-weight: 500 !important;
+        padding: 0.5rem 1.25rem !important;
+        font-size: 0.875rem !important;
+        border-radius: 6px !important;
     }
     
-    .stButton button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: var(--shadow-lg) !important;
-        background: linear-gradient(135deg, var(--primary-900), var(--primary-700)) !important;
+    button[kind="primary"]:hover,
+    div[data-testid="baseButton-primary"] button:hover {
+        background: linear-gradient(135deg, #0069d9, #0056b3) !important;
+        box-shadow: 0 4px 8px rgba(0,123,255,0.3) !important;
     }
     
-    .stButton button:active {
-        transform: translateY(0) !important;
-        box-shadow: var(--shadow-sm) !important;
+    /* Secondary buttons - Gray (Streamlit's secondary type) */
+    button[kind="secondary"],
+    div[data-testid="baseButton-secondary"] button {
+        background: linear-gradient(135deg, #6c757d, #5a6268) !important;
+        border: none !important;
+        color: white !important;
+        font-weight: 500 !important;
+        padding: 0.5rem 1.25rem !important;
+        font-size: 0.875rem !important;
+        border-radius: 6px !important;
     }
     
-    /* Secondary buttons */
-    .stButton button[kind="secondary"] {
+    button[kind="secondary"]:hover,
+    div[data-testid="baseButton-secondary"] button:hover {
+        background: linear-gradient(135deg, #5a6268, #495057) !important;
+        box-shadow: 0 4px 8px rgba(108,117,125,0.3) !important;
+    }
+    
+    /* Default buttons (no type specified) */
+    button:not([kind]):not([data-testid*="baseButton"]) {
         background: white !important;
-        color: var(--primary-700) !important;
-        border: 2px solid var(--primary-700) !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+        padding: 0.5rem 1.25rem !important;
+        font-size: 0.875rem !important;
+        color: #495057 !important;
     }
     
-    .stButton button[kind="secondary"]:hover {
-        background: var(--primary-50) !important;
-        border-color: var(--primary-900) !important;
-        color: var(--primary-900) !important;
+    /* Button colors by class - will be added by JavaScript */
+    .btn-save {
+        background: linear-gradient(135deg, #28a745, #20c997) !important;
+        border: none !important;
+        color: white !important;
     }
     
-    /* Form Fields */
+    .btn-save:hover {
+        background: linear-gradient(135deg, #218838, #17a085) !important;
+        box-shadow: 0 4px 8px rgba(40,167,69,0.3) !important;
+    }
+    
+    .btn-next {
+        background: linear-gradient(135deg, #007bff, #0069d9) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-next:hover {
+        background: linear-gradient(135deg, #0069d9, #0056b3) !important;
+        box-shadow: 0 4px 8px rgba(0,123,255,0.3) !important;
+    }
+    
+    .btn-back {
+        background: linear-gradient(135deg, #6c757d, #5a6268) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-back:hover {
+        background: linear-gradient(135deg, #5a6268, #495057) !important;
+        box-shadow: 0 4px 8px rgba(108,117,125,0.3) !important;
+    }
+    
+    .btn-confirm {
+        background: linear-gradient(135deg, #17a2b8, #20c997) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-confirm:hover {
+        background: linear-gradient(135deg, #138496, #17a085) !important;
+        box-shadow: 0 4px 8px rgba(23,162,184,0.3) !important;
+    }
+    
+    .btn-cancel {
+        background: linear-gradient(135deg, #dc3545, #c82333) !important;
+        border: none !important;
+        color: white !important;
+    }
+    
+    .btn-cancel:hover {
+        background: linear-gradient(135deg, #c82333, #a71d2a) !important;
+        box-shadow: 0 4px 8px rgba(220,53,69,0.3) !important;
+    }
+    
+    /* Form Fields - Subtle */
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea,
     .stNumberInput > div > div > input {
-        border: 2px solid var(--gray-300) !important;
-        border-radius: var(--radius-md) !important;
-        padding: 0.75rem 1rem !important;
-        font-size: 1rem !important;
-        transition: all 0.2s ease !important;
+        border: 1px solid var(--gray-300) !important;
+        border-radius: var(--radius-sm) !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.875rem !important;
+        transition: all 0.15s ease !important;
         background: white !important;
     }
     
     .stTextInput > div > div > input:focus,
     .stTextArea > div > div > textarea:focus,
     .stNumberInput > div > div > input:focus {
-        border-color: var(--primary-500) !important;
-        box-shadow: 0 0 0 3px var(--primary-100) !important;
+        border-color: var(--info) !important;
+        box-shadow: 0 0 0 2px rgba(0,123,255,0.1) !important;
         outline: none !important;
     }
     
@@ -2094,16 +2027,17 @@ def add_custom_css():
         resize: vertical !important;
     }
     
-    /* Select boxes */
+    /* Select boxes - Subtle */
     .stSelectbox > div > div {
-        border: 2px solid var(--gray-300) !important;
-        border-radius: var(--radius-md) !important;
-        transition: all 0.2s ease !important;
+        border: 1px solid var(--gray-300) !important;
+        border-radius: var(--radius-sm) !important;
+        transition: all 0.15s ease !important;
+        font-size: 0.875rem !important;
     }
     
     .stSelectbox > div > div:focus-within {
-        border-color: var(--primary-500) !important;
-        box-shadow: 0 0 0 3px var(--primary-100) !important;
+        border-color: var(--info) !important;
+        box-shadow: 0 0 0 2px rgba(0,123,255,0.1) !important;
     }
     
     /* Checkboxes */
@@ -2132,22 +2066,21 @@ def add_custom_css():
         background: var(--primary-50) !important;
     }
     
-    /* === SECTION HEADERS === */
+    /* === SECTION HEADERS - SMALLER === */
     [data-testid="stMarkdownContainer"] h2 {
-        color: var(--primary-900) !important;
-        font-weight: 600 !important;
-        font-size: 1.5rem !important;
-        margin: 2rem 0 1rem 0 !important;
-        padding-bottom: 0.5rem !important;
-        border-bottom: 2px solid var(--primary-100) !important;
-        position: relative;
+        color: var(--gray-700) !important;
+        font-weight: 500 !important;
+        font-size: 1.1rem !important;
+        margin: 1rem 0 0.5rem 0 !important;
+        padding-bottom: 0.25rem !important;
+        border-bottom: 1px solid var(--gray-200) !important;
     }
     
     [data-testid="stMarkdownContainer"] h3 {
-        color: var(--primary-700) !important;
+        color: var(--gray-600) !important;
         font-weight: 500 !important;
-        font-size: 1.25rem !important;
-        margin: 1.5rem 0 0.75rem 0 !important;
+        font-size: 1rem !important;
+        margin: 0.75rem 0 0.5rem 0 !important;
     }
     
     /* === LOT/SLOT CARDS === */
@@ -2206,17 +2139,33 @@ def add_custom_css():
         color: var(--info) !important;
     }
     
-    /* === SIDEBAR === */
-    .sidebar .sidebar-content {
-        padding: 1rem !important;
+    /* === SIDEBAR - IMPROVED === */
+    section[data-testid="stSidebar"] {
+        background-color: #f8f9fa !important;
+    }
+    
+    section[data-testid="stSidebar"] .block-container {
+        padding: 0.75rem !important;
     }
     
     .sidebar-header {
-        background: var(--gray-50) !important;
-        padding: 1rem !important;
-        border-radius: var(--radius-md) !important;
-        margin-bottom: 1rem !important;
-        border-left: 4px solid var(--primary-700) !important;
+        background: white !important;
+        padding: 0.75rem !important;
+        border-radius: var(--radius-sm) !important;
+        margin-bottom: 0.75rem !important;
+        border-left: 3px solid var(--info) !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    
+    /* Sidebar fonts smaller */
+    section[data-testid="stSidebar"] * {
+        font-size: 0.875rem !important;
+    }
+    
+    section[data-testid="stSidebar"] h3 {
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+        color: var(--gray-700) !important;
     }
     
     /* === RESPONSIVE DESIGN === */
@@ -2286,12 +2235,39 @@ def add_custom_css():
     }
     
     .lot-sidebar-active {
-        background: #E3F2FD !important;
-        border-left: 4px solid #2196F3 !important;
+        background: #E8F5E9 !important;  /* Light green background */
+        border-left: 4px solid #4CAF50 !important;  /* Green border */
         font-weight: 600;
         padding: 0.75rem !important;
         margin: 0.5rem 0 !important;
+        box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2) !important;  /* Subtle green shadow */
         border-radius: var(--radius-md) !important;
+        position: relative;
+        animation: pulse-green 2s infinite;
+    }
+    
+    @keyframes pulse-green {
+        0% {
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
+        }
+        50% {
+            box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
+        }
+        100% {
+            box-shadow: 0 2px 4px rgba(76, 175, 80, 0.2);
+        }
+    }
+    
+    @keyframes pulse-blue {
+        0% {
+            box-shadow: 0 4px 8px rgba(0,123,255,0.3);
+        }
+        50% {
+            box-shadow: 0 8px 16px rgba(0,123,255,0.5);
+        }
+        100% {
+            box-shadow: 0 4px 8px rgba(0,123,255,0.3);
+        }
     }
     
     .lot-sidebar-completed {
@@ -2353,22 +2329,134 @@ def add_custom_css():
         }
     }
     </style>
+    
+    <script>
+    // Apply button colors based on text content
+    function colorizeButtons() {
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(button => {
+            const text = button.textContent.toLowerCase();
+            
+            // Remove all button classes first
+            button.classList.remove('btn-save', 'btn-next', 'btn-back', 'btn-confirm', 'btn-cancel');
+            
+            // Apply class based on text content
+            if (text.includes('shrani') || text.includes('save')) {
+                button.classList.add('btn-save');
+            } else if (text.includes('naprej') || text.includes('→') || text.includes('next')) {
+                button.classList.add('btn-next');
+            } else if (text.includes('nazaj') || text.includes('←') || text.includes('back')) {
+                button.classList.add('btn-back');
+            } else if (text.includes('potrdi') || text.includes('confirm')) {
+                button.classList.add('btn-confirm');
+            } else if (text.includes('opusti') || text.includes('prekliči') || text.includes('cancel')) {
+                button.classList.add('btn-cancel');
+            }
+        });
+    }
+    
+    // Run on load and observe for changes
+    colorizeButtons();
+    const observer = new MutationObserver(colorizeButtons);
+    observer.observe(document.body, { childList: true, subtree: true });
+    </script>
     """, unsafe_allow_html=True)
 
 def render_lot_header():
     """Display lot context header at the top of the form (Rule of Three: Location 1)."""
     if st.session_state.get('lot_mode') == 'multiple':
+        # Check if we're actually on a lot-specific step
+        dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+        current_step = st.session_state.get('current_step', 0)
+        
+        # Only show header if current step is lot-specific
+        if current_step < len(dynamic_form_steps):
+            current_step_fields = dynamic_form_steps[current_step]
+            
+            # Debug logging for issue with ID 8
+            import logging
+            logging.debug(f"[render_lot_header] Step {current_step}: fields={current_step_fields}")
+            
+            # Check if this is truly a lot-specific step
+            # It should have lot_X prefix AND not be just lot_context
+            # Also exclude BASE_STEPS fields and general fields
+            base_step_fields = ['clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'lotsInfo', 'lotConfiguration']
+            
+            # Check if any field is a base step field (general fields)
+            is_base_step = any(field in base_step_fields for field in current_step_fields)
+            
+            # Also check for fields that start with 'general.' which indicate general fields in lot mode
+            is_general_field = any(field.startswith('general.') for field in current_step_fields)
+            
+            # Check if it's a lot-specific step (starts with lot_X.)
+            is_lot_specific_step = any(field.startswith('lot_') and '.' in field for field in current_step_fields)
+            
+            # Check if it's just a lot context step (lot_context_X)
+            is_lot_context = any(field.startswith('lot_context_') for field in current_step_fields)
+            
+            # Only show header if:
+            # 1. It's a lot-specific step with fields (lot_X.something)
+            # 2. OR it's a lot context step
+            # 3. AND it's not a base step or general field
+            if is_base_step or is_general_field:
+                logging.debug(f"[render_lot_header] Skipping - base step or general field")
+                return
+            
+            if not (is_lot_specific_step or is_lot_context):
+                logging.debug(f"[render_lot_header] Skipping - not lot-specific")
+                return
+            
+            # Extract lot index from the current step fields
+            # This ensures we show the correct lot being edited
+            actual_lot_index = None
+            for field in current_step_fields:
+                if field.startswith('lot_'):
+                    # Extract index from lot_X or lot_X.something
+                    parts = field.split('_', 2)
+                    if len(parts) >= 2:
+                        idx_part = parts[1].split('.')[0] if '.' in parts[1] else parts[1]
+                        if idx_part.isdigit():
+                            actual_lot_index = int(idx_part)
+                            break
+            
+            # If we couldn't extract the index, don't show the header
+            if actual_lot_index is None:
+                logging.debug(f"[render_lot_header] Could not extract lot index from fields")
+                return
+        else:
+            # Outside the valid step range
+            return
+        
         lots = st.session_state.get('lots', [])
-        current_lot_index = st.session_state.get('current_lot_index', 0)
+        # Use the actual lot index extracted from the current step
+        current_lot_index = actual_lot_index if actual_lot_index is not None else st.session_state.get('current_lot_index', 0)
         
         # Fix TypeError: Handle None case for current_lot_index
         if lots and current_lot_index is not None and current_lot_index < len(lots):
             current_lot = lots[current_lot_index]
             lot_name = current_lot.get('name', f'Sklop {current_lot_index + 1}') if isinstance(current_lot, dict) else f'Sklop {current_lot_index + 1}'
             
+            # More prominent lot header with animation
             st.markdown(
-                f'<div class="lot-context-header">'
-                f'🏷️ Trenutno urejate sklop: <strong>{lot_name}</strong>'
+                f'<div class="lot-context-header" style="'
+                f'background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); '
+                f'color: white; '
+                f'padding: 1.5rem; '
+                f'border-radius: 10px; '
+                f'margin: 1rem 0; '
+                f'box-shadow: 0 4px 8px rgba(0,123,255,0.3); '
+                f'border: 2px solid #0056b3; '
+                f'animation: pulse-blue 2s infinite;">'
+                f'<div style="display: flex; align-items: center; justify-content: space-between;">'
+                f'<div>'
+                f'<div style="font-size: 0.9rem; opacity: 0.9; margin-bottom: 0.25rem;">TRENUTNO UREJATE</div>'
+                f'<strong style="font-size: 1.8rem; display: block;">{lot_name.upper()}</strong>'
+                f'</div>'
+                f'<div style="text-align: center; background: rgba(255,255,255,0.2); padding: 1rem; border-radius: 10px;">'
+                f'<div style="font-size: 2rem; font-weight: bold;">{current_lot_index + 1}/{len(lots)}</div>'
+                f'<div style="font-size: 0.8rem; margin-top: 0.25rem;">SKLOP</div>'
+                f'</div>'
+                f'</div>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -2390,7 +2478,10 @@ def calculate_lot_progress(lot_index):
         if step_fields and len(step_fields) > 0:
             first_field = step_fields[0]
             # Check if it's a lot-specific step for this lot index
-            if first_field.startswith(f'lot_{lot_index}_') or first_field == f'lot_context_{lot_index}':
+            # Handle both dot notation (lot_0.field) and underscore notation (lot_0_field)
+            if (first_field.startswith(f'lot_{lot_index}.') or 
+                first_field.startswith(f'lot_{lot_index}_') or 
+                first_field == f'lot_context_{lot_index}'):
                 lot_step_count += 1
                 if completed_steps.get(i, False):
                     lot_completed += 1
@@ -2429,18 +2520,34 @@ def render_lot_sidebar():
             st.markdown("### 📦 Sklopi")
             
             lots = st.session_state.get('lots', [])
-            current_lot_index = st.session_state.get('current_lot_index', 0)
+            
+            # Get the actual current lot from the current step
+            current_step_keys = st.session_state.get("current_step_keys", [])
+            context = get_current_lot_context(current_step_keys)
+            
+            # Only consider we're on a lot if we're truly on lot-specific fields
+            actual_current_lot_index = None
+            if context.get('mode') == 'lots' and context.get('lot_index') is not None:
+                # Additional check - make sure we're not on base steps
+                base_step_fields = ['clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'lotsInfo', 'lotConfiguration']
+                is_base_step = any(field in base_step_fields for field in current_step_keys)
+                
+                if not is_base_step:
+                    actual_current_lot_index = context.get('lot_index')
             
             for i, lot in enumerate(lots):
                 lot_name = lot.get('name', f'Sklop {i+1}') if isinstance(lot, dict) else f'Sklop {i+1}'
                 progress = calculate_lot_progress(i)
                 
-                if i == current_lot_index:
-                    # Active lot
+                if i == actual_current_lot_index:
+                    # Active lot - only show when truly on lot-specific steps
                     st.markdown(
                         f'<div class="lot-sidebar-active">'
-                        f'📝 <strong>{lot_name}</strong>'
+                        f'<div style="display: flex; align-items: center; justify-content: space-between;">'
+                        f'<span>🟢 <strong>{lot_name}</strong></span>'
                         f'<span class="lot-progress-badge">{progress}%</span>'
+                        f'</div>'
+                        f'<div style="font-size: 0.8rem; color: #2E7D32; margin-top: 0.25rem;">Trenutno urejate ta sklop</div>'
                         f'</div>',
                         unsafe_allow_html=True
                     )
@@ -2623,10 +2730,14 @@ def render_navigation_buttons(current_step_keys):
     # Check if we're at the final step of a lot
     is_lot_final = is_final_lot_step(st.session_state, st.session_state.current_step)
     
+    # Get lot buttons first to check if we should use lot navigation
+    lot_buttons = []
     if is_lot_final:
-        # Special navigation for lot final steps
         lot_buttons = get_lot_navigation_buttons(st.session_state)
-        
+    
+    # Only use lot navigation if we have lot buttons
+    if is_lot_final and lot_buttons and len(lot_buttons) > 0:
+        # Special navigation for lot final steps
         if len(lot_buttons) == 1:
             # Single button - use full width
             col_nav_left, col_nav_center, col_nav_right = st.columns([1, 1, 1])
@@ -2710,8 +2821,8 @@ def render_navigation_buttons(current_step_keys):
                         handle_lot_action(action)
     
     else:
-        # Standard navigation
-        col_nav_left, col_nav_center, col_nav_right = st.columns([1, 1, 1])
+        # Standard navigation - now with 4 columns for new button
+        col_nav_left, col_save, col_save_close, col_nav_right = st.columns([1, 1, 1, 1])
         
         with col_nav_left:
             if st.session_state.current_step > 0:
@@ -2725,16 +2836,37 @@ def render_navigation_buttons(current_step_keys):
                     st.session_state.current_step -= 1
                     st.rerun()
         
-        with col_nav_center:
-            # Save button - available on all steps
+        with col_save:
+            # Save button - stays in form
             if st.button(
-                "Shrani", 
+                "💾 Shrani", 
                 type="secondary",
                 use_container_width=True,
-                help="Shrani trenutni napredek obrazca"
+                help="Shrani napredek in nadaljuj z urejanjem"
             ):
                 with st.spinner(LOADING_MESSAGES['save_progress']):
-                    save_form_progress()
+                    draft_id = save_form_progress()
+                    if draft_id:
+                        st.success(f"✅ Shranjeno! Lahko nadaljujete z urejanjem.")
+        
+        with col_save_close:
+            # Save and close button - returns to dashboard
+            if st.button(
+                "💾 Shrani in zapri", 
+                type="secondary",
+                use_container_width=True,
+                help="Shrani napredek in se vrni na pregled"
+            ):
+                with st.spinner(LOADING_MESSAGES['save_progress']):
+                    draft_id = save_form_progress()
+                    if draft_id:
+                        st.success(f"✅ Shranjeno!")
+                        # Return to dashboard
+                        st.session_state.current_page = 'dashboard'
+                        if st.session_state.get('edit_mode'):
+                            st.session_state.edit_mode = False
+                            st.session_state.edit_record_id = None
+                        st.rerun()
 
         with col_nav_right:
             if st.session_state.current_step < len(dynamic_form_steps) - 1:
@@ -2842,22 +2974,23 @@ def render_navigation_buttons(current_step_keys):
     st.markdown('</div>', unsafe_allow_html=True)
 
 def render_drafts_sidebar(draft_options):
-    """Render the enhanced drafts management sidebar."""
-    st.markdown(f'<div class="sidebar-header"><h3>{get_text("drafts_header")}</h3></div>', unsafe_allow_html=True)
+    """Render compact drafts sidebar."""
+    st.markdown("##### Osnutki")
     
     if not draft_options:
-        st.info(get_text("no_drafts"))
+        st.caption("Ni osnutkov")
         return
 
     selected_draft_label = st.selectbox(
-        get_text("load_draft"), 
+        "", 
         options=list(draft_options.keys()),
-        help="Izberite osnutek, ki ga želite naložiti"
+        help="Izberite osnutek",
+        label_visibility="collapsed"
     )
     
-    # Single button for loading draft - no save button in sidebar
+    # Compact load button
     if st.button(
-        get_text("load_selected_draft"),
+        "📂 Naloži",
         type="secondary",
         use_container_width=True
     ):

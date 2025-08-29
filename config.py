@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Admin authentication
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "potocnikgodnov2025!")
 
 # Base form steps - always included (shared across all lots)
 BASE_STEPS = [
@@ -74,6 +74,16 @@ def get_dynamic_form_steps(session_state):
     has_lots = session_state.get("lotsInfo.hasLots", False)
     lot_mode = session_state.get("lot_mode", "none")  # 'none', 'single', 'multiple'
     
+    # Also check if lot fields exist in session state (for cases where hasLots might be incorrect)
+    # This happens when editing forms that have lot data but hasLots is False
+    has_lot_fields = any(k.startswith('lot_0') or k.startswith('lot_1') or k.startswith('lot_2') 
+                         for k in session_state.keys())
+    
+    # If we detect lot fields, assume lots exist
+    if has_lot_fields and not has_lots:
+        has_lots = True
+        session_state["lotsInfo.hasLots"] = True
+    
     # Only add lot configuration step if user selected to have lots
     if has_lots:
         # Add lot configuration step
@@ -89,7 +99,27 @@ def get_dynamic_form_steps(session_state):
         elif lots:
             num_lots = len(lots)
         else:
-            num_lots = 0
+            # Check for lot fields to determine number of lots
+            lot_indices = set()
+            for key in session_state.keys():
+                if key.startswith('lot_'):
+                    # Extract lot index from keys like lot_0.something or lot_1_something
+                    parts = key.split('_')
+                    if len(parts) > 1 and parts[1].isdigit():
+                        lot_indices.add(int(parts[1]))
+                    elif len(parts) > 1 and '.' in key:
+                        # Handle lot_0.field format
+                        lot_part = key.split('.')[0]
+                        if '_' in lot_part:
+                            idx = lot_part.split('_')[1]
+                            if idx.isdigit():
+                                lot_indices.add(int(idx))
+            
+            num_lots = len(lot_indices) if lot_indices else 0
+            
+            # If we found lot indices but no lots array, create placeholder lots
+            if num_lots > 0 and not lots:
+                session_state["lots"] = [{"name": f"Sklop {i+1}"} for i in range(num_lots)]
             
         if num_lots > 1:
             lot_mode = "multiple"
@@ -107,10 +137,14 @@ def get_dynamic_form_steps(session_state):
     if lot_mode == "none":
         # No lots - add procurement steps once for general
         steps.extend(LOT_SPECIFIC_STEPS)
+        # Add final steps (contractInfo and otherInfo)
+        steps.extend(FINAL_STEPS)
         
     elif lot_mode == "single":
         # Single lot - add procurement steps once
         steps.extend(LOT_SPECIFIC_STEPS)
+        # Add final steps (contractInfo and otherInfo)
+        steps.extend(FINAL_STEPS)
         
     elif lot_mode == "multiple":
         # Multiple lots handling
@@ -121,27 +155,52 @@ def get_dynamic_form_steps(session_state):
         is_edit_mode = session_state.get("edit_mode", False)
         show_all_lots = session_state.get("show_all_lot_steps", False)
         
-        # Determine which lots to show steps for
-        if is_loading_draft or is_edit_mode or show_all_lots:
-            # Show steps for ALL lots (for navigation and editing)
+        import logging
+        logging.info(f"[get_dynamic_form_steps] lot_mode=multiple, current_lot={current_lot_index}, "
+                    f"is_loading_draft={is_loading_draft}, is_edit_mode={is_edit_mode}, "
+                    f"show_all_lots={show_all_lots}, num_lots={num_lots}")
+        
+        # Important: For normal form filling, we should ONLY show current lot steps
+        # to prevent premature lot switching
+        if is_edit_mode:
+            # Edit mode: show all lots for navigation
             lots_to_show = range(num_lots)
+        elif is_loading_draft:
+            # Draft loading: temporarily show all, but should revert after load
+            lots_to_show = range(num_lots)
+            # Clear the draft flag after initial load
+            if session_state.get("draft_loaded"):
+                session_state["current_draft_id"] = None
         else:
-            # Normal mode: Only show current lot's steps
-            lots_to_show = [current_lot_index] if current_lot_index < num_lots else []
+            # Normal mode: ALWAYS show ALL lots to ensure proper navigation
+            # This ensures contractInfo and otherInfo are always accessible
+            lots_to_show = range(num_lots)
         
         # Add steps for each lot to show
-        for i in lots_to_show:
+        for i, lot_idx in enumerate(lots_to_show):
             # Add lot context step (shows lot name/header)
-            steps.append([f"lot_context_{i}"])
+            steps.append([f"lot_context_{lot_idx}"])
             
             # Add all procurement steps for this lot
             for step in LOT_SPECIFIC_STEPS:
                 # Prefix each field with lot index using dot notation for consistency
-                lot_step = [f"lot_{i}.{field}" for field in step]
+                lot_step = [f"lot_{lot_idx}.{field}" for field in step]
                 steps.append(lot_step)
+            
+            # Add contractInfo and otherInfo after EACH lot
+            # These are lot-specific final steps that should be prefixed with lot index
+            import logging
+            logging.info(f"[get_dynamic_form_steps] Adding lot-specific FINAL_STEPS for lot_{lot_idx}")
+            for step in FINAL_STEPS:
+                # Prefix FINAL_STEPS with lot index for consistency
+                lot_final_step = [f"lot_{lot_idx}.{field}" for field in step]
+                steps.append(lot_final_step)
     
-    # Always add final steps at the end
-    steps.extend(FINAL_STEPS)
+    # Log the final steps configuration
+    import logging
+    
+    logging.info(f"[get_dynamic_form_steps] Total steps: {len(steps)}")
+    logging.info(f"[get_dynamic_form_steps] Last 3 steps: {steps[-3:] if len(steps) >= 3 else steps}")
     
     return steps
 
@@ -193,29 +252,9 @@ ITEMS_PER_PAGE = int(os.getenv('ITEMS_PER_PAGE', '10'))
 
 def is_final_lot_step(session_state, current_step):
     """Check if we're on the final step of a lot."""
-    steps = get_dynamic_form_steps(session_state)
-    
-    # Check if this is the last step before the next lot context
-    # or before the final steps
-    if current_step >= len(steps) - 1:
-        return False
-    
-    current_step_fields = steps[current_step]
-    next_step_fields = steps[current_step + 1]
-    
-    # Only return true for lot final steps when we're actually in lot mode
-    lot_mode = session_state.get("lot_mode", "none")
-    if lot_mode != "multiple":
-        return False
-    
-    # Check if next step is a lot context (for multi-lot scenarios)
-    if next_step_fields and len(next_step_fields) > 0:
-        next_field = next_step_fields[0]
-        # Only check for lot_context transitions, not contractInfo/otherInfo
-        # Those are handled by normal navigation
-        if next_field.startswith('lot_context_'):
-            return True
-    
+    # SIMPLE LOGIC: After selectionCriteria ALWAYS comes contractInfo
+    # Never show lot navigation buttons after selectionCriteria
+    # This function should ALWAYS return False
     return False
 
 def get_next_lot_index(session_state):
@@ -232,12 +271,14 @@ def get_lot_navigation_buttons(session_state):
     Get navigation buttons for lot iteration.
     Returns list of (button_text, action, button_type)
     """
+    import logging
+    
     buttons = []
     lot_mode = session_state.get("lot_mode", "none")
     
     if lot_mode != "multiple":
         # Standard navigation for non-lot or single lot
-        return [("Potrdi in zaključi", "submit", "primary")]
+        return []  # Return empty - let normal navigation handle it
     
     current_lot_index = session_state.get("current_lot_index", 0)
     if current_lot_index is None:
@@ -249,7 +290,14 @@ def get_lot_navigation_buttons(session_state):
     
     total_lots = len(lot_names)
     
-    # Always have save button
+    logging.info(f"[get_lot_navigation_buttons] current_lot={current_lot_index}, total_lots={total_lots}")
+    
+    # If we're on the LAST lot, return empty list - use normal navigation
+    if current_lot_index >= total_lots - 1:
+        logging.info(f"[get_lot_navigation_buttons] On last lot - returning empty (use normal nav)")
+        return []  # Let normal navigation handle contract/final steps
+    
+    # Always have save button for non-last lots
     buttons.append(("Shrani", "save", "secondary"))
     
     if current_lot_index < total_lots - 1:
@@ -266,9 +314,5 @@ def get_lot_navigation_buttons(session_state):
         else:
             # We're in the middle of a lot, show next lot button
             buttons.append((f"Nadaljuj s: {next_lot_name}", "next_lot", "primary"))
-    
-    # Option to finish
-    if current_lot_index == total_lots - 1:
-        buttons.append(("Zaključi vnos", "submit", "primary"))
     
     return buttons

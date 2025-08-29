@@ -271,6 +271,10 @@ class ValidationManager:
         # Expand section keys to field keys
         expanded_keys = self._expand_step_keys(step_keys)
         
+        import logging
+        logging.info(f"[validate_step] Original step_keys: {step_keys}")
+        logging.info(f"[validate_step] Expanded keys: {expanded_keys}")
+        
         # Run generic validations (skip _validate_required_fields for step 0 to avoid duplicates)
         if step_number != 0:
             self._validate_required_fields(expanded_keys, step_number)
@@ -377,57 +381,22 @@ class ValidationManager:
             if is_single_client and key == 'clientInfo.clients':
                 continue
             
-            # Try multiple possible key patterns for general vs lot mode
-            field_value = None
+            # Skip fields that have specialized validators
+            # These are validated in their respective validate_* methods
+            specialized_fields = [
+                'executionDeadline',  # Handled by validate_execution_deadline()
+                'technicalSpecifications',  # Handled by validate_screen_7_technical_specs()
+                'priceInfo',  # Handled by validate_price_info()
+            ]
             
-            # For fields that have different key patterns in lot vs general mode
-            problematic_fields = ['executionDeadline', 'technicalSpecifications', 'priceInfo']
-            
-            if any(field in key for field in problematic_fields):
-                possible_keys = [
-                    key,  # Original key
-                    f'general.{key}',  # General mode prefix
-                    key.replace('general.', ''),  # Remove general prefix if present
-                ]
-                
-                # If in lot mode, also check lot-specific patterns
-                current_lot_index = self.session_state.get('current_lot_index')
-                lots = self.session_state.get('lots', [])
-                
-                if current_lot_index is not None:
-                    # Extract the field part after the section name
-                    # e.g., executionDeadline.type -> type
-                    base_field = key.split('.')[-1] if '.' in key else key
-                    section_name = key.split('.')[0] if '.' in key else key
-                    
-                    possible_keys.extend([
-                        f'lot_{current_lot_index}_{section_name}.{base_field}',  # Underscore pattern
-                        f'lot_{current_lot_index}.{section_name}.{base_field}',  # Dot pattern
-                        f'lot_{current_lot_index}.{section_name}.{base_field}',  # Double prefix pattern
-                        f'{section_name}.{base_field}',  # Direct pattern
-                    ])
-                elif len(lots) == 0:  # General mode without lots
-                    # In general mode, also check without any prefix
-                    section_name = key.split('.')[0] if '.' in key else key
-                    base_field = key.split('.')[-1] if '.' in key else ''
-                    if base_field:
-                        possible_keys.append(f'{section_name}.{base_field}')
-                
-                # Try all possible keys
+            # Check if this key is for a specialized field
+            if any(field in key for field in specialized_fields):
                 import logging
-                logging.debug(f"[_validate_required_fields] Checking key '{key}', trying patterns: {possible_keys}")
-                for possible_key in possible_keys:
-                    value = self.session_state.get(possible_key)
-                    logging.debug(f"  Trying '{possible_key}': value='{value}'")
-                    if value is not None and value != '':
-                        field_value = value
-                        logging.debug(f"  Found value '{value}' at key '{possible_key}'")
-                        break
-                
-                if field_value is None:
-                    field_value = ''
-            else:
-                field_value = self.session_state.get(key, '')
+                logging.info(f"[_validate_required_fields] Skipping specialized field: {key}")
+                continue
+            
+            # Try multiple possible key patterns for general vs lot mode
+            field_value = self.session_state.get(key, '')
             
             # Get field schema - handle nested fields
             field_schema = None
@@ -1425,6 +1394,7 @@ class ValidationManager:
         - For date type: start and end dates required
         - For duration types: positive integer required
         """
+        import logging
         errors = []
         
         # Get lots for dynamic key generation
@@ -1432,6 +1402,13 @@ class ValidationManager:
         
         # Get current lot index to prioritize lot-specific keys
         current_lot_index = self.session_state.get('current_lot_index')
+        logging.info(f"[VALIDATION] Validating executionDeadline - current_lot_index: {current_lot_index}")
+        
+        # Debug: Show all session state keys containing 'executionDeadline'
+        deadline_keys = [k for k in self.session_state.keys() if 'executionDeadline' in k]
+        logging.info(f"[VALIDATION] Session state keys with 'executionDeadline': {deadline_keys}")
+        for key in deadline_keys:
+            logging.info(f"[VALIDATION] Session state['{key}'] = {self.session_state.get(key)}")
         
         # Try different possible keys for type field
         deadline_type = None
@@ -1439,12 +1416,16 @@ class ValidationManager:
         
         # If we have a current lot index, prioritize that key (check all patterns)
         if current_lot_index is not None:
-            type_keys.append(f'lot_{current_lot_index}_executionDeadline.type')  # Underscore pattern
-            type_keys.append(f'lot_{current_lot_index}.executionDeadline.type')  # Dot pattern
-            type_keys.append(f'lot_{current_lot_index}.executionDeadline.type')  # Double prefix pattern
+            # Widget keys (what Streamlit actually uses)
+            type_keys.append(f'widget_lot_{current_lot_index}.executionDeadline.type')  # Widget with dot pattern
+            # Regular keys
+            type_keys.append(f'lot_{current_lot_index}.executionDeadline.type')  # Dot pattern (primary)
+            type_keys.append(f'lot_{current_lot_index}_executionDeadline.type')  # Underscore pattern (legacy)
         
         # Add general mode keys
         type_keys.extend([
+            'widget_general.executionDeadline.type',  # Widget general mode (FIRST priority)
+            'widget_executionDeadline.type',    # Widget direct key
             'general.executionDeadline.type',  # General mode
             'executionDeadline.type',           # Direct key
         ])
@@ -1452,18 +1433,22 @@ class ValidationManager:
         # Add other lot-specific keys as fallback (check all patterns)
         for i in range(len(lots)):
             if current_lot_index is None or i != current_lot_index:
-                type_keys.append(f'lot_{i}_executionDeadline.type')  # Underscore pattern
-                type_keys.append(f'lot_{i}.executionDeadline.type')  # Dot pattern
-                type_keys.append(f'lot_{i}.executionDeadline.type')  # Double prefix pattern
+                type_keys.append(f'widget_lot_{i}.executionDeadline.type')  # Widget with dot pattern
+                type_keys.append(f'lot_{i}.executionDeadline.type')  # Dot pattern (primary)
+                type_keys.append(f'lot_{i}_executionDeadline.type')  # Underscore pattern (legacy)
         
         # Find the deadline type value (only accept non-empty values)
+        logging.info(f"[VALIDATION] Checking type keys: {type_keys}")
         for key in type_keys:
             value = self.session_state.get(key)
+            logging.info(f"[VALIDATION] Checking key '{key}': value='{value}'")
             if value and value.strip():  # Only accept non-empty values
                 deadline_type = value
+                logging.info(f"[VALIDATION] Found deadline_type: '{deadline_type}' from key: '{key}'")
                 break
         
         if not deadline_type or deadline_type == '':
+            logging.warning(f"[VALIDATION] No deadline type found! Checked keys: {type_keys}")
             errors.append("Prosimo izberite način določitve roka izvedbe")
             return len(errors) == 0, errors
         
@@ -1472,10 +1457,15 @@ class ValidationManager:
         for key in type_keys:
             value = self.session_state.get(key)
             if value and value.strip() and value == deadline_type:
-                prefix = key.replace('.type', '')
+                # Remove 'widget_' prefix if present for consistent handling
+                if key.startswith('widget_'):
+                    prefix = key[7:].replace('.type', '')  # Remove 'widget_' (7 chars)
+                else:
+                    prefix = key.replace('.type', '')
                 break
         
         # Validate based on selected type
+        logging.info(f"[VALIDATION] deadline_type: '{deadline_type}', prefix: '{prefix}'")
         if deadline_type == 'datumsko':
             # Check start and end dates - try multiple key patterns
             start_date = None
@@ -1483,38 +1473,46 @@ class ValidationManager:
             
             # Try different key patterns for dates
             if prefix:
-                # Try with the found prefix first
-                start_date = self.session_state.get(f'{prefix}.startDate')
-                end_date = self.session_state.get(f'{prefix}.endDate')
+                # Try with the found prefix first (also check widget_ version)
+                start_date = self.session_state.get(f'{prefix}.startDate') or self.session_state.get(f'widget_{prefix}.startDate')
+                end_date = self.session_state.get(f'{prefix}.endDate') or self.session_state.get(f'widget_{prefix}.endDate')
+                logging.info(f"[VALIDATION] Checking dates with prefix '{prefix}': startDate='{start_date}', endDate='{end_date}'")
             
             # If not found, try other patterns
             if not start_date:
-                # Try current lot patterns
+                # Try current lot patterns (including widget_ prefix)
                 if current_lot_index is not None:
-                    start_date = (self.session_state.get(f'lot_{current_lot_index}_executionDeadline.startDate') or
+                    start_date = (self.session_state.get(f'widget_lot_{current_lot_index}.executionDeadline.startDate') or
                                  self.session_state.get(f'lot_{current_lot_index}.executionDeadline.startDate') or
-                                 self.session_state.get(f'lot_{current_lot_index}.executionDeadline.startDate'))
-                # Try direct key
+                                 self.session_state.get(f'lot_{current_lot_index}_executionDeadline.startDate'))
+                # Try direct key (including general mode)
                 if not start_date:
-                    start_date = self.session_state.get('executionDeadline.startDate')
+                    start_date = (self.session_state.get('widget_general.executionDeadline.startDate') or
+                                 self.session_state.get('widget_executionDeadline.startDate') or
+                                 self.session_state.get('general.executionDeadline.startDate') or
+                                 self.session_state.get('executionDeadline.startDate'))
             
             if not end_date:
-                # Try current lot patterns
+                # Try current lot patterns (including widget_ prefix)
                 if current_lot_index is not None:
-                    end_date = (self.session_state.get(f'lot_{current_lot_index}_executionDeadline.endDate') or
+                    end_date = (self.session_state.get(f'widget_lot_{current_lot_index}.executionDeadline.endDate') or
                                self.session_state.get(f'lot_{current_lot_index}.executionDeadline.endDate') or
-                               self.session_state.get(f'lot_{current_lot_index}.executionDeadline.endDate'))
-                # Try direct key
+                               self.session_state.get(f'lot_{current_lot_index}_executionDeadline.endDate'))
+                # Try direct key (including general mode)
                 if not end_date:
-                    end_date = self.session_state.get('executionDeadline.endDate')
+                    end_date = (self.session_state.get('widget_general.executionDeadline.endDate') or
+                               self.session_state.get('widget_executionDeadline.endDate') or
+                               self.session_state.get('general.executionDeadline.endDate') or
+                               self.session_state.get('executionDeadline.endDate'))
             
+            logging.info(f"[VALIDATION] Final dates found: startDate='{start_date}', endDate='{end_date}'")
             if not start_date:
                 errors.append("Datum začetka je obvezen pri datumskem roku")
             if not end_date:
                 errors.append("Datum konca je obvezen pri datumskem roku")
                 
         elif deadline_type == 'v dnevih':
-            days = self.session_state.get(f'{prefix}.days')
+            days = self.session_state.get(f'{prefix}.days') or self.session_state.get(f'widget_{prefix}.days')
             if days is None or days == '':
                 errors.append("Število dni je obvezno")
             else:
@@ -1528,7 +1526,7 @@ class ValidationManager:
                     errors.append("Število dni mora biti veljavno celo število")
                     
         elif deadline_type == 'v mesecih':
-            months = self.session_state.get(f'{prefix}.months')
+            months = self.session_state.get(f'{prefix}.months') or self.session_state.get(f'widget_{prefix}.months')
             if months is None or months == '':
                 errors.append("Število mesecev je obvezno")
             else:
@@ -1542,7 +1540,7 @@ class ValidationManager:
                     errors.append("Število mesecev mora biti veljavno celo število")
                     
         elif deadline_type == 'v letih':
-            years = self.session_state.get(f'{prefix}.years')
+            years = self.session_state.get(f'{prefix}.years') or self.session_state.get(f'widget_{prefix}.years')
             if years is None or years == '':
                 errors.append("Število let je obvezno")
             else:
@@ -1974,9 +1972,13 @@ class ValidationManager:
             
             # Check conditional description fields for selected exclusion reasons
             for reason in specific_reasons:
-                if self.session_state.get(f'{exclusion_prefix}.{reason}'):
+                reason_value = self.session_state.get(f'{exclusion_prefix}.{reason}')
+                # Only process if explicitly True (for boolean fields)
+                if reason_value == True or reason_value == 'true':
+                    import logging
+                    logging.info(f"[validation] Checking reason {reason}: value={reason_value}")
                     # Check for corresponding description fields based on reason type
-                    if reason == 'exclusionReason_c':  # Professional misconduct
+                    if reason == 'exclusionReason_c':  # Professional misconduct - hujša kršitev poklicnih pravil
                         desc_field = 'professionalMisconductDetails'
                         desc = self.session_state.get(f'{exclusion_prefix}.{desc_field}', '').strip()
                         if not desc:
@@ -1991,11 +1993,9 @@ class ValidationManager:
                         if not desc1 and not desc2:
                             errors.append("Pri izbiri razloga za izključitev morate vnesti opis pomanjkljivosti")
                     
-                    elif reason == 'exclusionReason_h':  # Other reasons
-                        desc_field = 'otherExclusionDetails'
-                        desc = self.session_state.get(f'{exclusion_prefix}.{desc_field}', '').strip()
-                        if not desc:
-                            errors.append("Pri izbiri 'drugo' morate vnesti opis razloga za izključitev")
+                    # Note: exclusionReason_h is "poskus neupravičenega vplivanja" not "drugo"
+                    # There is no "other" exclusion reason or otherExclusionDetails field in schema
+                    # Removing invalid validation for non-existent field
         
         # Check participation conditions - using correct field name from schema
         condition_type = None

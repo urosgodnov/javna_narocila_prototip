@@ -57,10 +57,15 @@ def render_lot_configuration():
     # Show summary
     st.divider()
     
-    if len(st.session_state.lot_names) == 1:
+    num_lots = len(st.session_state.lot_names)
+    if num_lots == 1:
         st.success(f"✅ **Konfiguriran je 1 sklop**")
+    elif num_lots == 2:
+        st.success(f"✅ **Konfigurirana sta 2 sklopa**")
+    elif num_lots in [3, 4]:
+        st.success(f"✅ **Konfigurirani so {num_lots} sklopi**")
     else:
-        st.success(f"✅ **Konfigurirani so {len(st.session_state.lot_names)} sklopi**")
+        st.success(f"✅ **Konfiguriranih je {num_lots} sklopov**")
     
     # Display lot summary
     with st.expander("Pregled sklopov", expanded=True):

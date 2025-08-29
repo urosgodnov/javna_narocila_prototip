@@ -120,46 +120,21 @@ def init_db():
         conn.commit()
 
 def save_draft(form_data):
-    init_db()
-    timestamp = datetime.now().isoformat()
-    # Convert any date objects to strings before JSON serialization
-    form_data_serializable = convert_dates_to_strings(form_data)
-    form_data_json = json.dumps(form_data_serializable)
-    with sqlite3.connect(DATABASE_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO drafts (timestamp, form_data_json) VALUES (?, ?)', (timestamp, form_data_json))
-        conn.commit()
-    return cursor.lastrowid
+    """DEPRECATED: Use create_procurement() with status='Delno izpolnjeno' instead."""
+    # Simply create a procurement with draft status
+    form_data['status'] = 'Delno izpolnjeno'
+    return create_procurement(form_data)
 
 def update_draft(draft_id, form_data):
-    """Update an existing draft with new form data."""
-    init_db()
-    timestamp = datetime.now().isoformat()
-    # Convert any date objects to strings before JSON serialization
-    form_data_serializable = convert_dates_to_strings(form_data)
-    form_data_json = json.dumps(form_data_serializable)
-    
-    try:
-        with sqlite3.connect(DATABASE_FILE) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                'UPDATE drafts SET timestamp = ?, form_data_json = ? WHERE id = ?',
-                (timestamp, form_data_json, draft_id)
-            )
-            conn.commit()
-            # Return True if a row was updated
-            return cursor.rowcount > 0
-    except Exception as e:
-        import logging
-        logging.error(f"Error updating draft {draft_id}: {e}")
-        return False
+    """DEPRECATED: Use update_procurement() instead."""
+    # Simply update the procurement
+    return update_procurement(draft_id, form_data)
 
 def get_all_draft_metadata():
-    init_db()
-    with sqlite3.connect(DATABASE_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT id, timestamp FROM drafts ORDER BY timestamp DESC')
-        return cursor.fetchall()
+    """DEPRECATED: Use get_all_procurements() with status filter instead."""
+    # Return procurements with draft status
+    procurements = get_all_procurements()
+    return [(p['id'], p['zadnja_sprememba']) for p in procurements if p.get('status') == 'Delno izpolnjeno']
 
 def get_recent_drafts(limit=5):
     """Get the most recent draft entries with metadata."""
@@ -266,10 +241,37 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
     
     # Calculate value - sum from lots if present, otherwise from main field
     vrednost = 0
-    has_lots = form_data.get('lotsInfo', {}).get('hasLots', False)
     
-    if has_lots and 'lots' in form_data:
-        # Sum up values from all lots
+    # Check for new lot structure (lot_0, lot_1, etc.)
+    lot_mode = form_data.get('lot_mode', '')
+    num_lots = form_data.get('num_lots', 0)
+    
+    if lot_mode == 'multiple' and num_lots > 0:
+        # New structure: sum values from lot_X fields
+        for i in range(num_lots):
+            # Try different possible field names for lot values
+            value_fields = [
+                f'lot_{i}.orderType.estimatedValue',
+                f'lot_{i}.priceInfo.estimatedValue',
+                f'lot_{i}_orderType_estimatedValue',  # Old underscore format
+                f'lot_{i}_priceInfo_estimatedValue'   # Old underscore format
+            ]
+            
+            for field in value_fields:
+                if field in form_data:
+                    lot_value = form_data.get(field, 0)
+                    try:
+                        if isinstance(lot_value, str):
+                            lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
+                        vrednost += lot_value
+                        logging.info(f"Found lot {i} value in {field}: {lot_value}")
+                        break  # Use first found value field for this lot
+                    except (ValueError, AttributeError):
+                        continue
+    
+    # Old structure fallback
+    elif form_data.get('lotsInfo', {}).get('hasLots', False) and 'lots' in form_data:
+        # Old structure: Sum up values from all lots in array
         for lot in form_data.get('lots', []):
             if isinstance(lot, dict):
                 lot_value = lot.get('estimatedValue', 0)
@@ -282,12 +284,31 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
     
     # If no value from lots, try to get from main field
     if vrednost == 0:
-        vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
-        if isinstance(vrednost, str):
-            try:
-                vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
-            except ValueError:
-                vrednost = 0
+        # Try general mode fields
+        if lot_mode == 'general':
+            value_fields = [
+                'general.orderType.estimatedValue',
+                'general.priceInfo.estimatedValue'
+            ]
+            for field in value_fields:
+                if field in form_data:
+                    vrednost = form_data.get(field, 0)
+                    if isinstance(vrednost, str):
+                        try:
+                            vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
+                        except ValueError:
+                            vrednost = 0
+                    if vrednost > 0:
+                        break
+        
+        # Fallback to old structure
+        if vrednost == 0:
+            vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
+            if isinstance(vrednost, str):
+                try:
+                    vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
+                except ValueError:
+                    vrednost = 0
     
     # Debug: Show what we extracted
     logging.warning(f"  Extracted: naziv='{naziv}', vrsta='{vrsta}', postopek='{postopek}', vrednost={vrednost}, has_lots={has_lots}")
@@ -312,13 +333,93 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
 
 def update_procurement(procurement_id, form_data):
     """Update an existing procurement record."""
+    import logging
+    
     init_db()
+    
+    # Debug: Check if clients data exists in form_data
+    if 'clientInfo' in form_data:
+        if 'clients' in form_data['clientInfo']:
+            logging.info(f"[update_procurement] clientInfo.clients: {form_data['clientInfo']['clients']}")
+        else:
+            logging.info(f"[update_procurement] clientInfo exists but no clients field. Keys: {list(form_data['clientInfo'].keys())}")
+    else:
+        logging.info("[update_procurement] No clientInfo in form_data")
     
     # Extract key fields from form data
     naziv = form_data.get('projectInfo', {}).get('projectName', 'Neimenovano naročilo')
     vrsta = form_data.get('orderType', {}).get('type', '')
     postopek = form_data.get('submissionProcedure', {}).get('procedure', '')
-    vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
+    
+    # Calculate value - same logic as create_procurement
+    vrednost = 0
+    
+    # Check for new lot structure (lot_0, lot_1, etc.)
+    lot_mode = form_data.get('lot_mode', '')
+    num_lots = form_data.get('num_lots', 0)
+    
+    # Auto-detect num_lots if not set
+    if lot_mode == 'multiple' and num_lots == 0:
+        # Count lot_X fields to determine num_lots
+        lot_indices = set()
+        for key in form_data.keys():
+            if key.startswith('lot_') and '.' in key:
+                lot_part = key.split('.')[0]
+                if '_' in lot_part:
+                    idx = lot_part.split('_')[1]
+                    if idx.isdigit():
+                        lot_indices.add(int(idx))
+        num_lots = len(lot_indices)
+    
+    if lot_mode == 'multiple' and num_lots > 0:
+        # New structure: sum values from lot_X fields
+        for i in range(num_lots):
+            # Try different possible field names for lot values
+            value_fields = [
+                f'lot_{i}.orderType.estimatedValue',
+                f'lot_{i}.priceInfo.estimatedValue',
+                f'lot_{i}_orderType_estimatedValue',  # Old underscore format
+                f'lot_{i}_priceInfo_estimatedValue'   # Old underscore format
+            ]
+            
+            for field in value_fields:
+                if field in form_data:
+                    lot_value = form_data.get(field, 0)
+                    try:
+                        if isinstance(lot_value, str):
+                            lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
+                        vrednost += lot_value
+                        break  # Use first found value field for this lot
+                    except (ValueError, AttributeError):
+                        continue
+    
+    # If no value from lots, try to get from main field
+    if vrednost == 0:
+        # Try general mode fields
+        if lot_mode == 'general' or lot_mode == 'none':
+            value_fields = [
+                'general.orderType.estimatedValue',
+                'general.priceInfo.estimatedValue'
+            ]
+            for field in value_fields:
+                if field in form_data:
+                    vrednost = form_data.get(field, 0)
+                    if isinstance(vrednost, str):
+                        try:
+                            vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
+                        except ValueError:
+                            vrednost = 0
+                    if vrednost > 0:
+                        break
+        
+        # Fallback to old structure
+        if vrednost == 0:
+            vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
+            if isinstance(vrednost, str):
+                try:
+                    vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
+                except ValueError:
+                    vrednost = 0
     
     # Convert any date objects to strings before JSON serialization
     form_data_serializable = convert_dates_to_strings(form_data)
