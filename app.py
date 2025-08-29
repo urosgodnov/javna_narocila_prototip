@@ -22,6 +22,7 @@ from utils.validation_control import (
 from ui.form_renderer import render_form
 from ui.admin_panel import render_admin_panel
 from ui.dashboard import render_dashboard
+from ui.form_styles import apply_form_styles
 from localization import get_text, format_step_indicator
 from init_database import initialize_cpv_data, check_cpv_data_status
 from utils.optimized_database_logger import configure_optimized_logging as configure_database_logging
@@ -468,6 +469,19 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
     try:
         import json
         import datetime
+        import logging
+        from datetime import date, time
+        
+        # Custom JSON encoder for date/time objects
+        class DateTimeEncoder(json.JSONEncoder):
+            def default(self, obj):
+                if isinstance(obj, datetime.datetime):
+                    return obj.isoformat()
+                elif isinstance(obj, date):
+                    return obj.isoformat()
+                elif isinstance(obj, time):
+                    return obj.strftime('%H:%M:%S')
+                return super().default(obj)
         
         # Get current form data
         form_data = get_form_data_from_session()
@@ -1119,6 +1133,9 @@ def validate_step(step_keys, schema):
 
 def render_main_form():
     """Render the main multi-step form interface with enhanced UX."""
+    # Apply form styles at the beginning
+    apply_form_styles()
+    
     # Import get_dynamic_form_steps function
     from config import get_dynamic_form_steps
     
@@ -1393,10 +1410,11 @@ def render_main_form():
         lot_progress = get_lot_progress_info()
         
         # Minimal context header - only show current section, no step numbers
-        if lot_progress['mode'] == 'lots':
-            st.markdown(f"##### 📦 {lot_progress['lot_name']}")
-        elif lot_progress['mode'] == 'general':
-            st.markdown(f"##### 📄 {lot_progress['lot_name']}")
+        # REMOVED: This was causing the blue rectangle issue when navigating
+        # if lot_progress['mode'] == 'lots':
+        #     st.markdown(f"##### 📦 {lot_progress['lot_name']}")
+        # elif lot_progress['mode'] == 'general':
+        #     st.markdown(f"##### 📄 {lot_progress['lot_name']}")
         
         # Thin progress bar only - no text duplication
         progress_percentage = min(1.0, current_step_num / total_steps)
@@ -1471,14 +1489,6 @@ def render_main_form():
                             # Remove the $ref since we've resolved it
                             del prop_copy["$ref"]
                             
-                            # Special debug for orderType
-                            if original_key == "orderType":
-                                st.write(f"🔍 OrderType after resolution in lot mode:")
-                                st.write(f"  - Has $ref: {'$ref' in prop_copy}")
-                                st.write(f"  - Has properties: {'properties' in prop_copy}")
-                                st.write(f"  - Number of properties: {len(prop_copy.get('properties', {}))}")
-                                st.write(f"  - Type field: {prop_copy.get('type')}")
-                    
                     # For orderType specifically, remove render_if condition in lot mode
                     # The render_if condition checks hasLots==false which prevents rendering in lot mode
                     if original_key == "orderType":
@@ -1504,14 +1514,6 @@ def render_main_form():
                             # Remove the $ref since we've resolved it
                             del prop_copy["$ref"]
                             
-                            # Special debug for orderType
-                            if key == "orderType":
-                                st.write(f"🔍 OrderType after resolution in regular mode:")
-                                st.write(f"  - Has $ref: {'$ref' in prop_copy}")
-                                st.write(f"  - Has properties: {'properties' in prop_copy}")
-                                st.write(f"  - Number of properties: {len(prop_copy.get('properties', {}))}")
-                                st.write(f"  - Type field: {prop_copy.get('type')}")
-                    
                     # For orderType in lot mode or general mode, remove render_if condition
                     # The render_if condition checks hasLots==false which prevents rendering in lot mode
                     if key == "orderType":
@@ -2436,27 +2438,13 @@ def render_lot_header():
             current_lot = lots[current_lot_index]
             lot_name = current_lot.get('name', f'Sklop {current_lot_index + 1}') if isinstance(current_lot, dict) else f'Sklop {current_lot_index + 1}'
             
-            # More prominent lot header with animation
+            # Simple, minimal lot header - no blue rectangle
             st.markdown(
-                f'<div class="lot-context-header" style="'
-                f'background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); '
-                f'color: white; '
-                f'padding: 1.5rem; '
-                f'border-radius: 10px; '
-                f'margin: 1rem 0; '
-                f'box-shadow: 0 4px 8px rgba(0,123,255,0.3); '
-                f'border: 2px solid #0056b3; '
-                f'animation: pulse-blue 2s infinite;">'
-                f'<div style="display: flex; align-items: center; justify-content: space-between;">'
-                f'<div>'
-                f'<div style="font-size: 0.9rem; opacity: 0.9; margin-bottom: 0.25rem;">TRENUTNO UREJATE</div>'
-                f'<strong style="font-size: 1.8rem; display: block;">{lot_name.upper()}</strong>'
-                f'</div>'
-                f'<div style="text-align: center; background: rgba(255,255,255,0.2); padding: 1rem; border-radius: 10px;">'
-                f'<div style="font-size: 2rem; font-weight: bold;">{current_lot_index + 1}/{len(lots)}</div>'
-                f'<div style="font-size: 0.8rem; margin-top: 0.25rem;">SKLOP</div>'
-                f'</div>'
-                f'</div>'
+                f'<div style="'
+                f'padding: 0.5rem 0; '
+                f'margin: 0.5rem 0; '
+                f'border-bottom: 1px solid #e0e0e0;">'
+                f'<span style="font-size: 0.9rem; color: #666;">📦 Urejate sklop {current_lot_index + 1}/{len(lots)}: <strong>{lot_name}</strong></span>'
                 f'</div>',
                 unsafe_allow_html=True
             )
@@ -2509,7 +2497,32 @@ def switch_to_lot(lot_index):
     
     # Update current lot index
     st.session_state['current_lot_index'] = lot_index
-    st.success(f"Preklop na sklop: {st.session_state.get('lots', [])[lot_index].get('name', f'Sklop {lot_index + 1}')}")
+    
+    # Find the first step for this lot
+    from config import get_dynamic_form_steps
+    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    
+    # Find the lot context step for this lot
+    target_step = None
+    for i, step_keys in enumerate(dynamic_form_steps):
+        if step_keys and len(step_keys) > 0:
+            first_key = step_keys[0]
+            # Check if this is the lot context step for our target lot
+            if first_key == f'lot_context_{lot_index}':
+                target_step = i
+                break
+            # Or check if this is a lot-specific step for our target lot
+            elif first_key.startswith(f'lot_{lot_index}.'):
+                target_step = i
+                break
+    
+    # Set the current step to the lot's first step if found
+    if target_step is not None:
+        st.session_state.current_step = target_step
+        st.success(f"Preklop na sklop: {st.session_state.get('lots', [])[lot_index].get('name', f'Sklop {lot_index + 1}')}")
+    else:
+        st.warning(f"Ne morem najti korakov za sklop {lot_index + 1}")
+    
     st.rerun()
 
 def render_lot_sidebar():
@@ -2837,10 +2850,9 @@ def render_navigation_buttons(current_step_keys):
                     st.rerun()
         
         with col_save:
-            # Save button - stays in form
+            # Save button - stays in form (gray style - default)
             if st.button(
                 "💾 Shrani", 
-                type="secondary",
                 use_container_width=True,
                 help="Shrani napredek in nadaljuj z urejanjem"
             ):
@@ -2850,10 +2862,9 @@ def render_navigation_buttons(current_step_keys):
                         st.success(f"✅ Shranjeno! Lahko nadaljujete z urejanjem.")
         
         with col_save_close:
-            # Save and close button - returns to dashboard
+            # Save and close button - returns to dashboard (gray style - default)
             if st.button(
                 "💾 Shrani in zapri", 
-                type="secondary",
                 use_container_width=True,
                 help="Shrani napredek in se vrni na pregled"
             ):
@@ -2887,10 +2898,10 @@ def render_navigation_buttons(current_step_keys):
                         button_text = f"{get_text('next_button')} →"
                 else:
                     button_text = f"{get_text('next_button')} →"
-                    
+                
+                # Use default gray style for consistency with other buttons
                 if st.button(
                     button_text, 
-                    type="primary",
                     use_container_width=True
                 ):
                     import logging
@@ -2919,9 +2930,9 @@ def render_navigation_buttons(current_step_keys):
                 col_cancel, col_confirm = st.columns(2)
                 
                 with col_cancel:
+                    # Cancel button - neutral style with X icon
                     if st.button(
-                        "🚫 Opusti", 
-                        type="secondary",
+                        "✕ Prekliči", 
                         use_container_width=True,
                         key="cancel_form"
                     ):
@@ -2929,10 +2940,10 @@ def render_navigation_buttons(current_step_keys):
                         st.rerun()
                 
                 with col_confirm:
+                    # Confirm button with gray style for consistency
                     button_text = "✅ Potrdi" 
                     if st.button(
                         button_text, 
-                        type="primary",
                         use_container_width=True,
                         key="confirm_form"
                     ):

@@ -6,9 +6,15 @@ import os
 DATABASE_FILE = 'mainDB.db'  # Back to using main database after fixing corruption
 
 def convert_dates_to_strings(obj):
-    """Recursively convert date objects to ISO format strings for JSON serialization."""
-    if isinstance(obj, (datetime, date)):
+    """Recursively convert date/time objects to strings for JSON serialization."""
+    from datetime import time
+    
+    if isinstance(obj, datetime):
         return obj.isoformat()
+    elif isinstance(obj, date):
+        return obj.isoformat()
+    elif isinstance(obj, time):
+        return obj.strftime('%H:%M:%S')
     elif isinstance(obj, dict):
         return {key: convert_dates_to_strings(value) for key, value in obj.items()}
     elif isinstance(obj, list):
@@ -269,12 +275,15 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
                     except (ValueError, AttributeError):
                         continue
     
-    # Old structure fallback
+    # Old structure fallback  
     elif form_data.get('lotsInfo', {}).get('hasLots', False) and 'lots' in form_data:
         # Old structure: Sum up values from all lots in array
         for lot in form_data.get('lots', []):
             if isinstance(lot, dict):
-                lot_value = lot.get('estimatedValue', 0)
+                # Try both old and new structure for lot values
+                lot_value = lot.get('orderType', {}).get('estimatedValue', 0)
+                if lot_value == 0:
+                    lot_value = lot.get('estimatedValue', 0)  # Fallback to old structure
                 try:
                     if isinstance(lot_value, str):
                         lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
@@ -284,33 +293,41 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
     
     # If no value from lots, try to get from main field
     if vrednost == 0:
-        # Try general mode fields
-        if lot_mode == 'general':
-            value_fields = [
-                'general.orderType.estimatedValue',
-                'general.priceInfo.estimatedValue'
-            ]
-            for field in value_fields:
-                if field in form_data:
-                    vrednost = form_data.get(field, 0)
-                    if isinstance(vrednost, str):
-                        try:
-                            vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
-                        except ValueError:
-                            vrednost = 0
-                    if vrednost > 0:
-                        break
+        # Try general mode fields first (with dot notation)
+        value_fields = [
+            'general.orderType.estimatedValue',
+            'general.priceInfo.estimatedValue',
+            'orderType.estimatedValue',  # Without general prefix
+            'priceInfo.estimatedValue'   # Without general prefix
+        ]
         
-        # Fallback to old structure
+        # Check flat keys with dot notation
+        for field in value_fields:
+            if field in form_data:
+                vrednost = form_data.get(field, 0)
+                if isinstance(vrednost, str):
+                    try:
+                        vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
+                    except ValueError:
+                        vrednost = 0
+                if vrednost > 0:
+                    logging.info(f"Found estimated value in field {field}: {vrednost}")
+                    break
+        
+        # Fallback to nested structure if still 0
         if vrednost == 0:
+            # Try nested structure
             vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
             if isinstance(vrednost, str):
                 try:
                     vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
                 except ValueError:
                     vrednost = 0
+            if vrednost > 0:
+                logging.info(f"Found estimated value in nested orderType.estimatedValue: {vrednost}")
     
     # Debug: Show what we extracted
+    has_lots = lot_mode == 'multiple' and num_lots > 0
     logging.warning(f"  Extracted: naziv='{naziv}', vrsta='{vrsta}', postopek='{postopek}', vrednost={vrednost}, has_lots={has_lots}")
     
     # Set default date and status
@@ -358,8 +375,9 @@ def update_procurement(procurement_id, form_data):
     lot_mode = form_data.get('lot_mode', '')
     num_lots = form_data.get('num_lots', 0)
     
-    # Auto-detect num_lots if not set
-    if lot_mode == 'multiple' and num_lots == 0:
+    # Auto-detect num_lots if not set or incorrect
+    # Always auto-detect to ensure we have the correct count
+    if lot_mode == 'multiple':
         # Count lot_X fields to determine num_lots
         lot_indices = set()
         for key in form_data.keys():
@@ -373,6 +391,7 @@ def update_procurement(procurement_id, form_data):
     
     if lot_mode == 'multiple' and num_lots > 0:
         # New structure: sum values from lot_X fields
+        logging.info(f"[UPDATE] Processing {num_lots} lots in lot_mode='multiple'")
         for i in range(num_lots):
             # Try different possible field names for lot values
             value_fields = [
@@ -382,44 +401,78 @@ def update_procurement(procurement_id, form_data):
                 f'lot_{i}_priceInfo_estimatedValue'   # Old underscore format
             ]
             
+            lot_found = False
             for field in value_fields:
                 if field in form_data:
                     lot_value = form_data.get(field, 0)
                     try:
                         if isinstance(lot_value, str):
                             lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
+                        logging.info(f"[UPDATE] Found lot_{i} value in {field}: {lot_value}")
                         vrednost += lot_value
+                        lot_found = True
                         break  # Use first found value field for this lot
                     except (ValueError, AttributeError):
                         continue
+            if not lot_found:
+                logging.info(f"[UPDATE] No value found for lot_{i}")
+    
+    # Also check lots array structure (same as in create_procurement)
+    # Only process lots array if we haven't already found values from lot_X fields
+    if vrednost == 0 and form_data.get('lotsInfo', {}).get('hasLots', False) and 'lots' in form_data:
+        logging.info(f"[UPDATE] Processing lots array with {len(form_data.get('lots', []))} lots")
+        # Sum up values from all lots in array
+        for i, lot in enumerate(form_data.get('lots', [])):
+            if isinstance(lot, dict):
+                # Try both old and new structure for lot values
+                lot_value = lot.get('orderType', {}).get('estimatedValue', 0)
+                if lot_value == 0:
+                    lot_value = lot.get('estimatedValue', 0)  # Fallback to old structure
+                try:
+                    if isinstance(lot_value, str):
+                        lot_value = float(lot_value.replace(',', '.')) if lot_value else 0
+                    logging.info(f"[UPDATE] Lot {i}: value={lot_value}, running total={vrednost + lot_value}")
+                    vrednost += lot_value
+                except (ValueError, AttributeError):
+                    continue
     
     # If no value from lots, try to get from main field
     if vrednost == 0:
-        # Try general mode fields
-        if lot_mode == 'general' or lot_mode == 'none':
-            value_fields = [
-                'general.orderType.estimatedValue',
-                'general.priceInfo.estimatedValue'
-            ]
-            for field in value_fields:
-                if field in form_data:
-                    vrednost = form_data.get(field, 0)
-                    if isinstance(vrednost, str):
-                        try:
-                            vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
-                        except ValueError:
-                            vrednost = 0
-                    if vrednost > 0:
-                        break
+        # Try multiple field patterns - both with and without general prefix
+        value_fields = [
+            'general.orderType.estimatedValue',
+            'general.priceInfo.estimatedValue',
+            'orderType.estimatedValue',  # Without general prefix
+            'priceInfo.estimatedValue'   # Without general prefix
+        ]
         
-        # Fallback to old structure
+        # Check flat keys with dot notation
+        for field in value_fields:
+            if field in form_data:
+                vrednost = form_data.get(field, 0)
+                if isinstance(vrednost, str):
+                    try:
+                        vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
+                    except ValueError:
+                        vrednost = 0
+                if vrednost > 0:
+                    logging.info(f"Found estimated value in field {field}: {vrednost}")
+                    break
+        
+        # Fallback to nested structure if still 0
         if vrednost == 0:
+            # Try nested structure
             vrednost = form_data.get('orderType', {}).get('estimatedValue', 0)
             if isinstance(vrednost, str):
                 try:
                     vrednost = float(vrednost.replace(',', '.')) if vrednost else 0
                 except ValueError:
                     vrednost = 0
+            if vrednost > 0:
+                logging.info(f"Found estimated value in nested orderType.estimatedValue: {vrednost}")
+    
+    # Log final calculated value
+    logging.info(f"[UPDATE] Final calculated vrednost: {vrednost}")
     
     # Convert any date objects to strings before JSON serialization
     form_data_serializable = convert_dates_to_strings(form_data)

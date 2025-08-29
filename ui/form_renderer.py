@@ -6,6 +6,7 @@ from typing import List, Dict
 from localization import get_text, get_validation_message
 from utils.lot_utils import get_lot_scoped_key, render_lot_context_step
 from ui.components.cpv_selector import render_cpv_selector
+from ui.form_styles import apply_form_styles
 # Story 27.3: Removed direct criteria_validation imports - now using centralized ValidationManager
 from utils.criteria_validation import get_validation_summary  # Still needed for render_validation_summary
 from utils.criteria_suggestions import (
@@ -40,24 +41,29 @@ def format_number_with_dots(value):
 
 
 def parse_formatted_number(formatted_str):
-    """Parse formatted number back to float (Story 3.0.3)."""
+    """Parse formatted number back to float (Story 3.0.3).
+    Handles both Slovenian (1.500.000,00) and English (1,500,000.00) formats.
+    """
     if not formatted_str:
         return 0
     try:
-        # Count dots to determine if last one is decimal separator
-        dot_count = formatted_str.count(".")
-        if dot_count > 0:
-            # Split by dots
-            parts = formatted_str.split(".")
-            if len(parts) > 1 and len(parts[-1]) <= 2:
-                # Last part likely decimals if 2 digits or less
-                integer_part = "".join(parts[:-1])
-                decimal_part = parts[-1]
-                cleaned = f"{integer_part}.{decimal_part}"
-            else:
-                # All dots are thousand separators
-                cleaned = formatted_str.replace(".", "")
+        # Convert to string if not already
+        formatted_str = str(formatted_str).strip()
+        
+        # Determine format by checking the last occurrence of comma and dot
+        last_comma = formatted_str.rfind(',')
+        last_dot = formatted_str.rfind('.')
+        
+        if last_comma > last_dot:
+            # Comma is after dot, so comma is decimal separator (Slovenian format)
+            # 1.500.000,00 -> 1500000.00
+            cleaned = formatted_str.replace('.', '').replace(',', '.')
+        elif last_dot > last_comma:
+            # Dot is after comma, so dot is decimal separator (English format)
+            # 1,500,000.00 -> 1500000.00
+            cleaned = formatted_str.replace(',', '')
         else:
+            # No special formatting, just a plain number
             cleaned = formatted_str
         
         return float(cleaned)
@@ -434,6 +440,9 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
         field_manager: FieldTypeManager instance for enhanced field rendering
         real_time_validator: RealTimeValidator instance for field validation
     """
+    # Form styles are now applied once in app.py render_main_form()
+    # Removed duplicate application here to prevent style conflicts
+    
     # Initialize field manager if not provided
     if field_manager is None:
         field_manager = FieldTypeManager()
@@ -613,10 +622,17 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                                 else:
                                     display_name = f"{item_title} {i + 1} (brez imena)"
                             
-                            # For cofinancers - use name field
+                            # For cofinancers - use cofinancerName field
                             elif 'cofinancers' in session_key:
-                                name_key = f"{session_key}.{i}.name"
+                                # Try cofinancerName first (correct field name)
+                                name_key = f"{session_key}.{i}.cofinancerName"
                                 display_name = st.session_state.get(name_key, '')
+                                
+                                # Fallback to name if cofinancerName doesn't exist
+                                if not display_name:
+                                    name_key = f"{session_key}.{i}.name"
+                                    display_name = st.session_state.get(name_key, '')
+                                
                                 if display_name:
                                     # Also show percentage if available
                                     percentage_key = f"{session_key}.{i}.percentage"
@@ -626,7 +642,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                                     else:
                                         display_name = f"{display_name}"
                                 else:
-                                    display_name = f"{item_title} {i + 1} (brez imena)"
+                                    display_name = f"Sofinancer {i + 1}"
                             
                             # For lots - use name field
                             elif session_key == 'lots':
@@ -641,13 +657,13 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                             elif 'inspectionDates' in session_key:
                                 date_key = f"{session_key}.{i}.date"
                                 time_key = f"{session_key}.{i}.time"
-                                date = st.session_state.get(date_key, '')
-                                time = st.session_state.get(time_key, '')
-                                if date:
-                                    if time:
-                                        display_name = f"Ogled: {date} ob {time}"
+                                date_val = st.session_state.get(date_key, '')
+                                time_val = st.session_state.get(time_key, '')
+                                if date_val:
+                                    if time_val:
+                                        display_name = f"Ogled: {date_val} ob {time_val}"
                                     else:
-                                        display_name = f"Ogled: {date}"
+                                        display_name = f"Ogled: {date_val}"
                                 else:
                                     display_name = f"Termin ogleda {i + 1}"
                             
@@ -1173,19 +1189,36 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     default_date = raw_default if raw_default else date.today()
                     st.session_state[session_key] = default_date
                 
+                # Convert string to date object if needed
+                current_value = st.session_state.get(session_key)
+                if isinstance(current_value, str):
+                    try:
+                        # Parse ISO format date string
+                        from datetime import datetime
+                        current_value = datetime.fromisoformat(current_value).date()
+                    except:
+                        current_value = date.today()
+                elif not current_value:
+                    current_value = date.today()
+                
                 # Enhanced date input with separate widget key
                 widget_key = f"widget_{session_key}"
                 date_value = st.date_input(
                     display_label, 
-                    value=st.session_state[session_key], 
+                    value=current_value, 
                     key=widget_key, 
                     help=help_text,
                     format="DD.MM.YYYY"
                 )
                 
                 # Sync widget value back to session state
+                # Convert date object to string for JSON serialization
                 if date_value != st.session_state.get(session_key):
-                    st.session_state[session_key] = date_value
+                    if date_value:
+                        # Convert date object to ISO format string
+                        st.session_state[session_key] = date_value.isoformat()
+                    else:
+                        st.session_state[session_key] = None
             elif prop_details.get("format") == "time":
                 # Time input field
                 from datetime import time as datetime_time
@@ -1215,8 +1248,13 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 )
                 
                 # Sync widget value back to session state
+                # Convert time object to string for JSON serialization
                 if time_value != st.session_state.get(session_key):
-                    st.session_state[session_key] = time_value
+                    if time_value:
+                        # Convert time object to string HH:MM format
+                        st.session_state[session_key] = time_value.strftime('%H:%M')
+                    else:
+                        st.session_state[session_key] = None
             else:
                 # Check if this field has enhanced configuration
                 if field_manager.is_enhanced_field(full_key):
@@ -1317,6 +1355,12 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
             if is_financial:
                 # Use formatted display for financial fields
                 current_value = st.session_state.get(session_key, 0)
+                
+                # Debug logging for estimatedValue
+                if 'estimatedValue' in prop_name:
+                    import logging
+                    logging.info(f"[ESTIMATED_VALUE RENDER] session_key={session_key}, current_value={current_value}")
+                
                 formatted_str = format_number_with_dots(current_value)
                 widget_key = f"widget_{session_key}_formatted"
                 
@@ -1324,7 +1368,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 col_input, col_symbol = st.columns([5, 1])
                 
                 with col_input:
-                    number_text = st.text_input(
+                    st.text_input(
                         display_label,
                         value=formatted_str,
                         key=widget_key,
@@ -1335,13 +1379,23 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 with col_symbol:
                     st.markdown("<div style='padding-top: 28px; font-size: 16px; font-weight: 500;'>€</div>", unsafe_allow_html=True)
                 
-                # Parse and store unformatted value
+                # Parse and store unformatted value - CRITICAL FIX: read from widget_key in session_state
+                number_text = st.session_state.get(widget_key, formatted_str)
                 try:
-                    if number_text.strip():
-                        number_value = parse_formatted_number(number_text)
+                    if number_text and str(number_text).strip():
+                        number_value = parse_formatted_number(str(number_text))
                     else:
                         number_value = 0.0
                     st.session_state[session_key] = number_value
+                    
+                    # Debug logging for estimatedValue
+                    if 'estimatedValue' in session_key:
+                        logging.warning(f"[ESTIMATED_VALUE DEBUG] Financial field:")
+                        logging.warning(f"  widget_key={widget_key}")
+                        logging.warning(f"  session_key={session_key}")
+                        logging.warning(f"  widget value={number_text}")
+                        logging.warning(f"  parsed value={number_value}")
+                        logging.warning(f"  stored in session[{session_key}]={st.session_state.get(session_key)}")
                 except ValueError:
                     st.warning(f"'{number_text}' ni veljavna številka")
                     st.session_state[session_key] = 0.0
@@ -1349,7 +1403,7 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                 # Use standard number input for non-financial fields
                 current_str = str(st.session_state[session_key]) if st.session_state[session_key] != 0.0 else ""
                 widget_key = f"widget_{session_key}_text"
-                number_text = st.text_input(
+                st.text_input(
                     display_label, 
                     value=current_str, 
                     key=widget_key,
@@ -1357,13 +1411,25 @@ def render_form(schema_properties, parent_key="", lot_context=None, field_manage
                     placeholder="0.00"
                 )
                 
+                # CRITICAL FIX: Read value from widget_key in session_state
+                number_text = st.session_state.get(widget_key, current_str)
+                
                 # Convert back to number and store in session state
                 try:
-                    if number_text.strip():
-                        number_value = float(number_text.replace(',', '.'))  # Handle both comma and dot
+                    if number_text and str(number_text).strip():
+                        number_value = float(str(number_text).replace(',', '.'))  # Handle both comma and dot
                     else:
                         number_value = 0.0
                     st.session_state[session_key] = number_value
+                    
+                    # Debug for estimatedValue in non-financial fields too
+                    if 'estimatedValue' in session_key:
+                        logging.warning(f"[ESTIMATED_VALUE DEBUG] Standard field:")
+                        logging.warning(f"  widget_key={widget_key}")
+                        logging.warning(f"  session_key={session_key}")
+                        logging.warning(f"  widget value={number_text}")
+                        logging.warning(f"  parsed value={number_value}")
+                        logging.warning(f"  stored in session[{session_key}]={st.session_state.get(session_key)}")
                 except ValueError:
                     st.warning(f"'{number_text}' ni veljavna številka")
                     st.session_state[session_key] = 0.0
