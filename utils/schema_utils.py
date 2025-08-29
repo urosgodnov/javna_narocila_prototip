@@ -74,14 +74,39 @@ def get_form_data_from_session():
     array_data = {}  # Track array items
     
     for key in st.session_state.keys():
-        # Pattern: parentKey.arrayName.index.field (e.g., clientInfo.clients.0.name)
-        if '.' in key and any(part.isdigit() for part in key.split('.')):
-            parts = key.split('.')
+        # Skip widget keys
+        if key.startswith('widget_'):
+            continue
+            
+        # Handle regular, general-prefixed, AND lot-prefixed array keys
+        actual_key = key
+        original_prefix = ''
+        
+        if key.startswith('general.'):
+            # For processing, we'll use the key without general prefix
+            # but remember it has the prefix for proper reconstruction
+            actual_key = key[8:]  # Remove 'general.' prefix
+            original_prefix = 'general.'
+        elif key.startswith('lot_'):
+            # Check if this is a lot-prefixed key with array pattern
+            # e.g., lot_0.inspectionInfo.inspectionDates.0.date
+            # We keep the lot prefix for now since we'll handle it specially
+            actual_key = key
+            # Extract lot prefix (e.g., 'lot_0.')
+            if '.' in key:
+                lot_part = key.split('.')[0]
+                if '_' in lot_part and lot_part.split('_')[1].isdigit():
+                    original_prefix = lot_part + '.'
+                    actual_key = key  # Keep full key for lot processing
+            
+        # Pattern: parentKey.arrayName.index.field (e.g., clientInfo.clients.0.name or orderType.cofinancers.0.cofinancerName)
+        if '.' in actual_key and any(part.isdigit() for part in actual_key.split('.')):
+            parts = actual_key.split('.')
             # Find array index
             for i, part in enumerate(parts):
                 if part.isdigit():
                     # This is an array element
-                    array_key = '.'.join(parts[:i])  # e.g., clientInfo.clients
+                    array_key = '.'.join(parts[:i])  # e.g., clientInfo.clients or orderType.cofinancers
                     index = int(part)
                     field_path = '.'.join(parts[i+1:]) if i+1 < len(parts) else None
                     
@@ -103,6 +128,8 @@ def get_form_data_from_session():
                     break
     
     # Convert array_data to proper arrays
+    lot_arrays = {}  # Store lot-prefixed arrays separately
+    
     for array_key, indices_dict in array_data.items():
         # Sort by index and create array
         max_index = max(indices_dict.keys()) if indices_dict else -1
@@ -113,14 +140,24 @@ def get_form_data_from_session():
             else:
                 array_list.append({})  # Fill gaps with empty objects
         
-        # Set the array in form_data
-        parts = array_key.split('.')
-        d = form_data
-        for part in parts[:-1]:
-            d = d.setdefault(part, {})
-        d[parts[-1]] = array_list
-        
-        logging.info(f"[get_form_data_from_session] Reconstructed array {array_key} with {len(array_list)} items")
+        # Check if this is a lot-prefixed array
+        if array_key.startswith('lot_'):
+            # Store it for later processing with lot data
+            lot_arrays[array_key] = array_list
+            logging.info(f"[get_form_data_from_session] Storing lot array {array_key} with {len(array_list)} items for later")
+        else:
+            # Set non-lot arrays in form_data
+            parts = array_key.split('.')
+            d = form_data
+            for part in parts[:-1]:
+                d = d.setdefault(part, {})
+            d[parts[-1]] = array_list
+            
+            logging.info(f"[get_form_data_from_session] Reconstructed array {array_key} with {len(array_list)} items")
+            
+            # Special logging for cofinancers
+            if 'cofinancers' in array_key:
+                logging.info(f"[COFINANCERS] Reconstructed {array_key}: {array_list}")
     
     # Process regular fields
     for key, value in st.session_state.items():
@@ -165,6 +202,9 @@ def get_form_data_from_session():
                     # Only set the final value if we successfully navigated the structure
                     if isinstance(d, dict):
                         d[field_parts[-1]] = value
+                        # Special logging for estimatedValue
+                        if 'estimatedValue' in key:
+                            logging.info(f"[ESTIMATED_VALUE] Setting in form_data: {'.'.join(field_parts)} = {value}")
     
     # Handle lot-specific data
     lot_mode = st.session_state.get('lot_mode', 'none')
@@ -219,6 +259,21 @@ def get_form_data_from_session():
                         # Only set the final value if we successfully navigated the structure
                         if isinstance(d, dict):
                             d[parts[-1]] = value
+            
+            # Add any arrays that belong to this lot
+            for array_key, array_value in lot_arrays.items():
+                if array_key.startswith(f'lot_{i}.'):
+                    # Remove the lot prefix to get the field path
+                    field_path = array_key[len(f'lot_{i}.'):]
+                    parts = field_path.split('.')
+                    
+                    # Navigate to the correct position in lot_data
+                    d = lot_data
+                    for part in parts[:-1]:
+                        d = d.setdefault(part, {})
+                    d[parts[-1]] = array_value
+                    
+                    logging.info(f"[get_form_data_from_session] Added lot array {array_key} to lot {i}")
             
             lots_data.append(lot_data)
         

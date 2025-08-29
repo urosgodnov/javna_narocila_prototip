@@ -960,6 +960,10 @@ def load_procurement_to_form(procurement_id):
         if 'clientInfo.clients' in flattened_data:
             logging.info(f"[load_procurement_to_form] Found clientInfo.clients with {len(flattened_data['clientInfo.clients'])} items")
         
+        # Also check for cofinancers
+        if 'orderType.cofinancers' in flattened_data:
+            logging.info(f"[load_procurement_to_form] Found orderType.cofinancers with {len(flattened_data['orderType.cofinancers'])} items")
+        
         for key, value in flattened_data.items():
             # Skip special keys that shouldn't have prefix
             special_keys = ['lots', 'lot_names', 'lot_mode', 'current_lot_index', 
@@ -983,6 +987,70 @@ def load_procurement_to_form(procurement_id):
                                 logging.info(f"[load_procurement_to_form] Set individual field {individual_key} = {field_value}")
                 continue
             
+            # Special handling for orderType.cofinancers - preserve array and set individual fields
+            if key == 'orderType.cofinancers':
+                st.session_state[key] = value
+                logging.info(f"[load_procurement_to_form] Preserved {key} with {len(value) if isinstance(value, list) else 0} items")
+                # Also set with general prefix if needed
+                if not has_lots:
+                    st.session_state[f'general.{key}'] = value
+                    
+                # CRITICAL FIX: Also set individual fields for each cofinancer
+                if isinstance(value, list):
+                    for i, cofinancer in enumerate(value):
+                        if isinstance(cofinancer, dict):
+                            for field_name, field_value in cofinancer.items():
+                                individual_key = f'orderType.cofinancers.{i}.{field_name}'
+                                st.session_state[individual_key] = field_value
+                                # Also set with general prefix for non-lot mode
+                                if not has_lots:
+                                    general_individual_key = f'general.orderType.cofinancers.{i}.{field_name}'
+                                    st.session_state[general_individual_key] = field_value
+                                logging.info(f"[load_procurement_to_form] Set cofinancer field {individual_key} = {field_value}")
+                continue
+            
+            # CRITICAL: Handle lots array - convert to lot_X fields for form
+            if key == 'lots' and isinstance(value, list):
+                logging.info(f"[load_procurement_to_form] Processing lots array with {len(value)} lots")
+                for i, lot in enumerate(value):
+                    if isinstance(lot, dict):
+                        # Set lot name
+                        if 'name' in lot:
+                            st.session_state[f'lot_{i}.name'] = lot['name']
+                        
+                        # Process all lot fields recursively
+                        def set_lot_fields(lot_data, prefix):
+                            for field_key, field_value in lot_data.items():
+                                if field_key == 'name':
+                                    continue  # Already handled
+                                
+                                full_key = f'{prefix}.{field_key}'
+                                
+                                if isinstance(field_value, dict):
+                                    # Recursively handle nested objects
+                                    set_lot_fields(field_value, full_key)
+                                elif isinstance(field_value, list):
+                                    # Handle arrays (like cofinancers)
+                                    st.session_state[full_key] = field_value
+                                    # Also set individual array items
+                                    for j, item in enumerate(field_value):
+                                        if isinstance(item, dict):
+                                            for item_key, item_value in item.items():
+                                                item_full_key = f'{full_key}.{j}.{item_key}'
+                                                st.session_state[item_full_key] = item_value
+                                                logging.info(f"[load_procurement_to_form] Set lot array field {item_full_key} = {item_value}")
+                                else:
+                                    # Simple value
+                                    st.session_state[full_key] = field_value
+                                    logging.info(f"[load_procurement_to_form] Set lot field {full_key} = {field_value}")
+                        
+                        # Set all lot fields
+                        set_lot_fields(lot, f'lot_{i}')
+                
+                # Still set the lots array for compatibility
+                st.session_state[key] = value
+                continue
+            
             if not has_lots and not key.startswith('lot_') and key not in special_keys and not key.startswith('_'):
                 # In general mode, add "general." prefix for non-special keys
                 general_key = f'general.{key}'
@@ -990,10 +1058,18 @@ def load_procurement_to_form(procurement_id):
                 logging.debug(f"Set {general_key} = {value[:50] if isinstance(value, str) else value}")
                 # Also set without prefix for backward compatibility
                 st.session_state[key] = value
+                
+                # Special handling for estimatedValue to ensure it's always available
+                if 'estimatedValue' in key:
+                    logging.info(f"[ESTIMATED_VALUE] Setting {key} = {value} and {general_key} = {value}")
             else:
                 # For lots mode or special keys, use as is
                 st.session_state[key] = value
                 logging.debug(f"Set {key} = {value[:50] if isinstance(value, str) else value}")
+                
+                # Special handling for estimatedValue 
+                if 'estimatedValue' in key:
+                    logging.info(f"[ESTIMATED_VALUE] Setting {key} = {value}")
         
         # Store that we loaded data for tracking changes
         st.session_state._last_loaded_data = flattened_data.copy()
