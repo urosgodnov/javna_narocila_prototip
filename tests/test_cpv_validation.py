@@ -11,7 +11,7 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.criteria_validation import check_cpv_requires_social_criteria, validate_criteria_selection
+from utils.validations import check_cpv_requires_social_criteria, validate_criteria_selection
 from utils.criteria_manager import get_criteria_for_cpv
 
 def main():

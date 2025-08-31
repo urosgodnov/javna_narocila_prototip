@@ -3,7 +3,7 @@
 
 import streamlit as st
 import json
-from ui.form_renderer import render_form
+from ui.form_renderer_compat import render_form
 from utils.schema_utils import load_json_schema
 
 def test_dynamic_labels():

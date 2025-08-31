@@ -5,7 +5,7 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from utils.criteria_validation import (
+from utils.validations import (
     validate_criteria_selection, 
     check_cpv_requires_additional_criteria,
     get_validation_summary

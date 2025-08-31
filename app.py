@@ -9,9 +9,10 @@ from config import (
     get_lot_navigation_buttons,
     SCHEMA_FILE
 )
+from config_fixed import get_fixed_steps, get_step_name
 from utils.schema_utils import load_json_schema, get_form_data_from_session, clear_form_data, resolve_schema_ref
 from utils.lot_utils import (
-    get_current_lot_context, initialize_lot_session_state, 
+    initialize_lot_session_state, 
     migrate_existing_data_to_lot_structure, get_lot_progress_info
 )
 from utils.lot_navigation import handle_lot_action
@@ -19,7 +20,7 @@ from utils.validation_control import (
     should_validate, render_master_validation_toggle, 
     render_step_validation_toggle, get_validation_status_message
 )
-from ui.form_renderer import render_form
+from ui.controllers.form_controller import FormController
 from ui.admin_panel import render_admin_panel
 from ui.dashboard import render_dashboard
 from ui.form_styles import apply_form_styles
@@ -762,21 +763,21 @@ def navigate_to_step(target_step, lot_id=None):
 
 def render_quick_navigation():
     """Render quick navigation dropdown for completed steps."""
-    from config import get_dynamic_form_steps
+    from config_fixed import get_fixed_steps, get_step_name
     
-    steps = get_dynamic_form_steps(st.session_state)
+    steps = get_fixed_steps()
     current = st.session_state.current_step
     completed = st.session_state.get('completed_steps', {})
     is_edit_mode = st.session_state.get('edit_mode', False)
     
-    # Build accessible steps list
+    # Build accessible steps list - only completed steps and current
     accessible_steps = []
-    step_names = get_step_names(steps)  # Use helper function to get names
     
-    for idx, step in enumerate(steps):
-        # In edit mode, all steps are accessible; otherwise check if completed or current/previous
+    for idx in range(len(steps)):
+        # In edit mode, all steps are accessible
+        # In normal mode, only completed steps and current step
         if is_edit_mode or idx <= current or completed.get(idx, False):
-            step_name = step_names[idx] if idx < len(step_names) else f"Korak {idx+1}"
+            step_name = get_step_name(idx)
             # Add step number to the name for clarity
             accessible_steps.append((idx, f"{idx+1}. {step_name}"))
     
@@ -802,7 +803,7 @@ def render_quick_navigation():
             st.markdown(f"**Napredek:** Korak {display_current} od {total_steps}")
             
             # Current step indicator with step number
-            current_name = step_names[current] if current < len(step_names) else f"Korak {current+1}"
+            current_name = get_step_name(current)
             st.markdown(f"**Trenutni korak:** {current+1}. {current_name}")
             
             # Navigation dropdown
@@ -884,9 +885,7 @@ def get_step_names(steps):
 # Story 31.3: Visual Progress Indicator
 def render_visual_progress_indicator():
     """Render horizontal progress indicator with visual states and navigation."""
-    from config import get_dynamic_form_steps
-    
-    steps = get_dynamic_form_steps(st.session_state)
+    steps = get_fixed_steps()
     current = st.session_state.current_step
     completed = st.session_state.get('completed_steps', {})
     step_names = get_step_names(steps)
@@ -991,9 +990,7 @@ def render_visual_progress_indicator():
 
 def render_compact_progress_indicator():
     """Compact progress indicator for many steps or mobile view."""
-    from config import get_dynamic_form_steps
-    
-    steps = get_dynamic_form_steps(st.session_state)
+    steps = get_fixed_steps()
     current = st.session_state.current_step
     completed = st.session_state.get('completed_steps', {})
     step_names = get_step_names(steps)
@@ -1136,8 +1133,7 @@ def render_main_form():
     # Apply form styles at the beginning
     apply_form_styles()
     
-    # Import get_dynamic_form_steps function
-    from config import get_dynamic_form_steps
+    # Use fixed steps instead of dynamic
     
     # Check for saved progress on startup - only show if we're in edit mode or have a current draft
     if 'checked_saved_progress' not in st.session_state:
@@ -1270,7 +1266,7 @@ def render_main_form():
                                             st.session_state.current_step = metadata['current_step']
                                     
                                     # Mark all steps with data as completed for navigation
-                                    steps = get_dynamic_form_steps(st.session_state)
+                                    steps = get_fixed_steps()
                                     import logging
                                     logging.info(f"[DRAFT LOAD] After loading, have {len(steps)} total steps")
                                     logging.info(f"[DRAFT LOAD] lot_mode: {st.session_state.get('lot_mode')}")
@@ -1326,30 +1322,7 @@ def render_main_form():
     
     # Modern form renderer configuration
     # Set to True to enable modern UI, False to use standard form
-    # Can be controlled via environment variable or config
-    import os
-    USE_MODERN_FORM = os.environ.get('USE_MODERN_FORM', 'false').lower() == 'true'
-    
-    # Try to use modern form renderer if enabled and available
-    use_modern_form = False
-    if USE_MODERN_FORM:
-        try:
-            # Use the FIXED modern form renderer
-            from ui.modern_form_renderer_fixed import (
-                render_modern_form_fixed as render_modern_form,
-                inject_modern_styles_once,
-                render_progress_indicator
-            )
-            use_modern_form = True
-            # Log that modern form is enabled
-            if 'modern_form_status' not in st.session_state:
-                st.session_state['modern_form_status'] = 'enabled'
-                print("✅ Modern form renderer enabled")
-        except ImportError as e:
-            use_modern_form = False
-            if 'modern_form_status' not in st.session_state:
-                st.session_state['modern_form_status'] = 'import_error'
-                print(f"⚠️ Modern form renderer not available: {e}")
+    # Modern form is no longer used - using fixed steps instead
     
     database.init_db()
     # Draft metadata removed - no longer needed
@@ -1399,12 +1372,13 @@ def render_main_form():
     col1, col2 = st.columns([5, 1])
 
     with col1:
-        # Get dynamic form steps based on lots
-        dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+        # Get fixed form steps
+        from config_fixed import get_fixed_steps
+        fixed_form_steps = get_fixed_steps()
         
         # Calculate progress
         current_step_num = st.session_state.current_step + 1
-        total_steps = len(dynamic_form_steps)
+        total_steps = len(fixed_form_steps)
         
         # Get lot progress info
         lot_progress = get_lot_progress_info()
@@ -1432,26 +1406,26 @@ def render_main_form():
             st.error(f"Step index {st.session_state.current_step} is negative. Resetting to step 0.")
             st.session_state.current_step = 0
             st.rerun()
-        elif st.session_state.current_step >= len(dynamic_form_steps):
-            st.error(f"Step index {st.session_state.current_step} is out of range. Maximum step is {len(dynamic_form_steps) - 1}.")
-            st.write(f"Debug: dynamic_form_steps has {len(dynamic_form_steps)} steps: {[i for i in range(len(dynamic_form_steps))]}")
-            st.session_state.current_step = len(dynamic_form_steps) - 1  # Reset to last valid step
+        elif st.session_state.current_step >= len(fixed_form_steps):
+            st.error(f"Step index {st.session_state.current_step} is out of range. Maximum step is {len(fixed_form_steps) - 1}.")
+            st.write(f"Debug: fixed_form_steps has {len(fixed_form_steps)} steps: {[i for i in range(len(fixed_form_steps))]}")
+            st.session_state.current_step = len(fixed_form_steps) - 1  # Reset to last valid step
             st.rerun()
             
-        current_step_keys = dynamic_form_steps[st.session_state.current_step]
+        current_step_keys = fixed_form_steps[st.session_state.current_step]
         
-        # Get lot context for current step
-        lot_context = get_current_lot_context(current_step_keys)
+        # Initialize FormController with current schema
+        form_controller = FormController(schema=st.session_state.get('schema', {}))
         
         # Debug edit mode
         if st.session_state.get('edit_mode'):
             import logging
             logging.info(f"=== EDIT MODE DEBUG ===")
             logging.info(f"Current step keys: {current_step_keys}")
-            logging.info(f"Lot context: {lot_context}")
+            logging.info(f"Current lot index: {form_controller.context.lot_index}")
             logging.info(f"Lot mode in session: {st.session_state.get('lot_mode', 'NOT SET')}")
             # Check for sample data
-            test_key = 'general.clientInfo.name' if lot_context['mode'] == 'general' else 'clientInfo.name'
+            test_key = f'lots.{form_controller.context.lot_index}.clientInfo.name'
             logging.info(f"Looking for key: {test_key}")
             if test_key in st.session_state:
                 logging.info(f"Found: {st.session_state[test_key]}")
@@ -1463,6 +1437,7 @@ def render_main_form():
         
         # Get properties - handle lot context steps and regular properties  
         current_step_properties = {}
+        
         for key in current_step_keys:
             if key.startswith('lot_context_'):
                 # Lot context steps don't need schema properties
@@ -1500,7 +1475,7 @@ def render_main_form():
                     current_step_properties[key] = prop_copy
             else:
                 # Regular properties
-                if key in st.session_state.schema["properties"]:
+                if 'schema' in st.session_state and 'properties' in st.session_state['schema'] and key in st.session_state['schema']['properties']:
                     prop_copy = st.session_state.schema["properties"][key].copy()
                     
                     # If this property has a $ref, resolve it and merge properties
@@ -1521,108 +1496,15 @@ def render_main_form():
                             del prop_copy["render_if"]
                     
                     current_step_properties[key] = prop_copy
-        
-
-        # Render modern progress indicator if available
-        if use_modern_form:
-            form_steps = dynamic_form_steps
-            # Handle form_steps as list of lists, not dictionaries
-            step_names = []
-            for i, step_fields in enumerate(form_steps):
-                # Each step is a list of field names
-                if step_fields and len(step_fields) > 0:
-                    # Use the first field name as step identifier, or default
-                    field_name = step_fields[0] if isinstance(step_fields, list) else str(step_fields)
-                    # Convert field name to readable format
-                    if field_name.startswith("lot_context_"):
-                        lot_index = int(field_name.split('_')[-1])
-                        # Get actual lot name from session state
-                        lots = st.session_state.get('lots', [])
-                        if lot_index < len(lots):
-                            lot_name = lots[lot_index].get('name', f'Sklop {lot_index + 1}') if isinstance(lots[lot_index], dict) else f'Sklop {lot_index + 1}'
-                        else:
-                            lot_name = f"Sklop {lot_index + 1}"
-                        step_name = lot_name
-                    elif field_name.startswith("lot_"):
-                        # Handle lot_N_fieldName pattern (e.g., lot_0_orderType)
-                        parts = field_name.split('_', 2)
-                        if len(parts) >= 3:
-                            lot_index = int(parts[1])
-                            base_field = parts[2]
-                            # Get lot name prefix
-                            lots = st.session_state.get('lots', [])
-                            if lot_index < len(lots):
-                                lot_name = lots[lot_index].get('name', f'Sklop {lot_index + 1}') if isinstance(lots[lot_index], dict) else f'Sklop {lot_index + 1}'
-                            else:
-                                lot_name = f"Sklop {lot_index + 1}"
-                            # Map the base field to its display name
-                            field_display_name = {
-                                "orderType": "Vrsta naročila",
-                                "technicalSpecifications": "Tehnične zahteve",
-                                "executionDeadline": "Roki izvajanja",
-                                "priceInfo": "Informacije o ceni",
-                                "inspectionInfo": "Ogledi in pogajanja",
-                                "participationAndExclusion": "Pogoji sodelovanja",
-                                "financialGuarantees": "Zavarovanja",
-                                "merila": "Merila",
-                                "selectionCriteria": "Merila izbire",
-                                "contractInfo": "Sklepanje pogodbe",
-                                "otherInfo": "Dodatne informacije"
-                            }.get(base_field, base_field)
-                            step_name = f"{lot_name}: {field_display_name}"
-                        else:
-                            step_name = f"Korak {i+1}"
-                    elif field_name == "clientInfo":
-                        step_name = "Podatki naročnika"
-                    elif field_name == "projectInfo":
-                        step_name = "Podatki projekta"
-                    elif field_name == "legalBasis":
-                        step_name = "Pravna podlaga"
-                    elif field_name == "submissionProcedure":
-                        step_name = "Postopek oddaje"
-                    elif field_name == "lotsInfo":
-                        step_name = "Konfiguracija sklopov"
-                    elif field_name == "orderType":
-                        step_name = "Vrsta naročila"
-                    elif field_name == "technicalSpecifications":
-                        step_name = "Tehnične zahteve"
-                    elif field_name == "executionDeadline":
-                        step_name = "Roki izvajanja"
-                    elif field_name == "priceInfo":
-                        step_name = "Informacije o ceni"
-                    elif field_name == "inspectionInfo":
-                        step_name = "Ogledi in pogajanja"
-                    elif field_name == "participationAndExclusion":
-                        step_name = "Pogoji sodelovanja"
-                    elif field_name == "financialGuarantees":
-                        step_name = "Zavarovanja"
-                    elif field_name == "merila":
-                        step_name = "Merila izbire"
-                    elif field_name == "selectionCriteria":
-                        step_name = "Merila izbire"
-                    elif field_name == "contractInfo":
-                        step_name = "Sklepanje pogodbe"
-                    elif field_name == "otherInfo":
-                        step_name = "Dodatne informacije"
-                    elif field_name == "confirmation":
-                        step_name = "Potrditev"
-                    else:
-                        step_name = f"Korak {i+1}"
-                    step_names.append(step_name)
-                else:
-                    step_names.append(f"Korak {i+1}")
-            # Render progress indicator
-            if use_modern_form:
-                render_progress_indicator(st.session_state.current_step, len(form_steps), step_names)
-            else:
-                # Fallback progress indicator when modern form is not available
-                # Ensure progress stays within [0.0, 1.0] range
-                if len(form_steps) > 0:
-                    progress = min(1.0, max(0.0, (st.session_state.current_step + 1) / len(form_steps)))
-                else:
-                    progress = 0.0
-                st.progress(progress)
-                st.write(f"Korak {st.session_state.current_step + 1} od {len(form_steps)}: {step_names[st.session_state.current_step] if st.session_state.current_step < len(step_names) else 'Korak'}")
+        # Render simple progress indicator
+        form_steps = fixed_form_steps
+        if len(form_steps) > 0:
+            progress = min(1.0, max(0.0, (st.session_state.current_step + 1) / len(form_steps)))
+        else:
+            progress = 0.0
+        st.progress(progress)
+        current_step_name = get_step_name(st.session_state.current_step)
+        st.write(f"Korak {st.session_state.current_step + 1} od {len(form_steps)}: {current_step_name}")
         
         # Story 22.1: Add master validation toggle on first step
         if st.session_state.current_step == 0:
@@ -1631,12 +1513,15 @@ def render_main_form():
         # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)
         
+        # Special handling for lotConfiguration step only
+        if 'lotConfiguration' in current_step_keys:
+            # Import and render lot configuration
+            from utils.lot_configuration_renderer import render_lot_configuration
+            render_lot_configuration()
         # Special handling for step 15 - otherInfo
-        if 'otherInfo' in current_step_keys:
-            # Get the session key for otherInfo field
-            session_key = 'otherInfo'
-            if lot_context and lot_context['mode'] == 'general':
-                session_key = 'general.otherInfo'
+        elif 'otherInfo' in current_step_keys:
+            # Get the session key for otherInfo field using new architecture
+            session_key = f'lots.{form_controller.context.lot_index}.otherInfo'
             
             # Initialize if not exists
             if session_key not in st.session_state:
@@ -1657,12 +1542,10 @@ def render_main_form():
                 st.session_state[session_key] = other_info_value
         else:
             # Render normal form for all other steps including step 14 (contractInfo)
-            if use_modern_form:
-                # Use modern form renderer
-                render_modern_form()
-            else:
-                # Fallback to original renderer
-                render_form(current_step_properties, lot_context=lot_context)
+            # Use FormController for rendering
+            
+            form_controller.set_schema({'properties': current_step_properties})
+            form_controller.render_form()
         
         st.markdown('</div>', unsafe_allow_html=True)
         
@@ -2368,12 +2251,12 @@ def render_lot_header():
     """Display lot context header at the top of the form (Rule of Three: Location 1)."""
     if st.session_state.get('lot_mode') == 'multiple':
         # Check if we're actually on a lot-specific step
-        dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+        fixed_form_steps = get_fixed_steps()
         current_step = st.session_state.get('current_step', 0)
         
         # Only show header if current step is lot-specific
-        if current_step < len(dynamic_form_steps):
-            current_step_fields = dynamic_form_steps[current_step]
+        if current_step < len(fixed_form_steps):
+            current_step_fields = fixed_form_steps[current_step]
             
             # Debug logging for issue with ID 8
             import logging
@@ -2451,10 +2334,10 @@ def render_lot_header():
 
 def calculate_lot_progress(lot_index):
     """Calculate completion percentage for a specific lot."""
-    from config import LOT_SPECIFIC_STEPS, get_dynamic_form_steps
+    from config import LOT_SPECIFIC_STEPS
     
     # Get all steps for the form
-    steps = get_dynamic_form_steps(st.session_state)
+    steps = get_fixed_steps()
     completed_steps = st.session_state.get('completed_steps', {})
     
     # Count lot-specific steps
@@ -2499,12 +2382,11 @@ def switch_to_lot(lot_index):
     st.session_state['current_lot_index'] = lot_index
     
     # Find the first step for this lot
-    from config import get_dynamic_form_steps
-    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    fixed_form_steps = get_fixed_steps()
     
     # Find the lot context step for this lot
     target_step = None
-    for i, step_keys in enumerate(dynamic_form_steps):
+    for i, step_keys in enumerate(fixed_form_steps):
         if step_keys and len(step_keys) > 0:
             first_key = step_keys[0]
             # Check if this is the lot context step for our target lot
@@ -2534,19 +2416,20 @@ def render_lot_sidebar():
             
             lots = st.session_state.get('lots', [])
             
-            # Get the actual current lot from the current step
+            # Get the actual current lot from the FormController
             current_step_keys = st.session_state.get("current_step_keys", [])
-            context = get_current_lot_context(current_step_keys)
+            # FormController manages lot context internally
+            current_lot_index = st.session_state.get('current_lot_index', 0)
             
             # Only consider we're on a lot if we're truly on lot-specific fields
             actual_current_lot_index = None
-            if context.get('mode') == 'lots' and context.get('lot_index') is not None:
+            if current_lot_index is not None:
                 # Additional check - make sure we're not on base steps
                 base_step_fields = ['clientInfo', 'projectInfo', 'legalBasis', 'submissionProcedure', 'lotsInfo', 'lotConfiguration']
                 is_base_step = any(field in base_step_fields for field in current_step_keys)
                 
                 if not is_base_step:
-                    actual_current_lot_index = context.get('lot_index')
+                    actual_current_lot_index = current_lot_index
             
             for i, lot in enumerate(lots):
                 lot_name = lot.get('name', f'Sklop {i+1}') if isinstance(lot, dict) else f'Sklop {i+1}'
@@ -2602,10 +2485,9 @@ def get_current_lot_name():
 def render_step_breadcrumbs():
     """Render step navigation breadcrumbs with lot context highlighting (Rule of Three: Location 2)."""
     from localization import get_dynamic_step_label
-    from config import get_dynamic_form_steps
     
-    # Get dynamic form steps for breadcrumbs
-    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    # Get fixed form steps for breadcrumbs
+    fixed_form_steps = get_fixed_steps()
     
     # Check if lots are enabled
     has_lots = st.session_state.get("lotsInfo.hasLots", False)
@@ -2613,7 +2495,7 @@ def render_step_breadcrumbs():
     
     breadcrumbs_html = '<div class="step-breadcrumbs">'
     
-    for i, step_keys in enumerate(dynamic_form_steps):
+    for i, step_keys in enumerate(fixed_form_steps):
         step_num = i + 1
         step_label = get_dynamic_step_label(step_keys, step_num, has_lots)
         
@@ -2643,7 +2525,7 @@ def render_step_breadcrumbs():
 def render_navigation_buttons_in_form(current_step_keys):
     """Render navigation buttons inside a Streamlit form."""
     # Get dynamic form steps for navigation
-    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    fixed_form_steps = get_fixed_steps()
     
     st.markdown('<div class="navigation-buttons">', unsafe_allow_html=True)
     
@@ -2663,7 +2545,7 @@ def render_navigation_buttons_in_form(current_step_keys):
                 st.rerun()
 
     with col_nav_right:
-        if st.session_state.current_step < len(dynamic_form_steps) - 1:
+        if st.session_state.current_step < len(fixed_form_steps) - 1:
             go_forward = st.form_submit_button(
                 f"{get_text('next_button')} →", 
                 type="primary",
@@ -2686,7 +2568,7 @@ def render_navigation_buttons_in_form(current_step_keys):
             if submit_form:
                 # Story 22.3: Check if any steps had validation skipped
                 validation_skipped = False
-                for step_num in range(len(dynamic_form_steps)):
+                for step_num in range(len(fixed_form_steps)):
                     if not should_validate(step_num):
                         validation_skipped = True
                         break
@@ -2736,7 +2618,7 @@ def render_navigation_buttons(current_step_keys):
     # Don't skip for any step - step 15 needs buttons too
     
     # Get dynamic form steps for navigation
-    dynamic_form_steps = get_dynamic_form_steps(st.session_state)
+    fixed_form_steps = get_fixed_steps()
     
     st.markdown('<div class="navigation-buttons">', unsafe_allow_html=True)
     
@@ -2880,9 +2762,9 @@ def render_navigation_buttons(current_step_keys):
                         st.rerun()
 
         with col_nav_right:
-            if st.session_state.current_step < len(dynamic_form_steps) - 1:
+            if st.session_state.current_step < len(fixed_form_steps) - 1:
                 # Check if we're on a lot_context step - beginning of a new lot
-                current_step_fields = dynamic_form_steps[st.session_state.current_step]
+                current_step_fields = fixed_form_steps[st.session_state.current_step]
                 if current_step_fields and len(current_step_fields) > 0:
                     first_field = current_step_fields[0]
                     if first_field.startswith('lot_context_'):
@@ -3104,8 +2986,7 @@ def render_drafts_sidebar(draft_options):
             
             # Mark all steps with data as completed for navigation
             # Need to import here as we're not in render_main_form scope
-            from config import get_dynamic_form_steps
-            steps = get_dynamic_form_steps(st.session_state)
+            steps = get_fixed_steps()
             completed_steps = {}
             
             for i, step_keys in enumerate(steps):

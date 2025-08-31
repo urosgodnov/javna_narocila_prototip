@@ -39,7 +39,7 @@ sys.modules['streamlit'] = MockSt
 st = MockSt
 
 # Now import the functions
-from utils.criteria_validation import validate_criteria_selection, check_cpv_requires_social_criteria
+from utils.validations import validate_criteria_selection, check_cpv_requires_social_criteria
 
 # Import the validate_step function (need to handle other dependencies)
 def should_validate(step_number):

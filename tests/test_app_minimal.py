@@ -2,7 +2,7 @@
 """Minimal test app for validation."""
 
 import streamlit as st
-from utils.criteria_validation import validate_criteria_selection, check_cpv_requires_additional_criteria
+from utils.validations import validate_criteria_selection, check_cpv_requires_additional_criteria
 from utils.validation_control import should_validate, render_master_validation_toggle, render_step_validation_toggle
 
 st.title("Validation Test App")

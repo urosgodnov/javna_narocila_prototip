@@ -2,7 +2,7 @@
 """Simple UI test with validation."""
 
 import streamlit as st
-from utils.criteria_validation import validate_criteria_selection, check_cpv_requires_additional_criteria
+from utils.validations import validate_criteria_selection, check_cpv_requires_additional_criteria
 from utils.validation_control import render_master_validation_toggle, render_step_validation_toggle, should_validate
 
 st.set_page_config(page_title="Validation Test", layout="wide")

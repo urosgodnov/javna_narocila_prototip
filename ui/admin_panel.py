@@ -483,6 +483,202 @@ def render_organization_management_tab():
             st.info("Ni najdenih organizacij.")
 
 
+def render_bank_management_tab():
+    """Render the bank management tab content with modern UI."""
+    from ui.components.modern_components import (
+        modern_card, modern_button, toast_notification,
+        status_badge, search_input, card_grid, empty_state
+    )
+    
+    with st.container():
+        # Header with search
+        col1, col2, col3 = st.columns([3, 2, 1])
+        with col1:
+            st.markdown("### Upravljanje bank")
+        with col2:
+            bank_search = search_input("Išči banke...", key="bank_search")
+        with col3:
+            if st.button("Nova banka", key="new_bank", type="primary", use_container_width=True):
+                st.session_state.show_add_bank = True
+        
+        # Add new bank form with modern card
+        if st.session_state.get('show_add_bank', False):
+            modern_card(
+                title="Dodaj novo banko",
+                content="""
+                <p style="color: var(--text-secondary);">
+                    Vnesite podatke za novo banko
+                </p>
+                """,
+                key="add_bank_card"
+            )
+            
+            with st.form(key='add_bank_form'):
+                col1, col2 = st.columns(2)
+                with col1:
+                    bank_code = st.text_input("Koda banke", max_chars=2, 
+                                             help="2-mestna koda banke")
+                    full_name = st.text_input("Polni naziv")
+                    swift = st.text_input("SWIFT koda", max_chars=11,
+                                        help="8 ali 11 znakov (npr. LJBASI2X)")
+                with col2:
+                    short_name = st.text_input("Kratki naziv (opcijsko)")
+                    country = st.text_input("Država", value="SI", max_chars=2,
+                                           help="2-črkovna ISO koda države")
+                    active = st.checkbox("Aktivna", value=True)
+                
+                if st.form_submit_button("Dodaj banko", type="primary", use_container_width=True):
+                    # Validate input
+                    errors = []
+                    if not bank_code or len(bank_code) != 2:
+                        errors.append("Koda banke mora biti točno 2 znaka")
+                    if not full_name or len(full_name.strip()) < 3:
+                        errors.append("Naziv banke je obvezen (min 3 znaki)")
+                    if swift and len(swift) not in [8, 11]:
+                        errors.append("SWIFT mora biti 8 ali 11 znakov")
+                    
+                    if errors:
+                        for error in errors:
+                            st.error(error)
+                    else:
+                        # Check if bank code already exists
+                        existing_bank = database.get_bank_by_code(bank_code)
+                        if existing_bank:
+                            st.error(f"Banka s kodo '{bank_code}' že obstaja")
+                        else:
+                            # Create bank
+                            bank_id = database.create_bank(
+                                bank_code=bank_code,
+                                name=full_name,
+                                short_name=short_name if short_name else None,
+                                swift=swift if swift else None,
+                                active=active,
+                                country=country
+                            )
+                            if bank_id:
+                                st.success(f"Banka '{full_name}' uspešno dodana.")
+                                st.session_state.show_add_bank = False
+                                st.rerun()
+                            else:
+                                st.error("Napaka pri dodajanju banke.")
+        
+        st.markdown("---")
+        st.markdown("### Seznam obstoječih bank")
+        
+        # Get banks from database (with search filter if provided)
+        banks = database.get_all_banks()
+        
+        # Filter banks based on search
+        if bank_search:
+            search_lower = bank_search.lower()
+            banks = [b for b in banks 
+                    if search_lower in b['name'].lower() 
+                    or (b['swift'] and search_lower in b['swift'].lower())
+                    or search_lower in b['bank_code'].lower()]
+        
+        if banks:
+            # Sort banks by code
+            banks.sort(key=lambda x: x['bank_code'])
+            
+            # Create a table-like display
+            for bank in banks:
+                with st.container():
+                    col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 1, 1])
+                    with col1:
+                        st.markdown(f"**{bank['bank_code']}**")
+                        st.caption(f"Koda: {bank['bank_code']}")
+                    
+                    with col2:
+                        st.markdown(f"**{bank['name']}**")
+                        if bank.get('short_name'):
+                            st.caption(bank['short_name'])
+                    
+                    with col3:
+                        # SWIFT and status
+                        if bank.get('swift'):
+                            st.info(f"SWIFT: {bank['swift']}")
+                        else:
+                            st.caption("Brez SWIFT kode")
+                        
+                        # Active status
+                        if bank['active']:
+                            st.success("Aktivna")
+                        else:
+                            st.warning("Neaktivna")
+                    
+                    with col4:
+                        # Edit button
+                        if st.button("Uredi", key=f"edit_bank_{bank['id']}"):
+                            st.session_state[f"editing_bank_{bank['id']}"] = True
+                    
+                    with col5:
+                        # Toggle active status
+                        button_text = "Deaktiviraj" if bank['active'] else "Aktiviraj"
+                        if st.button(button_text, key=f"toggle_bank_{bank['id']}", type="secondary"):
+                            if database.toggle_bank_status(bank['id']):
+                                st.rerun()
+                    
+                    # Edit form (shown when editing)
+                    if st.session_state.get(f"editing_bank_{bank['id']}", False):
+                        with st.form(key=f"edit_form_{bank['id']}"):
+                            st.markdown(f"#### Uredi banko: {bank['name']}")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                # Bank code is readonly
+                                st.text_input("Koda banke", value=bank['bank_code'], disabled=True,
+                                            help="Kode banke ni mogoče spremeniti")
+                                new_name = st.text_input("Polni naziv", value=bank['name'])
+                                new_swift = st.text_input("SWIFT koda", 
+                                                        value=bank['swift'] if bank['swift'] else "",
+                                                        max_chars=11)
+                            with col2:
+                                new_short_name = st.text_input("Kratki naziv", 
+                                                              value=bank['short_name'] if bank['short_name'] else "")
+                                new_country = st.text_input("Država", 
+                                                           value=bank['country'] if bank['country'] else "SI",
+                                                           max_chars=2)
+                            
+                            col_save, col_cancel = st.columns(2)
+                            with col_save:
+                                if st.form_submit_button("Shrani", use_container_width=True, type="primary"):
+                                    # Validate
+                                    errors = []
+                                    if not new_name or len(new_name.strip()) < 3:
+                                        errors.append("Naziv banke je obvezen (min 3 znaki)")
+                                    if new_swift and len(new_swift) not in [0, 8, 11]:
+                                        errors.append("SWIFT mora biti 8 ali 11 znakov ali prazen")
+                                    
+                                    if errors:
+                                        for error in errors:
+                                            st.error(error)
+                                    else:
+                                        # Update bank
+                                        success = database.update_bank(
+                                            bank_id=bank['id'],
+                                            name=new_name,
+                                            short_name=new_short_name if new_short_name else None,
+                                            swift=new_swift if new_swift else None,
+                                            country=new_country
+                                        )
+                                        if success:
+                                            st.success("Banka uspešno posodobljena!")
+                                            del st.session_state[f"editing_bank_{bank['id']}"]
+                                            st.rerun()
+                                        else:
+                                            st.error("Napaka pri posodabljanju banke.")
+                            
+                            with col_cancel:
+                                if st.form_submit_button("Prekliči", use_container_width=True, type="secondary"):
+                                    del st.session_state[f"editing_bank_{bank['id']}"]
+                                    st.rerun()
+        else:
+            if bank_search:
+                st.info(f"Ni najdenih bank za iskanje: '{bank_search}'")
+            else:
+                st.info("Ni najdenih bank. Dodajte prvo banko zgoraj.")
+
+
 def render_cpv_management_tab():
     """Render the CPV codes management tab content."""
     from ui.components.modern_components import modern_card
@@ -1489,9 +1685,9 @@ def render_admin_panel():
         render_admin_header()
         
         # Tabbed interface for different admin sections
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
             "Predloge", "Osnutki", "Baza podatkov", 
-            "Organizacije", "CPV kode & Merila", "Dnevnik", 
+            "Organizacije", "Banke", "CPV kode & Merila", "Dnevnik", 
             "AI Management"
         ])
         
@@ -1508,11 +1704,14 @@ def render_admin_panel():
             render_organization_management_tab()
         
         with tab5:
-            render_cpv_management_tab()
+            render_bank_management_tab()
         
         with tab6:
-            render_logging_management_tab()
+            render_cpv_management_tab()
         
         with tab7:
+            render_logging_management_tab()
+        
+        with tab8:
             from ui.ai_manager import render_ai_manager
             render_ai_manager()

@@ -5,6 +5,11 @@ All form validations are consolidated here for better maintainability.
 
 import streamlit as st
 from typing import Dict, List, Tuple, Any, Optional
+from dataclasses import dataclass
+import sqlite3
+from utils.cpv_manager import get_cpv_by_code
+from utils import criteria_manager
+import database
 
 
 class ValidationManager:
@@ -126,7 +131,8 @@ class ValidationManager:
                         'programArea': self.session_state.get(f'orderType.cofinancers.{i}.programArea', ''),
                         'programCode': self.session_state.get(f'orderType.cofinancers.{i}.programCode', ''),
                         'logo': self.session_state.get(f'orderType.cofinancers.{i}.logo', ''),
-                        'specialRequirements': self.session_state.get(f'orderType.cofinancers.{i}.specialRequirements', '')
+                        'specialRequirements': self.session_state.get(f'orderType.cofinancers.{i}.specialRequirements', ''),
+                        'useAIForRequirements': self.session_state.get(f'orderType.cofinancers.{i}.useAIForRequirements', False)
                     }
                 else:
                     # Fallback to old structure
@@ -797,60 +803,65 @@ class ValidationManager:
     
     def validate_screen_5_lots(self) -> Tuple[bool, List[str]]:
         """
-        Validate lot division for screen 5.
+        Validate lot division for screen 5 with unified lot handling.
         Requirements:
-        - If divided into lots, minimum 2 lots required
+        - If hasLots is False: treat as single virtual lot (validation passes)
+        - If hasLots is True and divided into lots: minimum 2 lots required
         - Each lot must have required fields filled
         """
         errors = []
         
-        # Check boolean field (modern schema)
+        # Check if order has lots flag (unified lot handling)
         has_lots = self.session_state.get('lotsInfo.hasLots', False)
         
-        if has_lots:
-            # Get lots array (might need collection first)
-            lots = self.session_state.get('lots', [])
-            
-            # If lots array is empty, try to collect from individual fields
-            if not lots:
-                collected_lots = []
-                i = 0
-                while True:
-                    name_key = f'lots.{i}.name'
-                    if name_key not in self.session_state:
-                        break
-                    
-                    lot = {
-                        'name': self.session_state.get(f'lots.{i}.name', ''),
-                        'description': self.session_state.get(f'lots.{i}.description', ''),
-                        'cpvCodes': self.session_state.get(f'lots.{i}.cpvCodes', ''),
-                        'estimatedValue': self.session_state.get(f'lots.{i}.estimatedValue', '')
-                    }
-                    collected_lots.append(lot)
-                    i += 1
-                lots = collected_lots
-            
-            # Check minimum 2 lots requirement
-            if len(lots) < 2:
-                errors.append("Pri delitvi na sklope morate imeti najmanj 2 sklopa")
-            
-            # Check each lot has required fields
-            complete_lots = 0
-            for idx, lot in enumerate(lots):
-                if isinstance(lot, dict):
-                    name = lot.get('name', '').strip()
-                    description = lot.get('description', '').strip()
-                    cpv = lot.get('cpvCodes', '').strip()
-                    # estimatedValue might be optional
-                    
-                    if name and description and cpv:
-                        complete_lots += 1
-                    elif name or description or cpv:  # Partially filled
-                        errors.append(f"Sklop {idx+1}: izpolnite vse obvezne podatke (naziv, opis, CPV kode)")
-            
-            if complete_lots < len(lots) and len(lots) >= 2:
-                # Only show this if we have enough lots but some are incomplete
-                pass  # Individual errors already added above
+        if not has_lots:
+            # Single order treated as virtual lot - validation passes
+            # No errors for single orders
+            return True, []
+        
+        # Multiple lots case - collect lots from session state
+        lots = self.session_state.get('lots', [])
+        
+        # If lots array is empty, try to collect from individual fields
+        if not lots:
+            collected_lots = []
+            i = 0
+            while True:
+                name_key = f'lots.{i}.name'
+                if name_key not in self.session_state:
+                    break
+                
+                lot = {
+                    'name': self.session_state.get(f'lots.{i}.name', ''),
+                    'description': self.session_state.get(f'lots.{i}.description', ''),
+                    'cpvCodes': self.session_state.get(f'lots.{i}.cpvCodes', ''),
+                    'estimatedValue': self.session_state.get(f'lots.{i}.estimatedValue', '')
+                }
+                collected_lots.append(lot)
+                i += 1
+            lots = collected_lots
+        
+        # Check minimum 2 lots requirement when hasLots is true
+        if len(lots) < 2:
+            errors.append("Če je naročilo razdeljeno na sklope, vnesite vsaj 2 sklopa")
+        
+        # Check each lot has required fields
+        complete_lots = 0
+        for idx, lot in enumerate(lots):
+            if isinstance(lot, dict):
+                name = lot.get('name', '').strip()
+                description = lot.get('description', '').strip()
+                cpv = lot.get('cpvCodes', '').strip()
+                # estimatedValue might be optional
+                
+                if name and description and cpv:
+                    complete_lots += 1
+                elif name or description or cpv:  # Partially filled
+                    errors.append(f"Sklop {idx+1}: izpolnite vse obvezne podatke (naziv, opis, CPV kode)")
+        
+        if complete_lots < len(lots) and len(lots) >= 2:
+            # Only show this if we have enough lots but some are incomplete
+            pass  # Individual errors already added above
         
         return len(errors) == 0, errors
     
@@ -1951,15 +1962,15 @@ class ValidationManager:
             # Check for at least one specific reason selected
             # Based on the actual field names in the JSON schema
             specific_reasons = [
-                'exclusionReason_a',  # Criminal conviction
-                'exclusionReason_b',  # Tax obligations
-                'exclusionReason_c',  # Social security
-                'exclusionReason_ch', # Insolvency
-                'exclusionReason_d',  # Professional misconduct
-                'exclusionReason_e',  # Conflict of interest
-                'exclusionReason_f',  # Contract deficiencies
-                'exclusionReason_g',  # Comparable sanctions
-                'exclusionReason_h'   # Other
+                'krsitev_okoljskega_prava',  # Environmental, social and labor law violations
+                'postopek_insolventnosti',  # Insolvency proceedings
+                'krsitev_poklicnih_pravil',  # Professional misconduct
+                'dogovor_izkrivljanje_konkurence', # Competition distortion agreement
+                'nasprotje_interesov',  # Conflict of interest
+                'predhodno_sodelovanje',  # Prior involvement
+                'pomanjkljivosti_pri_pogodbi',  # Contract deficiencies
+                'zavajajoce_informacije',  # Misleading information
+                'neupravicen_vpliv'   # Undue influence
             ]
             
             selected_count = 0
@@ -1978,13 +1989,13 @@ class ValidationManager:
                     import logging
                     logging.info(f"[validation] Checking reason {reason}: value={reason_value}")
                     # Check for corresponding description fields based on reason type
-                    if reason == 'exclusionReason_c':  # Professional misconduct - hujša kršitev poklicnih pravil
+                    if reason == 'krsitev_poklicnih_pravil':  # Professional misconduct - hujša kršitev poklicnih pravil
                         desc_field = 'professionalMisconductDetails'
                         desc = self.session_state.get(f'{exclusion_prefix}.{desc_field}', '').strip()
                         if not desc:
                             errors.append("Pri izbiri 'hujša kršitev poklicnih pravil' morate vnesti opis kršitve")
                     
-                    elif reason == 'exclusionReason_f':  # Contract deficiencies
+                    elif reason == 'pomanjkljivosti_pri_pogodbi':  # Contract deficiencies
                         # Check both possible description fields for this reason
                         desc_field1 = 'contractDeficienciesDetails'
                         desc_field2 = 'comparableSanctionsDetails'
@@ -1993,7 +2004,7 @@ class ValidationManager:
                         if not desc1 and not desc2:
                             errors.append("Pri izbiri razloga za izključitev morate vnesti opis pomanjkljivosti")
                     
-                    # Note: exclusionReason_h is "poskus neupravičenega vplivanja" not "drugo"
+                    # Note: neupravicen_vpliv is "poskus neupravičenega vplivanja" not "drugo"
                     # There is no "other" exclusion reason or otherExclusionDetails field in schema
                     # Removing invalid validation for non-existent field
         
@@ -3363,10 +3374,7 @@ class ValidationManager:
         Returns:
             Tuple of (errors, warnings)
         """
-        from utils.criteria_validation import (
-            check_cpv_requires_social_criteria,
-            check_cpv_requires_additional_criteria
-        )
+        # Functions are now local in this file
         
         errors = []
         warnings = []
@@ -3472,10 +3480,7 @@ class ValidationManager:
         warnings.extend(cpv_warnings)
         
         # Get restriction information for display
-        from utils.criteria_validation import (
-            check_cpv_requires_social_criteria,
-            check_cpv_requires_additional_criteria
-        )
+        # Functions are now local in this file
         
         restricted_info['social_required'] = check_cpv_requires_social_criteria(cpv_codes)
         restricted_info['additional_required'] = check_cpv_requires_additional_criteria(cpv_codes)
@@ -3543,13 +3548,13 @@ class ValidationManager:
     
     def _validate_cpv_code_format(self, code: str) -> bool:
         """
-        Validate CPV code format.
+        Validate CPV code format and existence in database.
         
         Args:
             code: CPV code to validate
             
         Returns:
-            True if valid format
+            True if valid format and exists in database
         """
         if not code:
             return False
@@ -3557,7 +3562,12 @@ class ValidationManager:
         import re
         # CPV code format: 8 digits, hyphen, 1 check digit (e.g., 12345678-9)
         pattern = r'^\d{8}-\d$'
-        return bool(re.match(pattern, code))
+        if not bool(re.match(pattern, code)):
+            return False
+        
+        # Check if code exists in database
+        cpv_record = get_cpv_by_code(code)
+        return cpv_record is not None
     
     def _validate_foreign_keys(self, table_name: str, record: Dict[str, Any]) -> List[str]:
         """
@@ -3746,3 +3756,257 @@ class ValidationManager:
                         )
         
         return errors
+
+
+# ============================================================================
+# CPV CRITERIA VALIDATION FUNCTIONS
+# Moved from criteria_validation.py for consolidation
+# ============================================================================
+
+@dataclass
+class ValidationResult:
+    """Result of criteria validation."""
+    is_valid: bool = True
+    messages: List[str] = None
+    restricted_cpv_codes: List[Dict] = None
+    required_criteria: List[str] = None
+    
+    def __post_init__(self):
+        if self.messages is None:
+            self.messages = []
+        if self.restricted_cpv_codes is None:
+            self.restricted_cpv_codes = []
+        if self.required_criteria is None:
+            self.required_criteria = []
+
+
+def get_cpv_info_from_db(cpv_code: str) -> Optional[Dict]:
+    """Get CPV code information from database."""
+    database.init_db()
+    with sqlite3.connect(database.DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT code, description FROM cpv_codes WHERE code = ?",
+            (cpv_code,)
+        )
+        result = cursor.fetchone()
+        if result:
+            return {'code': result[0], 'description': result[1]}
+    return None
+
+
+def check_cpv_requires_additional_criteria(cpv_codes: List[str]) -> Dict[str, Dict]:
+    """
+    Check which CPV codes have 'Merila - cena' restrictions.
+    
+    Args:
+        cpv_codes: List of CPV codes to check
+        
+    Returns:
+        Dictionary with CPV codes that require additional criteria
+        Format: {cpv_code: {'code': str, 'description': str, 'restriction': str}}
+    """
+    if not cpv_codes:
+        return {}
+    
+    # Get the 'Merila - cena' criteria type
+    price_criteria_type = criteria_manager.get_criteria_type_by_name("Merila - cena")
+    if not price_criteria_type:
+        return {}
+    
+    # Get all CPV codes with price restrictions
+    restricted_codes = criteria_manager.get_cpv_for_criteria(price_criteria_type['id'])
+    
+    # Find intersection with provided CPV codes
+    result = {}
+    for code in cpv_codes:
+        if code in restricted_codes:
+            cpv_info = get_cpv_info_from_db(code)
+            if cpv_info:
+                result[code] = {
+                    'code': code,
+                    'description': cpv_info['description'],
+                    'restriction': 'Cena ne sme biti edino merilo'
+                }
+    
+    return result
+
+
+def check_cpv_requires_social_criteria(cpv_codes: List[str]) -> Dict[str, Dict]:
+    """
+    Check which CPV codes have 'Merila - socialna merila' requirements.
+    
+    Args:
+        cpv_codes: List of CPV codes to check
+        
+    Returns:
+        Dictionary with CPV codes that require social criteria
+        Format: {cpv_code: {'code': str, 'description': str, 'restriction': str}}
+    """
+    if not cpv_codes:
+        return {}
+    
+    # Get the 'Merila - socialna merila' criteria type
+    social_criteria_type = criteria_manager.get_criteria_type_by_name("Merila - socialna merila")
+    if not social_criteria_type:
+        return {}
+    
+    # Get all CPV codes with social criteria requirements
+    social_codes = criteria_manager.get_cpv_for_criteria(social_criteria_type['id'])
+    
+    # Find intersection with provided CPV codes
+    result = {}
+    for code in cpv_codes:
+        if code in social_codes:
+            cpv_info = get_cpv_info_from_db(code)
+            if cpv_info:
+                result[code] = {
+                    'code': code,
+                    'description': cpv_info['description'],
+                    'restriction': 'Socialna merila so obvezna'
+                }
+    
+    return result
+
+
+def validate_criteria_selection(cpv_codes: List[str], selected_criteria: Dict) -> ValidationResult:
+    """
+    Validate if selected criteria meet requirements for given CPV codes.
+    
+    Args:
+        cpv_codes: List of selected CPV codes
+        selected_criteria: Dictionary of selected criteria (key: criterion name, value: bool)
+        
+    Returns:
+        ValidationResult with validation status and messages
+    """
+    result = ValidationResult()
+    
+    if not cpv_codes:
+        # No CPV codes selected, any criteria selection is valid
+        return result
+    
+    # Check which CPV codes have price restrictions
+    restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
+    
+    # Check which CPV codes require social criteria
+    social_cpv = check_cpv_requires_social_criteria(cpv_codes)
+    
+    # Combine all restrictions
+    all_restricted = {**restricted_cpv, **social_cpv}
+    
+    if not all_restricted:
+        # No restrictions for selected CPV codes
+        return result
+    
+    # Check if only price is selected
+    price_selected = selected_criteria.get('price', False)
+    
+    # List of non-price criteria
+    non_price_criteria = [
+        'additionalReferences',
+        'additionalTechnicalRequirements', 
+        'shorterDeadline',
+        'longerWarranty',
+        'environmentalCriteria',
+        'socialCriteria'
+    ]
+    
+    # Check if any non-price criteria are selected
+    has_other_criteria = any(
+        selected_criteria.get(criterion, False) 
+        for criterion in non_price_criteria
+    )
+    
+    # Check if social criteria is selected
+    social_selected = selected_criteria.get('socialCriteria', False)
+    
+    # Validation for price restrictions
+    if restricted_cpv and price_selected and not has_other_criteria:
+        result.is_valid = False
+        result.restricted_cpv_codes = list(restricted_cpv.values())
+        
+        # Create user-friendly message
+        cpv_list = [f"{code}" for code in restricted_cpv.keys()]
+        if len(cpv_list) > 3:
+            cpv_display = ", ".join(cpv_list[:3]) + f" in še {len(cpv_list) - 3} drugih"
+        else:
+            cpv_display = ", ".join(cpv_list)
+        
+        result.messages.append(
+            f"Izbrane CPV kode ({cpv_display}) zahtevajo dodatna merila poleg cene. "
+            f"Prosimo, izberite vsaj eno dodatno merilo."
+        )
+        result.required_criteria = ['Vsaj eno dodatno merilo mora biti izbrano']
+    
+    # Validation for social criteria requirement
+    if social_cpv and not social_selected:
+        result.is_valid = False
+        if not result.restricted_cpv_codes:
+            result.restricted_cpv_codes = []
+        result.restricted_cpv_codes.extend(list(social_cpv.values()))
+        
+        # Create user-friendly message
+        cpv_list = [f"{code}" for code in social_cpv.keys()]
+        if len(cpv_list) > 3:
+            cpv_display = ", ".join(cpv_list[:3]) + f" in še {len(cpv_list) - 3} drugih"
+        else:
+            cpv_display = ", ".join(cpv_list)
+        
+        result.messages.append(
+            f"Izbrane CPV kode ({cpv_display}) zahtevajo vključitev socialnih meril. "
+            f"Prosimo, označite 'Socialna merila'."
+        )
+        if 'Socialna merila morajo biti vključena' not in (result.required_criteria or []):
+            if not result.required_criteria:
+                result.required_criteria = []
+            result.required_criteria.append('Socialna merila morajo biti vključena')
+    
+    # Also check if no criteria at all are selected when we have restricted CPV codes
+    elif not price_selected and not has_other_criteria and all_restricted:
+        # Warning: CPV codes with restrictions but no criteria selected
+        result.messages.append(
+            "Opozorilo: Izbrane CPV kode imajo posebne zahteve glede meril. "
+            "Prosimo, izberite ustrezna merila za izbor."
+        )
+    
+    return result
+
+
+def get_validation_summary(cpv_codes: List[str]) -> Dict:
+    """
+    Get a summary of all validation rules for given CPV codes.
+    
+    Args:
+        cpv_codes: List of CPV codes
+        
+    Returns:
+        Dictionary with summary of applicable rules
+    """
+    summary = {
+        'has_restrictions': False,
+        'rules': [],
+        'restricted_count': 0
+    }
+    
+    if not cpv_codes:
+        return summary
+    
+    restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
+    social_cpv = check_cpv_requires_social_criteria(cpv_codes)
+    
+    if restricted_cpv:
+        summary['has_restrictions'] = True
+        summary['restricted_count'] += len(restricted_cpv)
+        summary['rules'].append(
+            f"Dodatna merila poleg cene obvezna ({len(restricted_cpv)} kod)"
+        )
+    
+    if social_cpv:
+        summary['has_restrictions'] = True
+        summary['restricted_count'] += len(social_cpv)
+        summary['rules'].append(
+            f"Socialna merila obvezna ({len(social_cpv)} kod)"
+        )
+    
+    return summary

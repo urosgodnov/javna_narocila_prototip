@@ -9,7 +9,7 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ui.form_renderer import render_form
+from ui.form_renderer_compat import render_form
 from utils.schema_utils import load_json_schema
 
 # Initialize Streamlit

@@ -68,10 +68,10 @@ def calculate_procurement_value(proc):
             
             return total_value if total_value > 0 else proc.get('vrednost', 0)
         
-        # Old structure fallback - check if this procurement has lots
-        has_lots = form_data.get('lotsInfo', {}).get('hasLots', False)
+        # Check if we have multiple lots (new unified architecture always has at least 1 lot)
+        lots_data = form_data.get('lots', [])
         
-        if has_lots and 'lots' in form_data:
+        if len(lots_data) > 1:
             # Sum up values from all lots
             total_value = 0
             lots = form_data.get('lots', [])
@@ -578,17 +578,15 @@ def display_procurements_table(procurements):
         # Calculate value (sum of lots if applicable)
         value = calculate_procurement_value(proc)
         
-        # Check if this has lots for display purposes
-        has_lots = False
+        # Check if this has multiple lots for display purposes
+        num_lots = 0
         if proc.get('form_data') and isinstance(proc['form_data'], dict):
-            has_lots = proc['form_data'].get('lotsInfo', {}).get('hasLots', False)
+            num_lots = len(proc['form_data'].get('lots', []))
         
-        # Add indicator if value is from lots
+        # Add indicator if value is from multiple lots
         value_display = f"{value:,.2f}"
-        if has_lots:
-            num_lots = len(proc['form_data'].get('lots', [])) if proc.get('form_data') else 0
-            if num_lots > 0:
-                value_display = f"{value:,.2f} ({num_lots} sklopov)"
+        if num_lots > 1:
+            value_display = f"{value:,.2f} ({num_lots} sklopov)"
         
         df_data.append({
             'ID': proc['id'],
@@ -924,19 +922,20 @@ def load_procurement_to_form(procurement_id):
         # Flatten and load into session state
         flattened_data = flatten_dict(form_data)
         
-        # Check if we have lots configuration
-        has_lots = flattened_data.get('lotsInfo.hasLots', False) or form_data.get('lot_mode') == 'multiple'
+        # Check if we have multiple lots (new architecture always has at least 1)
+        lots_in_data = form_data.get('lots', [])
+        has_multiple_lots = len(lots_in_data) > 1 or form_data.get('lot_mode') == 'multiple'
         
         # Check for lot-specific fields to handle new lot structure
         lot_mode = form_data.get('lot_mode', '')
         num_lots = form_data.get('num_lots', 0)
         
-        # Set lot mode based on has_lots or lot_mode
+        # Set lot mode based on number of lots
         if lot_mode == 'multiple':
             st.session_state.lot_mode = 'multiple'
             st.session_state.num_lots = num_lots
-        elif not has_lots:
-            st.session_state.lot_mode = 'none'
+        elif len(lots_in_data) <= 1:
+            st.session_state.lot_mode = 'single'
         else:
             lots = flattened_data.get('lots', [])
             if len(lots) > 1:
@@ -946,7 +945,7 @@ def load_procurement_to_form(procurement_id):
             else:
                 st.session_state.lot_mode = 'none'
         
-        logging.info(f"Has lots: {has_lots}, lot_mode: {st.session_state.get('lot_mode')}, num_lots: {num_lots}")
+        logging.info(f"Lots count: {len(lots_in_data)}, lot_mode: {st.session_state.get('lot_mode')}, num_lots: {num_lots}")
         logging.info(f"Loading {len(flattened_data)} keys into session state")
         logging.info(f"Sample keys: {list(flattened_data.keys())[:10]}")
         
@@ -973,9 +972,9 @@ def load_procurement_to_form(procurement_id):
             if key == 'clientInfo.clients':
                 st.session_state[key] = value
                 logging.info(f"[load_procurement_to_form] Preserved {key} = {value}")
-                # Also set with general prefix if needed
-                if not has_lots:
-                    st.session_state[f'general.{key}'] = value
+                # In new architecture, everything is lot-scoped
+                if len(lots_in_data) <= 1:
+                    st.session_state[f'lots.0.{key}'] = value
                     
                 # CRITICAL FIX: Also set individual fields for each client
                 if isinstance(value, list):
@@ -991,9 +990,9 @@ def load_procurement_to_form(procurement_id):
             if key == 'orderType.cofinancers':
                 st.session_state[key] = value
                 logging.info(f"[load_procurement_to_form] Preserved {key} with {len(value) if isinstance(value, list) else 0} items")
-                # Also set with general prefix if needed
-                if not has_lots:
-                    st.session_state[f'general.{key}'] = value
+                # In new architecture, everything is lot-scoped
+                if len(lots_in_data) <= 1:
+                    st.session_state[f'lots.0.{key}'] = value
                     
                 # CRITICAL FIX: Also set individual fields for each cofinancer
                 if isinstance(value, list):
@@ -1002,10 +1001,10 @@ def load_procurement_to_form(procurement_id):
                             for field_name, field_value in cofinancer.items():
                                 individual_key = f'orderType.cofinancers.{i}.{field_name}'
                                 st.session_state[individual_key] = field_value
-                                # Also set with general prefix for non-lot mode
-                                if not has_lots:
-                                    general_individual_key = f'general.orderType.cofinancers.{i}.{field_name}'
-                                    st.session_state[general_individual_key] = field_value
+                                # In new architecture, everything is lot-scoped
+                                if len(lots_in_data) <= 1:
+                                    lot_individual_key = f'lots.0.orderType.cofinancers.{i}.{field_name}'
+                                    st.session_state[lot_individual_key] = field_value
                                 logging.info(f"[load_procurement_to_form] Set cofinancer field {individual_key} = {field_value}")
                 continue
             
@@ -1051,11 +1050,11 @@ def load_procurement_to_form(procurement_id):
                 st.session_state[key] = value
                 continue
             
-            if not has_lots and not key.startswith('lot_') and key not in special_keys and not key.startswith('_'):
-                # In general mode, add "general." prefix for non-special keys
-                general_key = f'general.{key}'
-                st.session_state[general_key] = value
-                logging.debug(f"Set {general_key} = {value[:50] if isinstance(value, str) else value}")
+            if len(lots_in_data) <= 1 and not key.startswith('lot_') and key not in special_keys and not key.startswith('_'):
+                # In single lot mode, add "lots.0." prefix for non-special keys
+                lot_key = f'lots.0.{key}'
+                st.session_state[lot_key] = value
+                logging.debug(f"Set {lot_key} = {value[:50] if isinstance(value, str) else value}")
                 # Also set without prefix for backward compatibility
                 st.session_state[key] = value
                 

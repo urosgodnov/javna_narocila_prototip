@@ -27,7 +27,7 @@
                 },
                 "singleClientStreetAddress": {
                     "type": "string",
-                    "title": "Naslov (ulica/cesta in hišna številka)",
+                    "title": "Ulica in hišna številka",
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -35,7 +35,17 @@
                 },
                 "singleClientPostalCode": {
                     "type": "string",
-                    "title": "Poštna številka in kraj",
+                    "title": "Poštna številka",
+                    "pattern": "^[0-9]{4}$",
+                    "description": "4 številke (npr. 1000)",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientCity": {
+                    "type": "string",
+                    "title": "Kraj",
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -44,6 +54,34 @@
                 "singleClientLegalRepresentative": {
                     "type": "string",
                     "title": "Zakoniti zastopnik (ime in priimek)",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientTRR": {
+                    "type": "string",
+                    "title": "TRR (IBAN)",
+                    "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$",
+                    "description": "Slovenski IBAN začne s SI56 (npr. SI56 0234 5678 9012 345)",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientBank": {
+                    "type": "string",
+                    "title": "Banka",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientSwift": {
+                    "type": "string",
+                    "title": "SWIFT/BIC koda",
+                    "pattern": "^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$",
+                    "description": "8 ali 11 znakov (npr. LJBASIXX)",
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -66,21 +104,44 @@
                             },
                             "streetAddress": {
                                 "type": "string",
-                                "title": "Naslov (ulica/cesta in hišna številka)"
+                                "title": "Ulica in hišna številka"
                             },
                             "postalCode": {
                                 "type": "string",
-                                "title": "Poštna številka in kraj"
+                                "title": "Poštna številka",
+                                "pattern": "^[0-9]{4}$",
+                                "description": "4 številke (npr. 1000)"
+                            },
+                            "city": {
+                                "type": "string",
+                                "title": "Kraj"
                             },
                             "legalRepresentative": {
                                 "type": "string",
                                 "title": "Zakoniti zastopnik (ime in priimek)"
+                            },
+                            "trr": {
+                                "type": "string",
+                                "title": "TRR (IBAN)",
+                                "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$",
+                                "description": "Slovenski IBAN začne s SI56"
+                            },
+                            "bank": {
+                                "type": "string",
+                                "title": "Banka"
+                            },
+                            "swift": {
+                                "type": "string",
+                                "title": "SWIFT/BIC koda",
+                                "pattern": "^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$",
+                                "description": "8 ali 11 znakov"
                             }
                         },
                         "required": [
                             "name",
                             "streetAddress",
                             "postalCode",
+                            "city",
                             "legalRepresentative"
                         ]
                     }
@@ -307,6 +368,7 @@
                     "type": "string",
                     "format": "date",
                     "title": "Od",
+                    "default": null,
                     "render_if": {
                         "field": "executionDeadline.type",
                         "value": "datumsko"
@@ -316,6 +378,7 @@
                     "type": "string",
                     "format": "date",
                     "title": "Do",
+                    "default": null,
                     "render_if": {
                         "field": "executionDeadline.type",
                         "value": "datumsko"
@@ -498,12 +561,14 @@
                             "date": {
                                 "type": "string",
                                 "format": "date",
-                                "title": "Datum ogleda"
+                                "title": "Datum ogleda",
+                                "default": null
                             },
                             "time": {
                                 "type": "string",
                                 "format": "time",
-                                "title": "Ura ogleda"
+                                "title": "Ura ogleda",
+                                "default": null
                             }
                         },
                         "required": [
@@ -656,7 +721,7 @@
                     ],
                     "default": ""
                 },
-                "exclusionReason_a": {
+                "krsitev_okoljskega_prava": {
                     "type": "boolean",
                     "title": "kršitev obveznosti na področju okoljskega, socialnega in delovnega prava (a. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -665,7 +730,7 @@
                         "value": "specifični razlogi"
                     }
                 },
-                "exclusionReason_b": {
+                "postopek_insolventnosti": {
                     "type": "boolean",
                     "title": "postopek insolventnosti ali prisilnega prenehanja, likvidacije, sredstva ali poslovanje upravlja upravitelj ali sodišče, poslovne dejavnosti so začasno ustavljene (b. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -674,7 +739,7 @@
                         "value": "specifični razlogi"
                     }
                 },
-                "exclusionReason_c": {
+                "krsitev_poklicnih_pravil": {
                     "type": "boolean",
                     "title": "hujša kršitev poklicnih pravil, zaradi česar je omajana integriteta (c. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -688,11 +753,11 @@
                     "title": "→ Napišite kaj štejete za hujšo kršitev poklicnih pravil:",
                     "description": "Navedite konkretne primere ali kategorije kršitev, ki po vašem mnenju predstavljajo hujšo kršitev poklicnih pravil.",
                     "render_if": {
-                        "field": "participationAndExclusion.exclusionReason_c",
+                        "field": "participationAndExclusion.krsitev_poklicnih_pravil",
                         "value": true
                     }
                 },
-                "exclusionReason_ch": {
+                "dogovor_izkrivljanje_konkurence": {
                     "type": "boolean",
                     "title": "dogovor z drugimi gospodarskimi subjekti z namenom izkrivljanja konkurence (č. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -701,7 +766,7 @@
                         "value": "specifični razlogi"
                     }
                 },
-                "exclusionReason_d": {
+                "nasprotje_interesov": {
                     "type": "boolean",
                     "title": "nasprotja interesov (v komisiji naročnika je nekdo povezan s ponudnikom) ni mogoče učinkovito odpraviti z drugimi blažjimi ukrepi (d. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -710,7 +775,7 @@
                         "value": "specifični razlogi"
                     }
                 },
-                "exclusionReason_e": {
+                "predhodno_sodelovanje": {
                     "type": "boolean",
                     "title": "predhodno sodelovanje pri pripravi tega postopka javnega naročanja - izkrivljanje konkurence, ki ga ni mogoče učinkovito odpraviti na drug način (e. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -719,7 +784,7 @@
                         "value": "specifični razlogi"
                     }
                 },
-                "exclusionReason_f": {
+                "pomanjkljivosti_pri_pogodbi": {
                     "type": "boolean",
                     "title": "precejšnje ali stalne pomanjkljivosti gospodarskega subjekta pri izpolnjevanju ključne obveznosti pri prejšnji pogodbi o izvedbi javnega naročila (f. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -733,7 +798,7 @@
                     "title": "→ Napišite kaj štejete za precejšnje ali stalne pomanjkljivosti:",
                     "description": "Definirajte konkretne primere pomanjkljivosti pri izpolnjevanju pogodbenih obveznosti.",
                     "render_if": {
-                        "field": "participationAndExclusion.exclusionReason_f",
+                        "field": "participationAndExclusion.pomanjkljivosti_pri_pogodbi",
                         "value": true
                     }
                 },
@@ -742,11 +807,11 @@
                     "title": "→ Napišite kaj štejete za primerljive sankcije:",
                     "description": "Navedite vrste sankcij, ki jih obravnavate kot primerljive predčasnemu odstopu ali uveljavljanju odškodnine.",
                     "render_if": {
-                        "field": "participationAndExclusion.exclusionReason_f",
+                        "field": "participationAndExclusion.pomanjkljivosti_pri_pogodbi",
                         "value": true
                     }
                 },
-                "exclusionReason_g": {
+                "zavajajoce_informacije": {
                     "type": "boolean",
                     "title": "dajanje resnih zavajajočih informacij ali razlag / nerazkrivanje (g. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -755,7 +820,7 @@
                         "value": "specifični razlogi"
                     }
                 },
-                "exclusionReason_h": {
+                "neupravicen_vpliv": {
                     "type": "boolean",
                     "title": "poskus neupravičenega vplivanja na naročnika (h. točka šestega odstavka 75. člena ZJN-3)",
                     "default": false,
@@ -864,6 +929,7 @@
                     "type": "string",
                     "format": "date",
                     "title": "Obdobje od",
+                    "default": null,
                     "render_if": {
                         "field": "contractInfo.contractPeriodType",
                         "value": "za obdobje od-do"
@@ -873,6 +939,7 @@
                     "type": "string",
                     "format": "date",
                     "title": "Obdobje do",
+                    "default": null,
                     "render_if": {
                         "field": "contractInfo.contractPeriodType",
                         "value": "za obdobje od-do"
@@ -1120,6 +1187,12 @@
                                 "type": "string",
                                 "format": "textarea",
                                 "title": "Posebne zahteve sofinancerja"
+                            },
+                            "useAIForRequirements": {
+                                "type": "boolean",
+                                "title": "drugo, prosim za predlog umetne inteligence",
+                                "description": "AI bo predlagal posebne zahteve glede na program sofinanciranja",
+                                "default": false
                             }
                         },
                         "required": [
@@ -1242,6 +1315,12 @@
                                             "type": "string",
                                             "format": "textarea",
                                             "title": "Posebne zahteve sofinancerja"
+                                        },
+                                        "useAIForRequirements": {
+                                            "type": "boolean",
+                                            "title": "Ali želite AI predlog za posebne zahteve?",
+                                            "description": "AI bo predlagal zahteve glede na program sofinanciranja",
+                                            "default": false
                                         }
                                     },
                                     "required": [
@@ -1426,6 +1505,20 @@
                         "value": "da, specifični pogoji"
                     },
                     "properties": {
+                        "turnoverLimitInfo": {
+                            "type": "object",
+                            "title": "ℹ️ Omejitve letnega prometa po ZJN-3",
+                            "properties": {},
+                            "description": "Zahtevani najnižji letni promet ne sme presegati dvakratne ocenjene vrednosti javnega naročila, razen v ustrezno utemeljenih primerih, ki se glede na primer nanašajo na posebna tveganja, povezana z naravo gradenj, storitev ali blaga. Če se ponudniku odda več sklopov, ki se izvajajo sočasno, lahko naročnik določi najnižji letni promet, ki ga morajo imeti gospodarski subjekti za posamezno skupino sklopov. Če se javna naročila na podlagi okvirnega sporazuma oddajo po ponovnem odpiranju konkurence, se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo izvajala sočasno, če to ni znano, pa na podlagi ocenjene vrednosti okvirnega sporazuma. Pri dinamičnih nabavnih sistemih se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo oddala v okviru tega sistema.",
+                            "render_if": {
+                                "or": [
+                                    {"field": "participationConditions.economicFinancialSection.generalTurnover", "value": true},
+                                    {"field": "participationConditions.economicFinancialSection.specificTurnover", "value": true},
+                                    {"field": "participationConditions.economicFinancialSection.averageTurnover", "value": true},
+                                    {"field": "participationConditions.economicFinancialSection.averageSpecificTurnover", "value": true}
+                                ]
+                            }
+                        },
                         "generalTurnover": {
                             "type": "boolean",
                             "title": "splošni letni promet",
@@ -1473,16 +1566,6 @@
                         "averageSpecificTurnoverDetails": {
                             "type": "string",
                             "title": "→ Opišite zahtevo",
-                            "render_if": {
-                                "field": "participationConditions.economicFinancialSection.averageSpecificTurnover",
-                                "value": true
-                            }
-                        },
-                        "turnoverInfoAverageSpecific": {
-                            "type": "object",
-                            "title": "ℹ️ Informacija o prometu",
-                            "properties": {},
-                            "description": "Če se ponudniku odda več sklopov, ki se izvajajo sočasno, lahko naročnik določi najnižji letni promet, ki ga morajo imeti gospodarski subjekti za posamezno skupino sklopov. Če se javna naročila na podlagi okvirnega sporazuma oddajo po ponovnem odpiranju konkurence, se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo izvajala sočasno, če to ni znano, pa na podlagi ocenjene vrednosti okvirnega sporazuma. Pri dinamičnih nabavnih sistemih se zahtevani najvišji letni promet izračuna na podlagi pričakovanega največjega obsega posameznih naročil, ki se bodo oddala v okviru tega sistema.",
                             "render_if": {
                                 "field": "participationConditions.economicFinancialSection.averageSpecificTurnover",
                                 "value": true
@@ -1542,7 +1625,7 @@
                         },
                         "economicAI": {
                             "type": "boolean",
-                            "title": "drugo, prosim za predlog AI",
+                            "title": "drugo, prosim za predlog umetne inteligence",
                             "default": false
                         }
                     }
@@ -1622,7 +1705,7 @@
                         },
                         "technicalAI": {
                             "type": "boolean",
-                            "title": "drugo, prosim za predlog AI",
+                            "title": "drugo, prosim za predlog umetne inteligence",
                             "default": false
                         }
                     }
@@ -1986,7 +2069,7 @@
                 },
                 "otherCriteriaAI": {
                     "type": "boolean",
-                    "title": "Drugo, prosim predlog AI",
+                    "title": "drugo, prosim za predlog umetne inteligence",
                     "default": false
                 },
                 "socialCriteria": {
@@ -2154,7 +2237,7 @@
                 },
                 "otherCriteriaAIRatio": {
                     "type": "number",
-                    "title": "Drugo, prosim predlog AI (točke)",
+                    "title": "drugo, prosim za predlog umetne inteligence (točke)",
                     "minimum": 0,
                     "render_if": {
                         "field": "selectionCriteria.otherCriteriaAI",

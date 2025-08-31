@@ -5,7 +5,7 @@ import streamlit as st
 import sys
 sys.path.insert(0, '/mnt/c/Programiranje/Python/javna_narocila_prototip')
 
-from utils.criteria_validation import validate_criteria_selection
+from utils.validations import validate_criteria_selection
 
 st.title("Simple Validation Test")
 

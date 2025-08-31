@@ -2,7 +2,7 @@
 """Test script for criteria validation feature (Stories 21.1-21.3)"""
 
 import sys
-from utils.criteria_validation import (
+from utils.validations import (
     validate_criteria_selection,
     check_cpv_requires_additional_criteria,
     get_validation_summary

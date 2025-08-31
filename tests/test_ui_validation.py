@@ -6,7 +6,7 @@ Run with: streamlit run test_ui_validation.py
 
 import streamlit as st
 import database
-from utils.criteria_validation import (
+from utils.validations import (
     validate_criteria_selection,
     check_cpv_requires_additional_criteria,
     get_validation_summary

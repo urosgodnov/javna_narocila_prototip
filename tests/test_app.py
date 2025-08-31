@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 sys.path.insert(0, '/mnt/c/Programiranje/Python/javna_narocila_prototip')
 
-from utils.criteria_validation import validate_criteria_selection, check_cpv_requires_social_criteria
+from utils.validations import validate_criteria_selection, check_cpv_requires_social_criteria
 
 st.title("Test CPV Validation")
 

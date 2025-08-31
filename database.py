@@ -123,6 +123,9 @@ def init_db():
         # Execute AI documents table migration
         create_ai_documents_tables()
         
+        # Create bank table
+        create_bank_table()
+        
         conn.commit()
 
 def save_draft(form_data):
@@ -245,6 +248,11 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
     vrsta = form_data.get('orderType', {}).get('type', '')
     postopek = form_data.get('submissionProcedure', {}).get('procedure', '')
     
+    # Story 1.1: Transform "vseeno" to "odprti postopek" for document generation
+    if postopek == 'vseeno':
+        postopek = 'odprti postopek'
+        logging.info("Transformed 'vseeno' to 'odprti postopek' for document generation")
+    
     # Calculate value - sum from lots if present, otherwise from main field
     vrednost = 0
     
@@ -327,8 +335,9 @@ def create_procurement(form_data, customer_name='demo_organizacija'):
                 logging.info(f"Found estimated value in nested orderType.estimatedValue: {vrednost}")
     
     # Debug: Show what we extracted
-    has_lots = lot_mode == 'multiple' and num_lots > 0
-    logging.warning(f"  Extracted: naziv='{naziv}', vrsta='{vrsta}', postopek='{postopek}', vrednost={vrednost}, has_lots={has_lots}")
+    # In new architecture, check number of lots directly
+    num_lots_actual = len(form_data.get('lots', []))
+    logging.warning(f"  Extracted: naziv='{naziv}', vrsta='{vrsta}', postopek='{postopek}', vrednost={vrednost}, num_lots={num_lots_actual}")
     
     # Set default date and status
     datum_objave = datetime.now().date().isoformat()
@@ -367,6 +376,11 @@ def update_procurement(procurement_id, form_data):
     naziv = form_data.get('projectInfo', {}).get('projectName', 'Neimenovano naročilo')
     vrsta = form_data.get('orderType', {}).get('type', '')
     postopek = form_data.get('submissionProcedure', {}).get('procedure', '')
+    
+    # Story 1.1: Transform "vseeno" to "odprti postopek" for document generation
+    if postopek == 'vseeno':
+        postopek = 'odprti postopek'
+        logging.info("Transformed 'vseeno' to 'odprti postopek' for document generation")
     
     # Calculate value - same logic as create_procurement
     vrednost = 0
@@ -1050,3 +1064,427 @@ def ensure_demo_organization_exists():
         else:
             # For other errors, just ensure we can continue
             pass
+
+
+# ============ BANK TABLE OPERATIONS ============
+
+def create_bank_table():
+    """Create the bank table if it doesn't exist."""
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        cursor = conn.cursor()
+        
+        # Create bank table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bank (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bank_code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                short_name TEXT,
+                swift TEXT,
+                active BOOLEAN DEFAULT 1,
+                country TEXT DEFAULT 'SI',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create indexes for performance
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_bank_code 
+            ON bank(bank_code)
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_bank_swift 
+            ON bank(swift)
+        ''')
+        
+        conn.commit()
+
+
+class BankManager:
+    """Manager class for bank operations following the pattern of existing managers."""
+    
+    def __init__(self, db_connection):
+        """Initialize BankManager with database connection.
+        
+        Args:
+            db_connection: SQLite database connection object
+        """
+        self.conn = db_connection
+        self.cursor = self.conn.cursor()
+    
+    def create_bank_table(self):
+        """Create bank table if it doesn't exist."""
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bank (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bank_code TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                short_name TEXT,
+                swift TEXT,
+                active BOOLEAN DEFAULT 1,
+                country TEXT DEFAULT 'SI',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create indexes
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_bank_code ON bank(bank_code)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_bank_swift ON bank(swift)')
+        self.conn.commit()
+    
+    def insert_bank(self, bank_data: dict) -> int:
+        """Insert a new bank into the database.
+        
+        Args:
+            bank_data: Dictionary containing bank information
+                - code: Bank code (required)
+                - name: Bank name (required)  
+                - short_name: Short name (optional)
+                - swift: SWIFT/BIC code (optional)
+                - active: Active status (optional, defaults to 1)
+                - country: Country code (optional, defaults to 'SI')
+        
+        Returns:
+            ID of the inserted bank or None if insertion failed
+        """
+        try:
+            self.cursor.execute('''
+                INSERT INTO bank (bank_code, name, short_name, swift, active, country)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                bank_data.get('code'),
+                bank_data.get('name'),
+                bank_data.get('short_name'),
+                bank_data.get('swift'),
+                bank_data.get('active', 1),
+                bank_data.get('country', 'SI')
+            ))
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except sqlite3.IntegrityError as e:
+            if 'UNIQUE constraint failed' in str(e):
+                print(f"Bank with code {bank_data.get('code')} already exists")
+            return None
+        except Exception as e:
+            print(f"Error inserting bank: {e}")
+            return None
+    
+    def update_bank(self, bank_id: int, bank_data: dict) -> bool:
+        """Update an existing bank.
+        
+        Args:
+            bank_id: ID of the bank to update
+            bank_data: Dictionary with fields to update
+        
+        Returns:
+            True if update was successful, False otherwise
+        """
+        try:
+            # Build dynamic update query based on provided fields
+            update_fields = []
+            values = []
+            
+            for field in ['name', 'short_name', 'swift', 'active', 'country']:
+                if field in bank_data:
+                    update_fields.append(f"{field} = ?")
+                    values.append(bank_data[field])
+            
+            if not update_fields:
+                return False
+            
+            # Add updated_at timestamp
+            update_fields.append("updated_at = CURRENT_TIMESTAMP")
+            values.append(bank_id)
+            
+            query = f"UPDATE bank SET {', '.join(update_fields)} WHERE id = ?"
+            self.cursor.execute(query, values)
+            self.conn.commit()
+            
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error updating bank: {e}")
+            return False
+    
+    def get_bank_by_code(self, bank_code: str) -> dict:
+        """Get bank by its code.
+        
+        Args:
+            bank_code: 2-character bank code
+        
+        Returns:
+            Dictionary with bank data or None if not found
+        """
+        self.cursor.execute('''
+            SELECT id, bank_code, name, short_name, swift, active, country, 
+                   created_at, updated_at
+            FROM bank 
+            WHERE bank_code = ?
+        ''', (bank_code,))
+        
+        row = self.cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'bank_code': row[1],
+                'name': row[2],
+                'short_name': row[3],
+                'swift': row[4],
+                'active': row[5],
+                'country': row[6],
+                'created_at': row[7],
+                'updated_at': row[8]
+            }
+        return None
+    
+    def get_bank_by_swift(self, swift: str) -> dict:
+        """Get bank by its SWIFT/BIC code.
+        
+        Args:
+            swift: SWIFT/BIC code
+        
+        Returns:
+            Dictionary with bank data or None if not found
+        """
+        self.cursor.execute('''
+            SELECT id, bank_code, name, short_name, swift, active, country,
+                   created_at, updated_at
+            FROM bank 
+            WHERE swift = ?
+        ''', (swift,))
+        
+        row = self.cursor.fetchone()
+        if row:
+            return {
+                'id': row[0],
+                'bank_code': row[1],
+                'name': row[2],
+                'short_name': row[3],
+                'swift': row[4],
+                'active': row[5],
+                'country': row[6],
+                'created_at': row[7],
+                'updated_at': row[8]
+            }
+        return None
+    
+    def get_all_banks(self, active_only: bool = False) -> list:
+        """Get all banks from the database.
+        
+        Args:
+            active_only: If True, return only active banks
+        
+        Returns:
+            List of dictionaries containing bank data
+        """
+        if active_only:
+            query = '''
+                SELECT id, bank_code, name, short_name, swift, active, country,
+                       created_at, updated_at
+                FROM bank 
+                WHERE active = 1
+                ORDER BY bank_code
+            '''
+        else:
+            query = '''
+                SELECT id, bank_code, name, short_name, swift, active, country,
+                       created_at, updated_at
+                FROM bank 
+                ORDER BY bank_code
+            '''
+        
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        
+        banks = []
+        for row in rows:
+            banks.append({
+                'id': row[0],
+                'bank_code': row[1],
+                'name': row[2],
+                'short_name': row[3],
+                'swift': row[4],
+                'active': row[5],
+                'country': row[6],
+                'created_at': row[7],
+                'updated_at': row[8]
+            })
+        
+        return banks
+    
+    def deactivate_bank(self, bank_id: int) -> bool:
+        """Deactivate a bank (soft delete).
+        
+        Args:
+            bank_id: ID of the bank to deactivate
+        
+        Returns:
+            True if deactivation was successful, False otherwise
+        """
+        try:
+            self.cursor.execute('''
+                UPDATE bank 
+                SET active = 0, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            ''', (bank_id,))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error deactivating bank: {e}")
+            return False
+    
+    def activate_bank(self, bank_id: int) -> bool:
+        """Activate a bank.
+        
+        Args:
+            bank_id: ID of the bank to activate
+        
+        Returns:
+            True if activation was successful, False otherwise
+        """
+        try:
+            self.cursor.execute('''
+                UPDATE bank 
+                SET active = 1, updated_at = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            ''', (bank_id,))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error activating bank: {e}")
+            return False
+    
+    def toggle_bank_status(self, bank_id: int) -> bool:
+        """Toggle bank active status.
+        
+        Args:
+            bank_id: ID of the bank
+        
+        Returns:
+            True if toggle was successful, False otherwise
+        """
+        try:
+            # First get current status
+            self.cursor.execute('SELECT active FROM bank WHERE id = ?', (bank_id,))
+            row = self.cursor.fetchone()
+            
+            if row:
+                new_status = 0 if row[0] == 1 else 1
+                self.cursor.execute('''
+                    UPDATE bank 
+                    SET active = ?, updated_at = CURRENT_TIMESTAMP 
+                    WHERE id = ?
+                ''', (new_status, bank_id))
+                self.conn.commit()
+                return True
+            return False
+        except Exception as e:
+            print(f"Error toggling bank status: {e}")
+            return False
+
+
+# Convenience functions for bank operations (following the pattern of organization functions)
+
+def get_all_banks(active_only=False):
+    """Get all banks from the database.
+    
+    Args:
+        active_only: If True, return only active banks
+    
+    Returns:
+        List of dictionaries containing bank data
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        return bank_manager.get_all_banks(active_only)
+
+
+def get_bank_by_code(bank_code):
+    """Get bank by its code.
+    
+    Args:
+        bank_code: 2-character bank code
+    
+    Returns:
+        Dictionary with bank data or None if not found
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        return bank_manager.get_bank_by_code(bank_code)
+
+
+def get_bank_by_swift(swift):
+    """Get bank by its SWIFT/BIC code.
+    
+    Args:
+        swift: SWIFT/BIC code
+    
+    Returns:
+        Dictionary with bank data or None if not found
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        return bank_manager.get_bank_by_swift(swift)
+
+
+def create_bank(bank_code, name, short_name=None, swift=None, active=1, country='SI'):
+    """Create a new bank.
+    
+    Args:
+        bank_code: 2-character bank code
+        name: Full bank name
+        short_name: Short name (optional)
+        swift: SWIFT/BIC code (optional)
+        active: Active status (optional, defaults to 1)
+        country: Country code (optional, defaults to 'SI')
+    
+    Returns:
+        ID of the created bank or None if creation failed
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        return bank_manager.insert_bank({
+            'code': bank_code,
+            'name': name,
+            'short_name': short_name,
+            'swift': swift,
+            'active': active,
+            'country': country
+        })
+
+
+def update_bank(bank_id, **kwargs):
+    """Update an existing bank.
+    
+    Args:
+        bank_id: ID of the bank to update
+        **kwargs: Fields to update (name, short_name, swift, active, country)
+    
+    Returns:
+        True if update was successful, False otherwise
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        return bank_manager.update_bank(bank_id, kwargs)
+
+
+def toggle_bank_status(bank_id):
+    """Toggle bank active status.
+    
+    Args:
+        bank_id: ID of the bank
+    
+    Returns:
+        True if toggle was successful, False otherwise
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        return bank_manager.toggle_bank_status(bank_id)
