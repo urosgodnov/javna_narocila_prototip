@@ -31,11 +31,12 @@ class FormController:
         # Create context with lot structure (automatically creates General lot)
         self.context = FormContext(st.session_state)
         
-        # Initialize renderer components
-        self.field_renderer = FieldRenderer(self.context)
+        # Initialize validation renderer first
+        self.validation_renderer = ValidationRenderer(self.context)
+        # Pass validation renderer to field renderer for dynamic requirements
+        self.field_renderer = FieldRenderer(self.context, self.validation_renderer)
         self.section_renderer = SectionRenderer(self.context, self.field_renderer)
         self.lot_manager = LotManager(self.context)
-        self.validation_renderer = ValidationRenderer(self.context)
         
         # Store schema (can be set later with set_schema)
         self.schema = schema or {}
@@ -118,6 +119,10 @@ class FormController:
         # Show progress if enabled
         if show_progress:
             self._render_progress()
+        
+        # Update dynamic requirements based on current form data
+        form_data = self.get_form_data()
+        self.validation_renderer.update_dynamic_requirements(form_data)
         
         # Get schema properties based on type
         if self.schema.get('type') == 'object':

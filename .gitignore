@@ -447,3 +447,4 @@ config_fixed.py
 screenshots/brezpoljpng.png
 screenshots/brezpoljpng2.png
 debug_production_keys.py
+mainDB.db

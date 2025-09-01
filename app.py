@@ -761,6 +761,44 @@ def navigate_to_step(target_step, lot_id=None):
     else:
         st.warning("⚠️ Ne morete skočiti na ta korak - prejšnji koraki niso izpolnjeni")
 
+def get_required_fields_for_step(step_keys):
+    """
+    Define required fields for each step to show asterisks.
+    Maps step field keys to their required field names.
+    """
+    required_map = {
+        'clientInfo': [
+            'singleClientName', 'singleClientStreet', 'singleClientHouseNumber',
+            'singleClientPostalCode', 'singleClientCity', 'singleClientLegalRepresentative'
+        ],
+        'orderInfo': ['title', 'description', 'estimatedValue'],
+        'cpvInfo': ['mainCPV'],
+        'submissionProcedure': ['procedureType'],
+        'orderType': ['type'],
+        'lotsInfo': ['hasLots'],
+        'executionDeadline': ['deadlineType'],
+        'submissionDeadline': ['deadlineDate', 'deadlineTime'],
+        'technicalRequirements': ['description'],
+        'priceInfo': ['evaluationType'],
+        'criteriaInfo': ['type'],
+        'participationConditions': [],
+        'negotiationInfo': [],
+        'contractInfo': ['duration']
+    }
+    
+    required_fields = []
+    for key in step_keys:
+        # Handle lot-specific keys
+        if '.' in key:
+            base_key = key.split('.')[1]  # lot_0.orderInfo -> orderInfo
+        else:
+            base_key = key
+            
+        if base_key in required_map:
+            required_fields.extend(required_map[base_key])
+    
+    return list(set(required_fields))  # Remove duplicates
+
 def render_quick_navigation():
     """Render quick navigation dropdown for completed steps."""
     from config_fixed import get_fixed_steps, get_step_name
@@ -1105,6 +1143,34 @@ def validate_step(step_keys, schema):
     
     # Run general validation
     is_valid, errors = validator.validate_step(step_keys, current_step)
+    
+    # Display general validation errors and add field styling
+    if not is_valid:
+        # Try to add red border styling to invalid fields
+        try:
+            from ui.renderers.validation_renderer import ValidationRenderer
+            from ui.contexts.form_context import FormContext
+            
+            # Create a validation renderer if we can
+            context = FormContext(st.session_state)
+            validation_renderer = ValidationRenderer(context)
+            
+            # Mark fields with errors for red border styling
+            for field_key in step_keys:
+                # Check if this is a property key that might have required subfields
+                if field_key in schema.get('properties', {}):
+                    field_schema = schema['properties'][field_key]
+                    if field_schema.get('type') == 'object' and 'properties' in field_schema:
+                        # Check subfields for clientInfo
+                        for subfield_key, subfield_schema in field_schema['properties'].items():
+                            full_key = f"{field_key}.{subfield_key}"
+                            field_value = st.session_state.get(full_key)
+                            # Check if field is required and empty
+                            if subfield_key in validator.get_required_fields():
+                                if not field_value or (isinstance(field_value, str) and not field_value.strip()):
+                                    validation_renderer.add_field_error_style(full_key)
+        except Exception as e:
+            logging.warning(f"Could not apply field error styling: {e}")
     
     # Display general validation errors
     for error in errors:
@@ -1542,9 +1608,13 @@ def render_main_form():
                 st.session_state[session_key] = other_info_value
         else:
             # Render normal form for all other steps including step 14 (contractInfo)
-            # Use FormController for rendering
+            # Use FormController for rendering with required fields
+            required_fields = get_required_fields_for_step(current_step_keys)
             
-            form_controller.set_schema({'properties': current_step_properties})
+            form_controller.set_schema({
+                'properties': current_step_properties,
+                'required': required_fields
+            })
             form_controller.render_form()
         
         st.markdown('</div>', unsafe_allow_html=True)

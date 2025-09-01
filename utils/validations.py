@@ -738,48 +738,93 @@ class ValidationManager:
         """
         errors = []
         
+        # Get current lot index for lot-aware validation
+        current_lot = self.session_state.get('current_lot_index', 0)
+        
         # For multiple customers, the validation is already handled in _validate_multiple_entries()
         # We just need to handle single customer here
-        is_single_client = self.session_state.get('clientInfo.isSingleClient', True)
+        # Check lot-aware key first, then fall back to global
+        is_single_client = (
+            self.session_state.get(f'lots.{current_lot}.clientInfo.isSingleClient') or
+            self.session_state.get('clientInfo.isSingleClient', True)
+        )
         if is_single_client:
             # Check if we're using new address fields or old combined field
-            using_new_fields = 'clientInfo.singleClientStreet' in self.session_state or \
-                             'clientInfo.singleClientHouseNumber' in self.session_state
+            # Check multiple possible key patterns - LOT AWARE
+            using_new_fields = False
+            street_keys = [
+                f'lots.{current_lot}.clientInfo.singleClientStreet',
+                f'lots.{current_lot}.singleClientStreet',
+                'clientInfo.singleClientStreet', 
+                'singleClientStreet',
+                'widget_clientInfo.singleClientStreet',
+                'widget_singleClientStreet'
+            ]
+            for key in street_keys:
+                if key in self.session_state:
+                    using_new_fields = True
+                    break
             
             if using_new_fields:
-                # Validate new separate address fields
+                # Validate new separate address fields - LOT AWARE
                 required_fields = {
-                    'clientInfo.singleClientName': 'Ime naročnika',
-                    'clientInfo.singleClientStreet': 'Ulica',
-                    'clientInfo.singleClientHouseNumber': 'Hišna številka',
-                    'clientInfo.singleClientPostalCode': 'Poštna številka',
-                    'clientInfo.singleClientCity': 'Kraj',
-                    'clientInfo.singleClientLegalRepresentative': 'Zakoniti zastopnik (ime in priimek)'
+                    'singleClientName': 'Ime naročnika',
+                    'singleClientStreet': 'Ulica',
+                    'singleClientHouseNumber': 'Hišna številka',
+                    'singleClientPostalCode': 'Poštna številka',
+                    'singleClientCity': 'Kraj',
+                    'singleClientLegalRepresentative': 'Zakoniti zastopnik (ime in priimek)'
                 }
                 
-                # Basic required field validation
-                for field_key, field_label in required_fields.items():
-                    value = self._safe_strip(self.session_state.get(field_key, '')) if self.session_state.get(field_key) else ''
+                # Basic required field validation - check lot-specific keys
+                for field_name, field_label in required_fields.items():
+                    # Try lot-specific keys first
+                    lot_key = f'lots.{current_lot}.clientInfo.{field_name}'
+                    lot_key_alt = f'lots.{current_lot}.{field_name}'
+                    global_key = f'clientInfo.{field_name}'
+                    
+                    value = (
+                        self.session_state.get(lot_key, '') or
+                        self.session_state.get(lot_key_alt, '') or
+                        self.session_state.get(global_key, '')
+                    )
+                    value = self._safe_strip(value) if value else ''
                     if not value:
                         errors.append(f"{field_label} je obvezno polje")
                 
-                # Advanced validation for address fields
-                street = self.session_state.get('clientInfo.singleClientStreet', '')
+                # Advanced validation for address fields - LOT AWARE
+                street = (
+                    self.session_state.get(f'lots.{current_lot}.singleClientStreet', '') or
+                    self.session_state.get(f'lots.{current_lot}.clientInfo.singleClientStreet', '') or
+                    self.session_state.get('clientInfo.singleClientStreet', '')
+                )
                 if street:
                     is_valid, street_errors = validate_street(street)
                     errors.extend(street_errors)
                 
-                house_number = self.session_state.get('clientInfo.singleClientHouseNumber', '')
+                house_number = (
+                    self.session_state.get(f'lots.{current_lot}.singleClientHouseNumber', '') or
+                    self.session_state.get(f'lots.{current_lot}.clientInfo.singleClientHouseNumber', '') or
+                    self.session_state.get('clientInfo.singleClientHouseNumber', '')
+                )
                 if house_number:
                     is_valid, house_errors = validate_house_number(house_number)
                     errors.extend(house_errors)
                 
-                city = self.session_state.get('clientInfo.singleClientCity', '')
+                city = (
+                    self.session_state.get(f'lots.{current_lot}.singleClientCity', '') or
+                    self.session_state.get(f'lots.{current_lot}.clientInfo.singleClientCity', '') or
+                    self.session_state.get('clientInfo.singleClientCity', '')
+                )
                 if city:
                     is_valid, city_errors = validate_city(city)
                     errors.extend(city_errors)
                 
-                postal_code = self.session_state.get('clientInfo.singleClientPostalCode', '')
+                postal_code = (
+                    self.session_state.get(f'lots.{current_lot}.singleClientPostalCode', '') or
+                    self.session_state.get(f'lots.{current_lot}.clientInfo.singleClientPostalCode', '') or
+                    self.session_state.get('clientInfo.singleClientPostalCode', '')
+                )
                 if postal_code:
                     is_valid, postal_errors = validate_postal_code(postal_code)
                     errors.extend(postal_errors)
@@ -860,6 +905,25 @@ class ValidationManager:
         if not has_lots:
             # Single order treated as virtual lot - validation passes
             # No errors for single orders
+            return True, []
+        
+        # Check if we're on the lot configuration step (only collecting names)
+        # This step just needs lot names, not full lot details
+        step_keys = self.session_state.get('current_step_keys', [])
+        if 'lotConfiguration' in step_keys:
+            # For lot configuration, only validate that we have lot names
+            lot_names = self.session_state.get('lot_names', [])
+            if len(lot_names) < 2:
+                errors.append("Če je naročilo razdeljeno na sklope, vnesite vsaj 2 sklopa")
+                return False, errors
+            
+            # Check that all lot names are non-empty
+            for i, name in enumerate(lot_names):
+                if not name or not name.strip():
+                    errors.append(f"Vnesite ime za sklop {i+1}")
+                    return False, errors
+            
+            # Lot configuration step validation passes if we have valid names
             return True, []
         
         # Multiple lots case - collect lots from session state
@@ -4197,19 +4261,20 @@ def validate_criteria_points(criteria: Dict) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def validate_date_range(start_date: str, end_date: str, field_name: str) -> Tuple[bool, List[str]]:
+def validate_date_range(start_date, end_date, field_name: str) -> Tuple[bool, List[str]]:
     """
     Validate that end date is after start date.
     
     Args:
-        start_date: Start date string (dd.mm.yyyy format)
-        end_date: End date string (dd.mm.yyyy format)
+        start_date: Start date (can be string in dd.mm.yyyy format or datetime.date object)
+        end_date: End date (can be string in dd.mm.yyyy format or datetime.date object)
         field_name: Name of the field for error message
         
     Returns:
         Tuple of (is_valid, list of error messages)
     """
-    from datetime import datetime
+    from datetime import datetime, date
+    import logging
     
     errors = []
     
@@ -4217,14 +4282,26 @@ def validate_date_range(start_date: str, end_date: str, field_name: str) -> Tupl
         return True, []  # Skip validation if either date is empty
     
     try:
-        # Parse dates in dd.mm.yyyy format
-        start = datetime.strptime(start_date, "%d.%m.%Y")
-        end = datetime.strptime(end_date, "%d.%m.%Y")
+        # Handle both string and date object formats
+        if isinstance(start_date, date):
+            start = start_date
+        else:
+            # Parse string date in dd.mm.yyyy format
+            start = datetime.strptime(str(start_date), "%d.%m.%Y").date()
+        
+        if isinstance(end_date, date):
+            end = end_date
+        else:
+            # Parse string date in dd.mm.yyyy format
+            end = datetime.strptime(str(end_date), "%d.%m.%Y").date()
+        
+        logging.info(f"[validate_date_range] Comparing dates: start={start}, end={end}")
         
         if end < start:
             errors.append(f"{field_name}: Končni datum ne more biti pred začetnim")
-    except ValueError as e:
-        # Date format error - this should be caught by format validation
+    except (ValueError, AttributeError) as e:
+        # Date format error - log it but don't add error since dates might be in different format
+        logging.warning(f"[validate_date_range] Date parsing error: {e}, start_date={start_date}, end_date={end_date}")
         pass
     
     return len(errors) == 0, errors

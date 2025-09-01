@@ -27,14 +27,16 @@ class FieldRenderer:
         "averageSalary"
     ]
     
-    def __init__(self, context: FormContext):
+    def __init__(self, context: FormContext, validation_renderer=None):
         """
         Initialize field renderer.
         
         Args:
             context: FormContext instance for state management
+            validation_renderer: Optional ValidationRenderer for dynamic requirements
         """
         self.context = context
+        self.validation_renderer = validation_renderer
         
     def render_field(self, 
                     field_name: str, 
@@ -53,6 +55,10 @@ class FieldRenderer:
         Returns:
             Field value
         """
+        # Skip deprecated fields completely
+        if field_schema.get('deprecated', False):
+            return None
+            
         field_type = field_schema.get('type')
         
         if field_type == 'string':
@@ -81,10 +87,9 @@ class FieldRenderer:
         Story 1.2: Support for dynamic required indicators.
         """
         # Check if we have a validation renderer with dynamic requirements
-        if hasattr(self.context, 'validation_renderer'):
-            renderer = self.context.validation_renderer
-            if hasattr(renderer, '_dynamic_required_fields') and field_key:
-                dynamic_required = renderer._dynamic_required_fields.get(field_key, required)
+        if self.validation_renderer:
+            if hasattr(self.validation_renderer, '_dynamic_required_fields') and field_key:
+                dynamic_required = self.validation_renderer._dynamic_required_fields.get(field_key, required)
                 if dynamic_required:
                     return f"{label} *"
         
@@ -113,8 +118,43 @@ class FieldRenderer:
         
         current_value = self.context.get_field_value(full_key, default)
         
+        # Check if field has validation errors to add red border
+        has_error = self.context.has_errors(full_key)
+        if has_error:
+            # Add CSS for red border on this specific field
+            self._add_field_error_style(widget_key)
+        
         # Handle different string subtypes
-        if schema.get('format') == 'date':
+        # Check for CPV field first
+        if 'cpv' in field_name.lower() or schema.get('format') == 'cpv':
+            # Apply error styling if validation errors exist
+            if self.context.has_errors(full_key):
+                self._add_field_error_style(widget_key)
+            
+            # Use CPV selector component
+            from ui.components.cpv_selector import render_cpv_selector
+            value = render_cpv_selector(
+                field_key=widget_key,
+                field_schema={
+                    'title': self._format_label(label, required, full_key),
+                    'description': help_text
+                },
+                current_value=current_value,
+                disabled=False
+            )
+            self.context.set_field_value(full_key, value)
+            
+            # Validate CPV if required
+            if required and not value:
+                self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+            
+            # Show validation error message below field if exists
+            errors = self.context.get_validation_errors(full_key)
+            if errors:
+                st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+            
+            return value
+        elif schema.get('format') == 'date':
             return self._render_date_picker(
                 full_key, label, help_text, required, current_value, schema
             )
@@ -129,6 +169,11 @@ class FieldRenderer:
         elif schema.get('format') == 'textarea' or schema.get('widget') == 'textarea':
             return self._render_text_area(
                 full_key, label, help_text, required, current_value
+            )
+        elif schema.get('format') == 'file':
+            # Render file uploader for logo and other file fields
+            return self._render_file_uploader(
+                full_key, label, help_text, required, current_value, schema
             )
         elif schema.get('format') == 'iban' or 'iban' in field_name.lower() or 'trr' in field_name.lower():
             # Render IBAN field with validation
@@ -159,7 +204,12 @@ class FieldRenderer:
             
             # Add validation error if required and empty
             if required and not value:
-                self.context.add_validation_error(full_key, f"{label} is required")
+                self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+            
+            # Show validation error message below field if exists
+            errors = self.context.get_validation_errors(full_key)
+            if errors:
+                st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
             
             return value
     
@@ -190,6 +240,13 @@ class FieldRenderer:
         # Check if this is a financial field
         is_financial = self._is_financial_field(field_name, parent_key)
         
+        # Check if field has validation errors to add red border
+        has_error = self.context.has_errors(full_key)
+        if has_error:
+            # Add CSS for red border on this specific field
+            widget_key_text = f"widget_{session_key}_text" if not is_financial else f"widget_{session_key}_formatted"
+            self._add_field_error_style(widget_key_text)
+        
         if is_financial:
             # Use text input with formatting for financial fields
             return self._render_financial_field(
@@ -215,6 +272,16 @@ class FieldRenderer:
                 else:
                     number_value = 0.0
                 self.context.set_field_value(full_key, number_value)
+                
+                # Add validation error if required and empty
+                if required and number_value == 0.0 and not value_str.strip():
+                    self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+                
+                # Show validation error message below field if exists
+                errors = self.context.get_validation_errors(full_key)
+                if errors:
+                    st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+                
                 return number_value
             except ValueError:
                 st.warning(f"'{value_str}' ni veljavna številka")
@@ -320,6 +387,11 @@ class FieldRenderer:
         session_key = self.context.get_field_key(full_key)
         widget_key = f"widget_{session_key}"
         
+        # Check if field has validation errors to add red border
+        has_error = self.context.has_errors(full_key)
+        if has_error:
+            self._add_field_error_style(widget_key)
+        
         # Handle null/None values - keep field empty
         if current_value is None or current_value == "null":
             current_value = None
@@ -379,6 +451,11 @@ class FieldRenderer:
         if required and value is None:
             self.context.add_validation_error(full_key, f"{label} je obvezno polje")
         
+        # Show validation error message below field if exists
+        errors = self.context.get_validation_errors(full_key)
+        if errors:
+            st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+        
         return value
     
     def _render_datetime_picker(self, 
@@ -431,6 +508,11 @@ class FieldRenderer:
         session_key = self.context.get_field_key(full_key)
         widget_key = f"widget_{session_key}"
         
+        # Check if field has validation errors to add red border
+        has_error = self.context.has_errors(full_key)
+        if has_error:
+            self._add_field_error_style(widget_key)
+        
         # Ensure current value is in options
         if current_value not in options and options:
             current_value = options[0]
@@ -446,6 +528,16 @@ class FieldRenderer:
         )
         
         self.context.set_field_value(full_key, value)
+        
+        # Add validation error if required and no selection
+        if required and (not value or value == ""):
+            self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+        
+        # Show validation error message below field if exists
+        errors = self.context.get_validation_errors(full_key)
+        if errors:
+            st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+        
         return value
     
     def _render_text_area(self, 
@@ -458,6 +550,11 @@ class FieldRenderer:
         session_key = self.context.get_field_key(full_key)
         widget_key = f"widget_{session_key}"
         
+        # Check if field has validation errors to add red border
+        has_error = self.context.has_errors(full_key)
+        if has_error:
+            self._add_field_error_style(widget_key)
+        
         value = st.text_area(
             label=self._format_label(label, required, full_key),
             value=current_value,
@@ -468,9 +565,71 @@ class FieldRenderer:
         self.context.set_field_value(full_key, value)
         
         if required and not value:
-            self.context.add_validation_error(full_key, f"{label} is required")
+            self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+        
+        # Show validation error message below field if exists
+        errors = self.context.get_validation_errors(full_key)
+        if errors:
+            st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
         
         return value
+    
+    def _render_file_uploader(self,
+                            full_key: str,
+                            label: str,
+                            help_text: str,
+                            required: bool,
+                            current_value: Any,
+                            schema: dict) -> Any:
+        """Render file uploader for logo and other files."""
+        session_key = self.context.get_field_key(full_key)
+        widget_key = f"widget_{session_key}"
+        
+        # Determine file types based on field
+        if 'logo' in full_key.lower():
+            file_types = ['png', 'jpg', 'jpeg', 'svg', 'gif']
+            type_label = "PNG, JPG, JPEG, SVG, GIF"
+        else:
+            file_types = None  # Accept all files
+            type_label = "vse vrste datotek"
+        
+        # File uploader
+        uploaded_file = st.file_uploader(
+            label=self._format_label(label, required, full_key),
+            type=file_types,
+            key=widget_key,
+            help=help_text or f"Dovoljene vrste: {type_label}"
+        )
+        
+        # Store file info in session state
+        if uploaded_file is not None:
+            # Store file object
+            self.context.set_field_value(full_key, uploaded_file)
+            
+            # Store file metadata for persistence
+            file_info = {
+                'name': uploaded_file.name,
+                'type': uploaded_file.type,
+                'size': uploaded_file.size
+            }
+            self.context.set_field_value(f"{full_key}_file_info", file_info)
+            
+            # Show file info
+            st.success(f"✓ Naložena datoteka: {uploaded_file.name} ({uploaded_file.size:,} bajtov)")
+        else:
+            # Check if there's previously uploaded file info
+            file_info = self.context.get_field_value(f"{full_key}_file_info")
+            if file_info:
+                st.info(f"ℹ️ Prejšnja datoteka: {file_info['name']}")
+            
+            # Clear the field value if no file
+            self.context.set_field_value(full_key, None)
+        
+        # Validation
+        if required and not uploaded_file and not file_info:
+            self.context.add_validation_error(full_key, f"{label} je obvezno")
+        
+        return uploaded_file
     
     def _render_multiselect(self, 
                            full_key: str, 
@@ -523,6 +682,11 @@ class FieldRenderer:
         session_key = self.context.get_field_key(full_key)
         widget_key = f"widget_{session_key}_formatted"
         
+        # Check if field has validation errors to add red border
+        has_error = self.context.has_errors(full_key)
+        if has_error:
+            self._add_field_error_style(widget_key)
+        
         # Format current value with European format
         formatted_str = format_currency_display(current_value)
         
@@ -553,6 +717,15 @@ class FieldRenderer:
             if 'estimatedValue' in full_key:
                 logging.info(f"[ESTIMATED_VALUE] {full_key}={parsed_value}")
             
+            # Add validation error if required and empty
+            if required and parsed_value == 0.0 and not value_str.strip():
+                self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+            
+            # Show validation error message below field if exists
+            errors = self.context.get_validation_errors(full_key)
+            if errors:
+                st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+            
             return parsed_value
         else:
             if value_str and value_str.strip():
@@ -577,6 +750,67 @@ class FieldRenderer:
                 return formatted
         except (ValueError, TypeError):
             return str(value)
+    
+    def _add_field_error_style(self, widget_key: str) -> None:
+        """Add CSS styling for fields with validation errors."""
+        # Generate a unique class name for this field
+        error_class = f"error-field-{widget_key.replace('widget_', '').replace('.', '-')}"
+        
+        st.markdown(
+            f"""
+            <style>
+            /* Universal error field styling using data-testid */
+            div[data-testid="stTextInput"]:has(input[aria-label*="{widget_key}"]) input,
+            div[data-testid="stNumberInput"]:has(input[aria-label*="{widget_key}"]) input,
+            div[data-testid="stTextArea"]:has(textarea[aria-label*="{widget_key}"]) textarea,
+            div[data-testid="stDateInput"]:has(input[aria-label*="{widget_key}"]) input,
+            div[data-testid="stTimeInput"]:has(input[aria-label*="{widget_key}"]) input,
+            div[data-testid="stSelectbox"]:has(div[aria-label*="{widget_key}"]) > div > div:first-child,
+            div[data-testid="stMultiSelect"]:has(div[aria-label*="{widget_key}"]) > div > div:first-child {{
+                border: 2px solid #ff4444 !important;
+                background-color: #fff5f5 !important;
+                box-shadow: 0 0 0 1px #ff4444 !important;
+            }}
+            
+            /* Additional targeting for multiselect containers */
+            div[data-testid="stMultiSelect"] div[data-baseweb="select"]:has(input[aria-label*="{widget_key}"]) {{
+                border: 2px solid #ff4444 !important;
+                background-color: #fff5f5 !important;
+            }}
+            
+            /* Target by key attribute directly */
+            input[key="{widget_key}"],
+            textarea[key="{widget_key}"],
+            select[key="{widget_key}"],
+            div[key="{widget_key}"] {{
+                border: 2px solid #ff4444 !important;
+                background-color: #fff5f5 !important;
+            }}
+            
+            /* Add error indicator to parent container */
+            .{error_class} {{
+                position: relative;
+                padding: 2px;
+                background: linear-gradient(135deg, rgba(255,68,68,0.1) 0%, rgba(255,68,68,0.05) 100%);
+                border-radius: 6px;
+                margin: 2px 0;
+            }}
+            </style>
+            <script>
+            // Add error class to field containers
+            setTimeout(() => {{
+                const fields = document.querySelectorAll('[key="{widget_key}"], [aria-label*="{widget_key}"]');
+                fields.forEach(field => {{
+                    const container = field.closest('div[data-testid]');
+                    if (container) {{
+                        container.classList.add('{error_class}');
+                    }}
+                }});
+            }}, 100);
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
     
     def _parse_formatted_number(self, formatted_str: str) -> float:
         """Parse number from formatted string."""
@@ -778,10 +1012,11 @@ class FieldRenderer:
                            help_text: str, 
                            required: bool,
                            current_value: str) -> str:
-        """Render SWIFT/BIC field with validation and rate limiting."""
+        """Render SWIFT/BIC field with validation, rate limiting and bank registry."""
         from utils.validations import validate_swift_bic, validate_swift_bank_consistency
         from utils.rate_limiter import swift_rate_limiter
         import streamlit as st
+        import database
         
         session_key = self.context.get_field_key(full_key)
         widget_key = f"widget_{session_key}"
@@ -789,14 +1024,42 @@ class FieldRenderer:
         # Get session ID for rate limiting
         session_id = st.session_state.get('session_id', 'unknown')
         
-        # Input field
-        value = st.text_input(
-            label=self._format_label(label, required, full_key),
-            value=current_value or "",
-            key=widget_key,
-            help=help_text or "Format: LJBASI2X (8 ali 11 znakov)",
-            placeholder="XXXXXXXX"
-        )
+        # Get banks from registry for autocomplete
+        all_banks = database.get_all_banks()
+        active_banks = [b for b in all_banks if b.get('active', True) and b.get('swift')]
+        
+        # Create selectbox with banks
+        if active_banks:
+            bank_options = ["Ročni vnos"] + [f"{b['name']} - {b['swift']}" for b in active_banks]
+            selected = st.selectbox(
+                label=self._format_label(label, required, full_key),
+                options=bank_options,
+                key=f"select_{widget_key}",
+                help="Izberite banko iz šifranta ali vnesite ročno"
+            )
+            
+            if selected == "Ročni vnos":
+                # Manual input
+                value = st.text_input(
+                    label="SWIFT koda",
+                    value=current_value or "",
+                    key=widget_key,
+                    help=help_text or "Format: LJBASI2X (8 ali 11 znakov)",
+                    placeholder="XXXXXXXX"
+                )
+            else:
+                # Extract SWIFT from selection
+                value = selected.split(" - ")[-1] if " - " in selected else ""
+                st.info(f"Izbrana SWIFT koda: {value}")
+        else:
+            # No banks in registry, use manual input
+            value = st.text_input(
+                label=self._format_label(label, required, full_key),
+                value=current_value or "",
+                key=widget_key,
+                help=help_text or "Format: LJBASI2X (8 ali 11 znakov)",
+                placeholder="XXXXXXXX"
+            )
         
         # Store uppercase value
         uppercase_value = value.upper().strip()

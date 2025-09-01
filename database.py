@@ -1488,3 +1488,37 @@ def toggle_bank_status(bank_id):
     with sqlite3.connect(DATABASE_FILE) as conn:
         bank_manager = BankManager(conn)
         return bank_manager.toggle_bank_status(bank_id)
+
+
+def delete_bank(bank_id):
+    """Delete a bank (soft delete by deactivating).
+    
+    Args:
+        bank_id: ID of the bank to delete
+    
+    Returns:
+        True if deletion was successful, False otherwise
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        return bank_manager.deactivate_bank(bank_id)
+
+
+def update_bank_status(bank_id, active):
+    """Update bank active status.
+    
+    Args:
+        bank_id: ID of the bank
+        active: New status (True/False)
+    
+    Returns:
+        True if update was successful, False otherwise
+    """
+    init_db()
+    with sqlite3.connect(DATABASE_FILE) as conn:
+        bank_manager = BankManager(conn)
+        if active:
+            return bank_manager.activate_bank(bank_id)
+        else:
+            return bank_manager.deactivate_bank(bank_id)

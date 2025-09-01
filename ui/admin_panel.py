@@ -348,12 +348,8 @@ def render_database_management_tab():
     render_database_manager()
 
 def render_organization_management_tab():
-    """Render the organization management tab content with modern UI."""
+    """Render the organization management tab content."""
     import hashlib
-    from ui.components.modern_components import (
-        modern_card, modern_button, toast_notification,
-        status_badge, search_input, card_grid, empty_state
-    )
     
     # Ensure demo organization exists
     database.ensure_demo_organization_exists()
@@ -364,37 +360,36 @@ def render_organization_management_tab():
         with col1:
             st.markdown("### Upravljanje organizacij")
         with col2:
-            org_search = search_input("Išči organizacije...", key="org_search")
+            org_search = st.text_input("", placeholder="Išči organizacije...", key="org_search", label_visibility="collapsed")
         with col3:
-            if st.button("Nova organizacija", key="new_org", type="primary", use_container_width=True):
+            if st.button("➕ Nova", key="new_org", use_container_width=True):
                 st.session_state.show_add_org = True
 
-        # Add new organization form with modern card
+        # Add new organization form
         if st.session_state.get('show_add_org', False):
-            modern_card(
-                title="Dodaj novo organizacijo",
-                content="""
-                <p style="color: var(--text-secondary);">
-                    Vnesite podatke za novo organizacijo
-                </p>
-                """,
-                key="add_org_card"
-            )
+            st.markdown("---")
+            st.markdown("#### Dodaj novo organizacijo")
             
             with st.form(key='add_organization_form'):
                 col1, col2 = st.columns(2)
                 with col1:
-                    new_org_name = st.text_input("Naziv organizacije")
+                    new_org_name = st.text_input("Naziv organizacije *")
                 with col2:
                     new_org_password = st.text_input("Geslo (opcijsko)", type="password", 
                                                     help="Pustite prazno za organizacije brez gesla")
                 
-                if st.form_submit_button("Dodaj organizacijo", type="primary", use_container_width=True):
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col2:
+                    submit = st.form_submit_button("Shrani", type="primary", use_container_width=True)
+                with col3:
+                    cancel = st.form_submit_button("Prekliči", use_container_width=True)
+                
+                if submit:
                         if new_org_name:
                             # Check if organization already exists
                             existing_org = database.get_organization_by_name(new_org_name)
                             if existing_org:
-                                toast_notification(f"Organizacija '{new_org_name}' že obstaja.", "warning")
+                                st.warning(f"Organizacija '{new_org_name}' že obstaja.")
                             else:
                                 # Hash password if provided
                                 password_hash = None
@@ -418,31 +413,33 @@ def render_organization_management_tab():
         organizations = database.get_all_organizations()
         
         if organizations:
-            # Create a table-like display
+            # Create a clean table display
             for org in organizations:
                 with st.container():
                     col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
                     with col1:
                         st.markdown(f"**{org['name']}**")
                         if org['name'] == 'demo_organizacija':
-                            st.caption("Demo organizacija (brez gesla)")
+                            st.caption("Demo organizacija")
                     
                     with col2:
-                        # Password status
+                        # Simple password status text
                         if org['password_hash']:
-                            st.success(" Geslo nastavljeno")
+                            st.text("✓ Geslo")
                         else:
-                            st.warning(" Brez gesla")
+                            st.text("Brez gesla")
                     
                     with col3:
-                        # Update password button
-                        if st.button("Spremeni geslo", key=f"change_pwd_{org['id']}"):
+                        # Small password button
+                        if st.button("Geslo", key=f"change_pwd_{org['id']}", 
+                                    help="Spremeni geslo"):
                             st.session_state[f"editing_pwd_{org['id']}"] = True
                     
                     with col4:
                         # Delete button (except for demo)
                         if org['name'] != 'demo_organizacija':
-                            if st.button("Izbriši", key=f"delete_org_{org['id']}", type="secondary"):
+                            if st.button("🗑️", key=f"delete_org_{org['id']}", 
+                                        help="Izbriši organizacijo"):
                                 if database.delete_organization(org['id']):
                                     st.success(f"Organizacija izbrisana.")
                                     st.rerun()
@@ -1674,6 +1671,313 @@ def export_logs_to_csv():
         st.warning("Ni podatkov za izvoz.")
 
 
+def render_compact_bank_management():
+    """Render bank management with compact table view"""
+    
+    st.markdown("### Upravljanje bank")
+    
+    # Top action bar
+    col1, col2, col3 = st.columns([2, 3, 1])
+    
+    with col1:
+        # Compact stats
+        banks = database.get_all_banks()
+        active_count = len([b for b in banks if b.get('active', True)])
+        st.metric("Skupaj bank", len(banks), f"{active_count} aktivnih")
+    
+    with col2:
+        # Search without icon
+        search_term = st.text_input(
+            "Iskanje",
+            placeholder="Išči po nazivu, SWIFT ali kodi...",
+            label_visibility="collapsed",
+            key="bank_search_compact"
+        )
+    
+    with col3:
+        if st.button("➕ Nova banka", use_container_width=True, key="add_bank_btn"):
+            st.session_state.show_bank_form = True
+    
+    # Compact add form (modal-like)
+    if st.session_state.get('show_bank_form', False):
+        with st.container():
+            st.markdown("---")
+            with st.form("add_bank_compact"):
+                st.markdown("#### Dodaj novo banko")
+                
+                # Inline form fields
+                cols = st.columns([1, 3, 2, 2, 1])
+                with cols[0]:
+                    bank_code = st.text_input("Koda", max_chars=2, placeholder="XX")
+                with cols[1]:
+                    name = st.text_input("Naziv banke", placeholder="Polni naziv")
+                with cols[2]:
+                    swift = st.text_input("SWIFT", max_chars=11, placeholder="XXXXXXXX")
+                with cols[3]:
+                    short_name = st.text_input("Kratki naziv", placeholder="Opcijsko")
+                with cols[4]:
+                    active = st.checkbox("Aktivna", value=True)
+                
+                # Form buttons
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col2:
+                    if st.form_submit_button("Shrani", type="primary"):
+                        # Validate and save
+                        if bank_code and name:
+                            success = database.create_bank(
+                                bank_code=bank_code,
+                                name=name,
+                                swift=swift,
+                                short_name=short_name,
+                                active=active
+                            )
+                            if success:
+                                st.success("Banka uspešno dodana!")
+                                st.session_state.show_bank_form = False
+                                st.rerun()
+                            else:
+                                st.error("Napaka pri dodajanju banke")
+                        else:
+                            st.error("Koda in naziv sta obvezna!")
+                with col3:
+                    if st.form_submit_button("Prekliči"):
+                        st.session_state.show_bank_form = False
+                        st.rerun()
+    
+    # Filter banks
+    filtered_banks = filter_banks(banks, search_term)
+    
+    # Render compact table
+    render_bank_table(filtered_banks)
+    
+    # Export section
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 1, 3])
+    with col1:
+        if st.button("📥 Izvozi CSV", key="export_banks_csv"):
+            export_banks_csv(filtered_banks)
+    with col2:
+        if st.button("🔄 Osveži", key="refresh_banks"):
+            st.rerun()
+
+
+def filter_banks(banks, search_term):
+    """Filter banks based on search term"""
+    if not search_term:
+        return banks
+    
+    search_lower = search_term.lower()
+    filtered = []
+    for bank in banks:
+        if (search_lower in bank.get('bank_code', '').lower() or
+            search_lower in bank.get('name', '').lower() or
+            search_lower in bank.get('short_name', '').lower() or
+            search_lower in bank.get('swift', '').lower()):
+            filtered.append(bank)
+    
+    return filtered
+
+
+def render_bank_table(banks):
+    """Render banks in compact table format using Streamlit's data editor"""
+    
+    if not banks:
+        st.info("Ni najdenih bank")
+        return
+    
+    # Apply custom CSS for compact table
+    st.markdown("""
+    <style>
+    /* Compact table styling */
+    .stDataFrame {
+        font-size: 0.9rem;
+    }
+    
+    .stDataFrame td {
+        padding: 4px 8px !important;
+    }
+    
+    .stDataFrame th {
+        padding: 6px 8px !important;
+        background: #f0f2f6 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("### Seznam bank")
+    st.caption("Kliknite na polje za urejanje. Spremembe se shranijo samodejno.")
+    
+    # Create DataFrame for display
+    df_data = []
+    for bank in banks:
+        df_data.append({
+            'id': bank.get('id'),
+            'Koda': bank.get('bank_code', ''),
+            'Naziv': bank.get('name', ''),
+            'Kratki naziv': bank.get('short_name', '-'),
+            'SWIFT': bank.get('swift', '-'),
+            'Status': 'Aktivna' if bank.get('active', True) else 'Neaktivna'
+        })
+    
+    df = pd.DataFrame(df_data)
+    
+    # Use data editor for inline editing - MUST be editable
+    edited_df = st.data_editor(
+        df,
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        disabled=False,  # Enable editing globally
+        column_config={
+            "id": None,  # Hide ID column
+            "Koda": st.column_config.TextColumn(
+                "Koda",
+                width="small",
+                disabled=True  # Bank code shouldn't be editable
+            ),
+            "Naziv": st.column_config.TextColumn(
+                "Naziv banke",
+                width="large",
+                disabled=False,  # Explicitly enable editing
+                required=True
+            ),
+            "Kratki naziv": st.column_config.TextColumn(
+                "Kratki naziv",
+                width="medium",
+                disabled=False  # Explicitly enable editing
+            ),
+            "SWIFT": st.column_config.TextColumn(
+                "SWIFT",
+                width="medium",
+                max_chars=11,
+                disabled=False  # Explicitly enable editing
+            ),
+            "Status": st.column_config.SelectboxColumn(
+                "Status",
+                width="small",
+                options=["Aktivna", "Neaktivna"],
+                required=True,
+                disabled=False  # Explicitly enable editing
+            )
+        },
+        key="bank_table_editor"
+    )
+    
+    # Check for changes and save with feedback
+    if not df.equals(edited_df):
+        with st.spinner("Shranjujem spremembe..."):
+            if save_table_changes(df, edited_df):
+                st.success("✅ Spremembe shranjene", icon="✅")
+                st.rerun()
+            else:
+                st.error("❌ Napaka pri shranjevanju")
+
+
+def save_table_changes(original_df, edited_df):
+    """Save changes made in the data editor"""
+    
+    # Compare dataframes to find changes
+    all_successful = True
+    changes_made = False
+    
+    try:
+        for idx, row in edited_df.iterrows():
+            if idx >= len(original_df):
+                continue  # Skip if row doesn't exist in original
+                
+            orig_row = original_df.iloc[idx]
+            
+            # Check if any field changed (handle None/NaN values)
+            naziv_changed = str(row.get('Naziv', '')) != str(orig_row.get('Naziv', ''))
+            kratki_changed = str(row.get('Kratki naziv', '-')) != str(orig_row.get('Kratki naziv', '-'))
+            swift_changed = str(row.get('SWIFT', '-')) != str(orig_row.get('SWIFT', '-'))
+            status_changed = str(row.get('Status', '')) != str(orig_row.get('Status', ''))
+            
+            if naziv_changed or kratki_changed or swift_changed or status_changed:
+                # Update database
+                bank_id = orig_row['id']
+                active = row['Status'] == 'Aktivna'
+                
+                # Clean up values
+                short_name = row.get('Kratki naziv', '')
+                if short_name in ['-', '', 'nan', None]:
+                    short_name = None
+                    
+                swift = row.get('SWIFT', '')
+                if swift in ['-', '', 'nan', None]:
+                    swift = None
+                
+                success = database.update_bank(
+                    bank_id=bank_id,
+                    name=row['Naziv'],
+                    short_name=short_name,
+                    swift=swift,
+                    active=active
+                )
+                
+                if success:
+                    changes_made = True
+                else:
+                    all_successful = False
+                    st.error(f"Napaka pri posodabljanju banke {row['Naziv']}")
+                    
+    except Exception as e:
+        st.error(f"Napaka pri shranjevanju: {str(e)}")
+        return False
+    
+    return all_successful and changes_made
+
+
+def export_banks_csv(banks):
+    """Export banks to CSV"""
+    
+    # Create CSV content
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Header
+    writer.writerow(['Koda', 'Naziv', 'Kratki naziv', 'SWIFT', 'Država', 'Status'])
+    
+    # Data rows
+    for bank in banks:
+        writer.writerow([
+            bank.get('bank_code', ''),
+            bank.get('name', ''),
+            bank.get('short_name', ''),
+            bank.get('swift', ''),
+            bank.get('country', 'SI'),
+            'Aktivna' if bank.get('active', True) else 'Neaktivna'
+        ])
+    
+    # Download button
+    csv_data = output.getvalue()
+    st.download_button(
+        label="💾 Prenesi CSV",
+        data=csv_data,
+        file_name=f"banke_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+
+
+def render_registries_menu():
+    """Render submenu for registries (Šifranti)."""
+    
+    st.markdown("## Šifranti")
+    st.markdown("Upravljanje sistemskih šifrantov")
+    
+    # Submenu tabs
+    registry_tabs = st.tabs([
+        "Organizacije",
+        "Banke"
+    ])
+    
+    with registry_tabs[0]:
+        render_organization_management_tab()
+    
+    with registry_tabs[1]:
+        render_compact_bank_management()
+
+
 def render_admin_panel():
     """Render the complete admin panel with modern interface."""
     if "logged_in" not in st.session_state:
@@ -1684,34 +1988,35 @@ def render_admin_panel():
     else:
         render_admin_header()
         
-        # Tabbed interface for different admin sections
-        tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-            "Predloge", "Osnutki", "Baza podatkov", 
-            "Organizacije", "Banke", "CPV kode & Merila", "Dnevnik", 
-            "AI Management"
+        # Tabbed interface with Šifranti at the end
+        tabs = st.tabs([
+            "Predloge", 
+            "Osnutki", 
+            "Izvoz podatkov",
+            "CPV kode & Merila",
+            "Dnevnik",
+            "AI upravljanje",
+            "Šifranti"  # NEW - at last position
         ])
         
-        with tab1:
+        with tabs[0]:
             render_template_management_tab()
         
-        with tab2:
+        with tabs[1]:
             render_draft_management_tab()
         
-        with tab3:
+        with tabs[2]:
             render_database_management_tab()
         
-        with tab4:
-            render_organization_management_tab()
-        
-        with tab5:
-            render_bank_management_tab()
-        
-        with tab6:
+        with tabs[3]:
             render_cpv_management_tab()
         
-        with tab7:
+        with tabs[4]:
             render_logging_management_tab()
         
-        with tab8:
+        with tabs[5]:
             from ui.ai_manager import render_ai_manager
             render_ai_manager()
+        
+        with tabs[6]:  # Šifranti tab
+            render_registries_menu()

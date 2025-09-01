@@ -80,7 +80,7 @@ class FormContext:
     
     def get_field_value(self, field_name: str, default: Any = None) -> Any:
         """
-        Get field value from session state using lot-scoped key.
+        Get field value from session state, checking multiple possible locations.
         
         Args:
             field_name: Name of the field
@@ -89,12 +89,32 @@ class FormContext:
         Returns:
             Field value or default
         """
+        # First try lot-scoped key
         key = self.get_field_key(field_name)
-        return self.session_state.get(key, default)
+        if key in self.session_state:
+            return self.session_state.get(key)
+            
+        # Try direct field name
+        if field_name in self.session_state:
+            return self.session_state.get(field_name)
+            
+        # Try with clientInfo prefix if applicable
+        if not field_name.startswith('clientInfo.') and any(field_name.startswith(prefix) for prefix in ['singleClient', 'isSingleClient']):
+            prefixed = f'clientInfo.{field_name}'
+            if prefixed in self.session_state:
+                return self.session_state.get(prefixed)
+        
+        # Try widget key
+        widget_key = f"widget_{key}"
+        if widget_key in self.session_state:
+            return self.session_state.get(widget_key)
+            
+        return default
     
     def set_field_value(self, field_name: str, value: Any) -> None:
         """
         Set field value in session state using lot-scoped key.
+        For validation compatibility, also stores with lot-aware clientInfo prefix.
         
         Args:
             field_name: Name of the field
@@ -102,6 +122,21 @@ class FormContext:
         """
         key = self.get_field_key(field_name)
         self.session_state[key] = value
+        
+        # ALSO store with the field_name directly for widgets to find
+        self.session_state[field_name] = value
+        
+        # For clientInfo fields, store with LOT-AWARE clientInfo prefix
+        # This ensures validation can find the right lot's data
+        if not field_name.startswith('clientInfo.') and any(field_name.startswith(prefix) for prefix in ['singleClient', 'isSingleClient']):
+            # Store as lots.{lot_index}.clientInfo.{field_name}
+            lot_aware_key = f'lots.{self.lot_index}.clientInfo.{field_name}'
+            self.session_state[lot_aware_key] = value
+            
+            # ALSO store in global clientInfo for current lot (for backward compatibility)
+            # But mark it with the lot index so validation knows which lot it's from
+            self.session_state[f'clientInfo.{field_name}'] = value
+            self.session_state[f'clientInfo._current_lot_index'] = self.lot_index
     
     def delete_field_value(self, field_name: str) -> None:
         """
@@ -421,11 +456,26 @@ class FormContext:
         }
         
         lots = self.session_state.get('lots', [])
-        for lot in lots:
-            lot_data = self.get_lot_data(lot['index'])
+        
+        # Ensure lots exist and are properly structured
+        if not lots:
+            self._initialize_lots()
+            lots = self.session_state.get('lots', [])
+        
+        for i, lot in enumerate(lots):
+            # Handle both dict and potentially corrupted lot structures
+            if isinstance(lot, dict):
+                lot_index = lot.get('index', i)
+                lot_name = lot.get('name', f'Sklop {lot_index + 1}')
+            else:
+                # Fallback for corrupted data
+                lot_index = i
+                lot_name = f'Sklop {i + 1}'
+            
+            lot_data = self.get_lot_data(lot_index)
             result['lots'].append({
-                'name': lot['name'],
-                'index': lot['index'],
+                'name': lot_name,
+                'index': lot_index,
                 'data': lot_data
             })
             

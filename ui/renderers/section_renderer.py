@@ -84,6 +84,10 @@ class SectionRenderer:
         if not self._should_render(section_schema):
             return {}
         
+        # Special handling for legalBasis field - use info icons with expanders
+        if section_name == 'legalBasis':
+            return self._render_legal_basis_section(section_schema, full_key, properties, required_fields)
+        
         # Create container with border for visual grouping
         use_container = section_schema.get('use_container', level > 0)
         use_expander = section_schema.get('use_expander', False)
@@ -144,11 +148,34 @@ class SectionRenderer:
         # Get or initialize array data
         session_key = self.context.get_field_key(full_key)
         if not self.context.field_exists(full_key):
-            self.context.set_field_value(full_key, [])
+            # Special handling for mixedOrderComponents - initialize with one default item
+            if section_name == 'mixedOrderComponents':
+                default_item = {
+                    'type': 'blago',
+                    'description': '',
+                    'estimatedValue': 0,
+                    'guaranteedFunds': 0,
+                    'isCofinanced': False
+                }
+                self.context.set_field_value(full_key, [default_item])
+            else:
+                self.context.set_field_value(full_key, [])
         
         array_data = self.context.get_field_value(full_key, [])
         if not isinstance(array_data, list):
             array_data = []
+            self.context.set_field_value(full_key, array_data)
+        
+        # For mixedOrderComponents, ensure at least one item exists
+        if section_name == 'mixedOrderComponents' and len(array_data) == 0:
+            default_item = {
+                'type': 'blago',
+                'description': '',
+                'estimatedValue': 0,
+                'guaranteedFunds': 0,
+                'isCofinanced': False
+            }
+            array_data.append(default_item)
             self.context.set_field_value(full_key, array_data)
         
         # Render array header
@@ -280,6 +307,35 @@ class SectionRenderer:
         is_client_info = parent_key == 'clientInfo' or parent_key.endswith('.clientInfo')
         is_cofinancer = 'cofinancer' in parent_key.lower()
         
+        # Define proper field ordering for client info
+        if is_client_info:
+            # Define the correct order for single client fields
+            single_client_order = [
+                'multipleClientsInfo',  # Info box
+                'isSingleClient',        # Checkbox
+                'singleClientName',      # Name FIRST
+                'singleClientStreet',    # Then address fields
+                'singleClientHouseNumber',
+                'singleClientPostalCode',
+                'singleClientCity',
+                'singleClientLegalRepresentative',  # Legal rep
+                'includeLogos',          # Logo checkbox
+                'clients'                # Multiple clients array
+            ]
+            
+            # Create ordered properties dict
+            ordered_properties = {}
+            for field in single_client_order:
+                if field in properties:
+                    ordered_properties[field] = properties[field]
+            
+            # Add any remaining fields not in the order list
+            for field, schema in properties.items():
+                if field not in ordered_properties and not schema.get('deprecated', False):
+                    ordered_properties[field] = schema
+            
+            properties = ordered_properties
+        
         # Detect address field groups for special rendering
         address_prefixes = []
         if is_client_info:
@@ -297,34 +353,19 @@ class SectionRenderer:
         
         # Track which fields have been rendered as part of address groups
         rendered_fields = set()
+        address_field_names = set()
         
-        # Render address fields as groups if detected
+        # Identify all address field names
         for prefix in address_prefixes:
-            address_fields = ['Street', 'HouseNumber', 'PostalCode', 'City']
-            if not prefix:
-                # For client array items, field names don't have prefix
-                address_fields = ['street', 'houseNumber', 'postalCode', 'city']
+            if prefix:
+                for field in ['Street', 'HouseNumber', 'PostalCode', 'City']:
+                    address_field_names.add(f"{prefix}{field}")
             else:
-                address_fields = [f"{prefix}{field}" for field in address_fields]
-            
-            # Check if we have these fields in properties
-            has_address_fields = any(field in properties for field in address_fields)
-            
-            if has_address_fields:
-                # Render address fields as a group
-                address_data = self.field_renderer.render_address_fields(
-                    prefix, properties, parent_key
-                )
-                section_data.update(address_data)
-                
-                # Mark these fields as rendered
-                for field in address_fields:
-                    if field in properties:
-                        rendered_fields.add(field)
+                address_field_names.update(['street', 'houseNumber', 'postalCode', 'city'])
         
-        # Render remaining fields normally
+        # Render fields in order
         for prop_name, prop_schema in properties.items():
-            # Skip if already rendered as part of address group
+            # Skip if already rendered
             if prop_name in rendered_fields:
                 continue
             
@@ -334,6 +375,37 @@ class SectionRenderer:
             
             prop_type = prop_schema.get('type')
             is_required = prop_name in required_fields
+            
+            # Check if this is an address field that should be grouped
+            if prop_name in address_field_names and any(prefix for prefix in address_prefixes):
+                # Find the right prefix for this field
+                field_prefix = None
+                for prefix in address_prefixes:
+                    if (prefix and prop_name.startswith(prefix)) or (not prefix and prop_name in ['street', 'houseNumber', 'postalCode', 'city']):
+                        field_prefix = prefix
+                        break
+                
+                if field_prefix is not None and field_prefix not in rendered_fields:
+                    # Render entire address group at once
+                    address_fields = ['Street', 'HouseNumber', 'PostalCode', 'City']
+                    if not field_prefix:
+                        address_fields = ['street', 'houseNumber', 'postalCode', 'city']
+                    else:
+                        address_fields = [f"{field_prefix}{field}" for field in address_fields]
+                    
+                    # Render address fields as a group
+                    address_data = self.field_renderer.render_address_fields(
+                        field_prefix, properties, parent_key
+                    )
+                    section_data.update(address_data)
+                    
+                    # Mark all address fields as rendered
+                    for field in address_fields:
+                        rendered_fields.add(field)
+                    
+                    # Mark this prefix as handled
+                    rendered_fields.add(field_prefix)
+                continue
             
             if prop_type == 'object':
                 section_data[prop_name] = self._render_object_section(
@@ -348,6 +420,8 @@ class SectionRenderer:
                 section_data[prop_name] = self.field_renderer.render_field(
                     prop_name, prop_schema, parent_key, required=is_required
                 )
+            
+            rendered_fields.add(prop_name)
         
         return section_data
     
@@ -404,3 +478,128 @@ class SectionRenderer:
         else:
             # Default to equals
             return actual_value == expected_value
+    
+    def _render_legal_basis_section(self, section_schema: dict, full_key: str, properties: dict, required_fields: list) -> dict:
+        """
+        Special rendering for legal basis section with info icons.
+        Shows legal basis information in expandable sections with info icons.
+        """
+        st.subheader("📋 Pravna podlaga")
+        
+        # Display all legal bases in a clear, organized format
+        st.info("Pri oddaji javnega naročila se bodo uporabljala določila naslednjih predpisov in drugih dokumentov:")
+        
+        # Create two columns for better organization
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📚 Obvezni predpisi za javna naročila")
+            st.markdown("""
+            1. **Zakon o javnem naročanju**  
+               ZJN-3, Uradni list RS, št. 91/15 s spremembami
+               
+            2. **Zakon o pravnem varstvu v postopkih javnega naročanju**  
+               ZPVPJN, Uradni list RS, št. 43/2011 s spremembami
+               
+            3. **Uredba o finančnih zavarovanjih pri javnem naročanju**  
+               Uradni list RS, št. 27/16
+               
+            4. **Uredba o zelenem javnem naročanju**  
+               Uradni list RS, št. 51/17 s spremembami  
+               *V kolikor je njena uporaba glede na predmet javnega naročila obvezna*
+               
+            5. **Zakon o integriteti in preprečevanju korupcije**  
+               ZIntPK-UPB2, Uradni list RS št. 69/2011 s spremembami
+               
+            6. **Zakon o varstvu osebnih podatkov**  
+               ZVOP-2, Uradni list RS št. 163/22
+               
+            7. **Zakon o poslovni skrivnosti**  
+               ZPosS, Uradni list RS, št. 22/19
+            """)
+        
+        with col2:
+            st.markdown("### 📖 Splošni predpisi")
+            st.markdown("""
+            8. **Obligacijski zakonik**  
+               OZ, Uradni list RS, št. 83/2001 s spremembami
+               
+            9. **Zakon o javnih financah**  
+               ZJF, Uradni list RS, št. 11/11 s spremembami
+               
+            10. **Zakon o davku na dodano vrednost**  
+                ZDDV-1, Uradni list RS, št. 13/11 s spremembami
+                
+            11. **Zakon o splošnem upravnem postopku**  
+                ZUP, Uradni list RS št. 80/99 s spremembami
+                
+            12. **Zakon o pravdnem postopku**  
+                ZPP-UPB3, Uradni list RS št. 73/2007 s spremembami
+                
+            13. **Predpisi, ki urejajo področje, ki je predmet javnega naročila**  
+                *Specifični za vsako naročilo*
+            """)
+        
+        st.success("✅ Naročnik bo pri izvajanju postopka javnega naročanja ravnal v skladu z vsemi veljavnimi predpisi in zagotovil transparentnost ter enakopravno obravnavo vseh ponudnikov.")
+        
+        # Initialize session state for legal basis fields
+        use_additional_key = f"{full_key}.useAdditional"
+        additional_bases_key = f"{full_key}.additionalLegalBases"
+        
+        if not self.context.field_exists(use_additional_key):
+            self.context.set_field_value(use_additional_key, False)
+        
+        if not self.context.field_exists(additional_bases_key):
+            self.context.set_field_value(additional_bases_key, [])
+        
+        # Checkbox for additional legal bases
+        use_additional = st.checkbox(
+            "Želim, da se upošteva še kakšna pravna podlaga",
+            value=self.context.get_field_value(use_additional_key, False),
+            key=f"widget_{self.context.get_field_key(use_additional_key)}",
+            help="Označite, če želite dodati dodatne pravne podlage poleg osnovne"
+        )
+        self.context.set_field_value(use_additional_key, use_additional)
+        
+        # Show additional legal bases if checkbox is checked
+        if use_additional:
+            additional_bases = self.context.get_field_value(additional_bases_key, [])
+            
+            st.markdown("**Dodatne pravne podlage:**")
+            
+            # Display existing legal bases
+            updated_bases = []
+            for idx, basis in enumerate(additional_bases):
+                col1, col2 = st.columns([5, 1])
+                with col1:
+                    new_value = st.text_input(
+                        f"Pravna podlaga {idx + 1}",
+                        value=basis,
+                        key=f"legal_basis_{idx}",
+                        placeholder="Vnesite pravno podlago (npr. člen zakona, uredba...)"
+                    )
+                    if new_value:
+                        updated_bases.append(new_value)
+                with col2:
+                    if st.button("🗑️", key=f"remove_legal_{idx}", help="Odstrani"):
+                        # Skip this item (don't add to updated_bases)
+                        pass
+                    else:
+                        if new_value:
+                            updated_bases.append(new_value)
+            
+            # Update if changed
+            if updated_bases != additional_bases:
+                self.context.set_field_value(additional_bases_key, updated_bases)
+            
+            # Add new legal basis button
+            if st.button("➕ Dodaj pravno podlago", key="add_legal_basis"):
+                additional_bases.append("")
+                self.context.set_field_value(additional_bases_key, additional_bases)
+                st.rerun()
+        
+        # Return the data
+        return {
+            'useAdditional': self.context.get_field_value(use_additional_key, False),
+            'additionalLegalBases': self.context.get_field_value(additional_bases_key, [])
+        }

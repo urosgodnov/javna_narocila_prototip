@@ -85,6 +85,7 @@
                     "title": "TRR (IBAN)",
                     "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$",
                     "description": "Slovenski IBAN začne s SI56 (npr. SI56 0234 5678 9012 345)",
+                    "deprecated": true,
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -93,6 +94,7 @@
                 "singleClientBank": {
                     "type": "string",
                     "title": "Banka",
+                    "deprecated": true,
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -103,6 +105,7 @@
                     "title": "SWIFT/BIC koda",
                     "pattern": "^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$",
                     "description": "8 ali 11 znakov (npr. LJBASIXX)",
+                    "deprecated": true,
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -158,17 +161,20 @@
                                 "type": "string",
                                 "title": "TRR (IBAN)",
                                 "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]+$",
-                                "description": "Slovenski IBAN začne s SI56"
+                                "description": "Slovenski IBAN začne s SI56",
+                                "deprecated": true
                             },
                             "bank": {
                                 "type": "string",
-                                "title": "Banka"
+                                "title": "Banka",
+                                "deprecated": true
                             },
                             "swift": {
                                 "type": "string",
                                 "title": "SWIFT/BIC koda",
                                 "pattern": "^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$",
-                                "description": "8 ali 11 znakov"
+                                "description": "8 ali 11 znakov",
+                                "deprecated": true
                             }
                         },
                         "required": [
@@ -194,7 +200,8 @@
                         "value": true
                     }
                 }
-            }
+            },
+            "required": ["singleClientName", "singleClientStreet", "singleClientHouseNumber", "singleClientPostalCode", "singleClientCity", "singleClientLegalRepresentative"]
         },
         "projectInfo": {
             "title": "Osnovni podatki o javnem naročilu",
@@ -219,7 +226,8 @@
                     "title": "Vpišite vse CPV kode",
                     "description": "Začnite tipkati kodo ali opis za iskanje CPV kod"
                 }
-            }
+            },
+            "required": ["projectName", "projectSubject", "cpvCodes"]
         },
         "legalBasis": {
             "title": "Pravna podlaga",

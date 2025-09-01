@@ -61,16 +61,30 @@ class ValidationRenderer:
         """
         self._invalid_fields.add(field_key)
         
+        # Get the widget key used by Streamlit
+        widget_key = f"widget_{self.context.get_field_key(field_key)}"
+        
         # Inject CSS for red border on invalid fields
+        # Using both widget key and field key for better matching
         st.markdown(
             f"""
             <style>
+            /* Target by widget key */
+            div[data-testid*="{widget_key}"] input,
+            div[data-testid*="{widget_key}"] textarea,
+            div[data-testid*="{widget_key}"] select,
+            /* Target by field key in aria-label */
             div[data-testid="stTextInput"] input[aria-label*="{field_key}"],
             div[data-testid="stNumberInput"] input[aria-label*="{field_key}"],
             div[data-testid="stSelectbox"] > div[aria-label*="{field_key}"],
-            div[data-testid="stTextArea"] textarea[aria-label*="{field_key}"] {{
+            div[data-testid="stTextArea"] textarea[aria-label*="{field_key}"],
+            /* Target by key attribute */
+            input[key*="{widget_key}"],
+            textarea[key*="{widget_key}"],
+            select[key*="{widget_key}"] {{
                 border: 2px solid #ff4444 !important;
                 background-color: #fff5f5 !important;
+                box-shadow: 0 0 0 1px #ff4444 !important;
             }}
             </style>
             """,
@@ -174,10 +188,20 @@ class ValidationRenderer:
         current_states["isSingleClient"] = is_single_client
         
         if is_single_client:
-            # Single client fields become required
+            # Single client fields become required - NEW SEPARATE FIELDS
             self._dynamic_required_fields["clientInfo.singleClientName"] = True
-            self._dynamic_required_fields["clientInfo.singleClientStreetAddress"] = True
+            self._dynamic_required_fields["clientInfo.singleClientStreet"] = True
+            self._dynamic_required_fields["clientInfo.singleClientHouseNumber"] = True
             self._dynamic_required_fields["clientInfo.singleClientPostalCode"] = True
+            self._dynamic_required_fields["clientInfo.singleClientCity"] = True
+            self._dynamic_required_fields["clientInfo.singleClientLegalRepresentative"] = True
+            # Also set without prefix for field renderer
+            self._dynamic_required_fields["singleClientName"] = True
+            self._dynamic_required_fields["singleClientStreet"] = True
+            self._dynamic_required_fields["singleClientHouseNumber"] = True
+            self._dynamic_required_fields["singleClientPostalCode"] = True
+            self._dynamic_required_fields["singleClientCity"] = True
+            self._dynamic_required_fields["singleClientLegalRepresentative"] = True
             # Multiple client fields not required
             self._dynamic_required_fields["clientInfo.clients"] = False
         else:
@@ -185,8 +209,18 @@ class ValidationRenderer:
             self._dynamic_required_fields["clientInfo.clients"] = True
             # Single client fields not required
             self._dynamic_required_fields["clientInfo.singleClientName"] = False
-            self._dynamic_required_fields["clientInfo.singleClientStreetAddress"] = False
+            self._dynamic_required_fields["clientInfo.singleClientStreet"] = False
+            self._dynamic_required_fields["clientInfo.singleClientHouseNumber"] = False
             self._dynamic_required_fields["clientInfo.singleClientPostalCode"] = False
+            self._dynamic_required_fields["clientInfo.singleClientCity"] = False
+            self._dynamic_required_fields["clientInfo.singleClientLegalRepresentative"] = False
+            # Also clear without prefix
+            self._dynamic_required_fields["singleClientName"] = False
+            self._dynamic_required_fields["singleClientStreet"] = False
+            self._dynamic_required_fields["singleClientHouseNumber"] = False
+            self._dynamic_required_fields["singleClientPostalCode"] = False
+            self._dynamic_required_fields["singleClientCity"] = False
+            self._dynamic_required_fields["singleClientLegalRepresentative"] = False
         
         # Lot conditionals
         has_lots = form_data.get("lotsInfo", {}).get("hasLots", False)
