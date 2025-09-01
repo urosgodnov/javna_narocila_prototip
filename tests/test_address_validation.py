@@ -25,10 +25,19 @@ class TestAddressValidation:
     
     def test_house_number_formats(self):
         """Test various house number formats."""
-        # TODO(human): Implement test for house number validation
-        # Test valid formats: "15", "15a", "15A", "15/2", "15/2b"
-        # Test invalid formats: "", "a15", "/15", "15//2", "15-2"
-        pass
+        # Test valid formats
+        valid_numbers = ["15", "15a", "15A", "15/2", "15/2b", "1", "999", "12B", "1/1"]
+        for number in valid_numbers:
+            result, errors = validate_house_number(number)
+            assert result == True, f"House number '{number}' should be valid"
+            assert errors == []
+        
+        # Test invalid formats
+        invalid_numbers = ["", "a15", "/15", "15//2", "15-2", "abc", "15/", "/", "//"]
+        for number in invalid_numbers:
+            result, errors = validate_house_number(number)
+            assert result == False, f"House number '{number}' should be invalid"
+            assert len(errors) > 0
     
     def test_street_validation(self):
         """Test street name validation."""

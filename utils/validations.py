@@ -4422,3 +4422,317 @@ def validate_address_fields(form_data: Dict) -> Tuple[bool, List[str]]:
                 errors.extend([f"Sofinancer {i+1} - {e}" for e in postal_errors])
     
     return len(errors) == 0, errors
+
+
+def validate_iban(iban: str) -> Tuple[bool, Optional[str]]:
+    """Validate IBAN using mod97 algorithm.
+    
+    Args:
+        iban: IBAN string to validate
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if not iban:
+        return False, "IBAN je obvezen"
+    
+    # Remove spaces and uppercase
+    iban = iban.replace(' ', '').upper()
+    
+    # Check Slovenian format
+    if iban.startswith('SI'):
+        if len(iban) != 19:
+            return False, "Slovenski IBAN mora imeti 19 znakov"
+    else:
+        # Basic length check for international IBANs
+        if len(iban) < 15 or len(iban) > 34:
+            return False, "IBAN mora imeti med 15 in 34 znakov"
+    
+    # Check if IBAN contains only alphanumeric characters
+    if not iban.isalnum():
+        return False, "IBAN lahko vsebuje samo črke in številke"
+    
+    # Mod97 validation
+    # Move first 4 characters to the end
+    rearranged = iban[4:] + iban[:4]
+    
+    # Convert letters to numbers (A=10, B=11, ..., Z=35)
+    numeric = ''
+    for char in rearranged:
+        if char.isdigit():
+            numeric += char
+        else:
+            numeric += str(10 + ord(char) - ord('A'))
+    
+    # Check mod 97
+    try:
+        if int(numeric) % 97 != 1:
+            return False, "Neveljavna IBAN kontrolna številka"
+    except ValueError:
+        return False, "Napaka pri preverjanju IBAN"
+    
+    return True, None
+
+
+def format_iban_display(iban: str) -> str:
+    """Format IBAN for display with spaces.
+    
+    Args:
+        iban: IBAN string
+    
+    Returns:
+        Formatted IBAN (SI56 1234 5678 9012 345)
+    """
+    if not iban:
+        return ""
+    
+    # Remove existing spaces
+    iban = iban.replace(' ', '').upper()
+    
+    # Split into groups of 4
+    parts = [iban[i:i+4] for i in range(0, len(iban), 4)]
+    
+    return ' '.join(parts)
+
+
+def auto_populate_bank_from_iban(iban: str, session_state: dict) -> bool:
+    """Auto-populate bank information from IBAN.
+    
+    Args:
+        iban: IBAN string
+        session_state: Streamlit session state
+    
+    Returns:
+        True if bank was found and populated
+    """
+    from database import BankManager
+    import sqlite3
+    
+    if not iban or not iban.startswith('SI') or len(iban) < 9:
+        return False
+    
+    # Extract bank code from IBAN (positions 5-6 for SI)
+    # Slovenian IBAN: SI56 XX YYY ... where XX is bank code
+    bank_code = iban[4:6]
+    
+    try:
+        # Initialize BankManager
+        conn = sqlite3.connect('mainDB.db')
+        bank_manager = BankManager(conn)
+        
+        # Get bank by code
+        bank = bank_manager.get_bank_by_code(bank_code)
+        
+        if bank:
+            # Update session state
+            session_state['bank_name'] = bank['name']
+            if bank.get('swift'):
+                session_state['swift'] = bank['swift']
+            return True
+    except Exception as e:
+        print(f"Error auto-populating bank: {e}")
+    
+    return False
+
+
+def validate_swift_bic(swift: str) -> Tuple[bool, Optional[str]]:
+    """Validate SWIFT/BIC code format.
+    
+    Args:
+        swift: SWIFT/BIC code to validate
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    import re
+    
+    if not swift:
+        return True, None  # SWIFT is optional
+    
+    # Remove spaces and uppercase
+    swift = swift.upper().strip()
+    
+    # Check length (8 or 11 characters)
+    if len(swift) not in [8, 11]:
+        return False, "SWIFT koda mora imeti 8 ali 11 znakov"
+    
+    # Pattern validation: 4 letters (bank) + 2 letters (country) + 2 chars (location) + 3 optional
+    pattern = r'^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$'
+    
+    if not re.match(pattern, swift):
+        return False, "Neveljavna SWIFT struktura (npr. LJBASI2X)"
+    
+    # Validate country code (basic check for known codes)
+    country_code = swift[4:6]
+    # List of common country codes (can be extended)
+    valid_country_codes = [
+        'SI', 'AT', 'DE', 'IT', 'HR', 'FR', 'GB', 'US', 'CH', 'NL', 
+        'BE', 'ES', 'PT', 'GR', 'CZ', 'SK', 'PL', 'HU', 'RO', 'BG'
+    ]
+    
+    if country_code not in valid_country_codes:
+        # Don't block, just warn
+        return True, None  # Allow unknown country codes
+    
+    return True, None
+
+
+def validate_swift_bank_consistency(swift: str, bank_name: str) -> Tuple[bool, Optional[str]]:
+    """Validate SWIFT code against selected bank.
+    
+    Args:
+        swift: SWIFT code
+        bank_name: Selected bank name
+    
+    Returns:
+        Tuple of (is_consistent, warning_message)
+    """
+    from database import BankManager
+    import sqlite3
+    
+    if not swift or not bank_name:
+        return True, None
+    
+    try:
+        # Initialize BankManager
+        conn = sqlite3.connect('mainDB.db')
+        bank_manager = BankManager(conn)
+        
+        # Get bank by SWIFT
+        bank = bank_manager.get_bank_by_swift(swift.upper())
+        
+        if bank and bank['name'] != bank_name:
+            return False, f"SWIFT koda pripada banki {bank['name']}, izbrana pa je {bank_name}"
+    except Exception as e:
+        print(f"Error checking SWIFT consistency: {e}")
+    
+    return True, None
+
+
+def validate_currency_amount(value_str: str, field_name: str, allow_zero: bool = False) -> Tuple[bool, Any]:
+    """Validate currency amount in European format.
+    
+    Args:
+        value_str: String representation of amount
+        field_name: Name of the field for error messages
+        allow_zero: Whether zero is allowed
+    
+    Returns:
+        Tuple of (is_valid, parsed_amount or error_message)
+    """
+    if not value_str or value_str.strip() == '':
+        if allow_zero:
+            return True, 0.0
+        return False, f"{field_name}: Vrednost je obvezna"
+    
+    try:
+        # Parse European format
+        # Remove thousand separators (dots)
+        cleaned = value_str.replace('.', '')
+        # Replace comma with dot for decimal
+        cleaned = cleaned.replace(',', '.')
+        # Remove spaces
+        cleaned = cleaned.strip()
+        
+        amount = float(cleaned)
+        
+        if amount < 0:
+            return False, f"{field_name}: Vrednost ne sme biti negativna"
+        
+        if not allow_zero and amount == 0:
+            return False, f"{field_name}: Vrednost mora biti večja od 0"
+        
+        # Maximum check (1 billion EUR)
+        if amount > 1_000_000_000:
+            return False, f"{field_name}: Vrednost presega razumno mejo"
+        
+        return True, amount
+        
+    except ValueError:
+        return False, f"{field_name}: Neveljavna številska vrednost"
+
+
+def format_currency_display(amount: Any) -> str:
+    """Format number as xxx.xxx.xxx,00 for display.
+    
+    Args:
+        amount: Numeric amount
+    
+    Returns:
+        Formatted string
+    """
+    if amount is None or amount == '':
+        return ""
+    
+    try:
+        # Convert to float if string
+        if isinstance(amount, str):
+            amount = float(amount)
+        
+        # Format with 2 decimal places
+        formatted = f"{amount:,.2f}"
+        
+        # Replace comma with temp marker
+        formatted = formatted.replace(',', '#')
+        # Replace dot with comma (decimal separator)
+        formatted = formatted.replace('.', ',')
+        # Replace temp marker with dot (thousand separator)
+        formatted = formatted.replace('#', '.')
+        
+        return formatted
+    except (ValueError, TypeError):
+        return str(amount)
+
+
+def parse_currency_input(value_str: str) -> Optional[float]:
+    """Parse user input in European format to float.
+    
+    Args:
+        value_str: User input string
+    
+    Returns:
+        Parsed float value or None if invalid
+    """
+    if not value_str:
+        return 0.0
+    
+    # Remove spaces
+    value_str = value_str.strip()
+    
+    # Detect format based on separators
+    if ',' in value_str and '.' in value_str:
+        # Has both separators - check which comes last
+        comma_pos = value_str.rfind(',')
+        dot_pos = value_str.rfind('.')
+        
+        if comma_pos > dot_pos:
+            # European format: 1.234.567,89
+            value_str = value_str.replace('.', '')  # Remove thousand separators
+            value_str = value_str.replace(',', '.')  # Convert decimal comma to dot
+        else:
+            # US format: 1,234,567.89
+            value_str = value_str.replace(',', '')  # Remove thousand separators
+    elif ',' in value_str:
+        # Only comma - check if it's likely a decimal
+        parts = value_str.split(',')
+        if len(parts) == 2 and len(parts[1]) <= 2:
+            # Likely decimal: 1234,56
+            value_str = value_str.replace(',', '.')
+        else:
+            # Likely thousands: 1,234,567
+            value_str = value_str.replace(',', '')
+    elif '.' in value_str:
+        # Only dot - check if it's likely a decimal
+        parts = value_str.split('.')
+        if len(parts) == 2 and len(parts[1]) <= 3:
+            # Likely decimal: 1234.56 or 1234.567
+            pass  # Keep as is
+        elif len(parts) > 2:
+            # Multiple dots - European thousands: 1.234.567
+            value_str = value_str.replace('.', '')
+        # else single dot with many digits after - keep as decimal
+    
+    try:
+        return float(value_str)
+    except ValueError:
+        return None

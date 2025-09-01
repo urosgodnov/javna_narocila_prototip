@@ -130,6 +130,21 @@ class FieldRenderer:
             return self._render_text_area(
                 full_key, label, help_text, required, current_value
             )
+        elif schema.get('format') == 'iban' or 'iban' in field_name.lower() or 'trr' in field_name.lower():
+            # Render IBAN field with validation
+            return self._render_iban_field(
+                full_key, label, help_text, required, current_value
+            )
+        elif schema.get('format') == 'swift' or 'swift' in field_name.lower() or 'bic' in field_name.lower():
+            # Render SWIFT/BIC field with validation
+            return self._render_swift_field(
+                full_key, label, help_text, required, current_value
+            )
+        elif schema.get('format') == 'bank' or 'bank' in field_name.lower():
+            # Render bank selector field
+            return self._render_bank_field(
+                full_key, label, help_text, required, current_value
+            )
         else:
             # Regular text input
             value = st.text_input(
@@ -502,12 +517,14 @@ class FieldRenderer:
                                help_text: str, 
                                required: bool,
                                current_value: float) -> float:
-        """Render financial field with EUR symbol and dot formatting."""
+        """Render financial field with EUR symbol and European formatting (xxx.xxx.xxx,00)."""
+        from utils.validations import format_currency_display, parse_currency_input
+        
         session_key = self.context.get_field_key(full_key)
         widget_key = f"widget_{session_key}_formatted"
         
-        # Format current value with dots
-        formatted_str = self._format_number_with_dots(current_value)
+        # Format current value with European format
+        formatted_str = format_currency_display(current_value)
         
         # Create columns for input and EUR symbol
         col_input, col_symbol = st.columns([5, 1])
@@ -517,8 +534,8 @@ class FieldRenderer:
                 label=self._format_label(label, required, full_key),
                 value=formatted_str,
                 key=widget_key,
-                help=help_text or "Format: 1.000.000",
-                placeholder="0"
+                help=help_text or "Format: 1.234.567,89",
+                placeholder="0,00"
             )
         
         with col_symbol:
@@ -528,20 +545,18 @@ class FieldRenderer:
             )
         
         # Parse and store unformatted value
-        try:
-            if value_str and value_str.strip():
-                number_value = self._parse_formatted_number(value_str)
-            else:
-                number_value = 0.0
-            self.context.set_field_value(full_key, number_value)
+        parsed_value = parse_currency_input(value_str)
+        if parsed_value is not None:
+            self.context.set_field_value(full_key, parsed_value)
             
             # Debug logging for estimatedValue
             if 'estimatedValue' in full_key:
-                logging.info(f"[ESTIMATED_VALUE] {full_key}={number_value}")
+                logging.info(f"[ESTIMATED_VALUE] {full_key}={parsed_value}")
             
-            return number_value
-        except ValueError:
-            st.warning(f"'{value_str}' ni veljavna številka")
+            return parsed_value
+        else:
+            if value_str and value_str.strip():
+                st.warning(f"'{value_str}' ni veljavna številka")
             self.context.set_field_value(full_key, 0.0)
             return 0.0
     
@@ -713,3 +728,191 @@ class FieldRenderer:
         # to get actual viewport width
         # For now, we'll assume desktop
         return False
+    
+    def _render_iban_field(self, 
+                           full_key: str, 
+                           label: str, 
+                           help_text: str, 
+                           required: bool,
+                           current_value: str) -> str:
+        """Render IBAN field with validation and bank auto-population."""
+        from utils.validations import validate_iban, format_iban_display, auto_populate_bank_from_iban
+        
+        session_key = self.context.get_field_key(full_key)
+        widget_key = f"widget_{session_key}"
+        
+        # Format IBAN for display
+        display_value = format_iban_display(current_value) if current_value else ""
+        
+        # Input field
+        value = st.text_input(
+            label=self._format_label(label, required, full_key),
+            value=display_value,
+            key=widget_key,
+            help=help_text or "Format: SI56 XXXX XXXX XXXX XXX",
+            placeholder="SI56 XXXX XXXX XXXX XXX"
+        )
+        
+        # Store unformatted value
+        unformatted = value.replace(' ', '').upper()
+        self.context.set_field_value(full_key, unformatted)
+        
+        # Validate IBAN
+        if unformatted:
+            is_valid, error = validate_iban(unformatted)
+            if not is_valid:
+                st.error(error)
+                self.context.add_validation_error(full_key, error)
+            else:
+                # Try to auto-populate bank
+                if auto_populate_bank_from_iban(unformatted, st.session_state):
+                    st.success("Banka prepoznana iz IBAN")
+        elif required:
+            self.context.add_validation_error(full_key, f"{label} je obvezen")
+        
+        return unformatted
+    
+    def _render_swift_field(self, 
+                           full_key: str, 
+                           label: str, 
+                           help_text: str, 
+                           required: bool,
+                           current_value: str) -> str:
+        """Render SWIFT/BIC field with validation and rate limiting."""
+        from utils.validations import validate_swift_bic, validate_swift_bank_consistency
+        from utils.rate_limiter import swift_rate_limiter
+        import streamlit as st
+        
+        session_key = self.context.get_field_key(full_key)
+        widget_key = f"widget_{session_key}"
+        
+        # Get session ID for rate limiting
+        session_id = st.session_state.get('session_id', 'unknown')
+        
+        # Input field
+        value = st.text_input(
+            label=self._format_label(label, required, full_key),
+            value=current_value or "",
+            key=widget_key,
+            help=help_text or "Format: LJBASI2X (8 ali 11 znakov)",
+            placeholder="XXXXXXXX"
+        )
+        
+        # Store uppercase value
+        uppercase_value = value.upper().strip()
+        self.context.set_field_value(full_key, uppercase_value)
+        
+        # Validate SWIFT
+        if uppercase_value:
+            is_valid, error = validate_swift_bic(uppercase_value)
+            if not is_valid:
+                st.error(error)
+                self.context.add_validation_error(full_key, error)
+            else:
+                # Check rate limit before consistency check
+                allowed, rate_error = swift_rate_limiter.is_allowed(session_id)
+                if allowed:
+                    # Check consistency with bank name if available
+                    bank_name = st.session_state.get('bank_name', '')
+                    if bank_name:
+                        is_consistent, warning = validate_swift_bank_consistency(
+                            uppercase_value, bank_name
+                        )
+                        if not is_consistent:
+                            st.warning(warning)
+                    
+                    # Show remaining requests if low
+                    remaining = swift_rate_limiter.get_remaining_requests(session_id)
+                    if remaining < 5:
+                        st.caption(f"Preostalo poizvedb: {remaining}")
+                elif rate_error:
+                    st.warning(rate_error)
+        
+        return uppercase_value
+    
+    def _render_bank_field(self, 
+                          full_key: str, 
+                          label: str, 
+                          help_text: str, 
+                          required: bool,
+                          current_value: str) -> str:
+        """Render bank selector field with dropdown and custom input option."""
+        from database import BankManager
+        import sqlite3
+        
+        session_key = self.context.get_field_key(full_key)
+        
+        try:
+            # Initialize BankManager
+            conn = sqlite3.connect('mainDB.db')
+            bank_manager = BankManager(conn)
+            
+            # Load banks from registry
+            banks = bank_manager.get_all_banks(active_only=True)
+            
+            # Create options dictionary
+            bank_options = [''] + [bank['name'] for bank in banks] + ['Druga banka...']
+            
+            # Get current selection
+            current_bank_name = current_value or ''
+            is_custom = current_bank_name not in bank_options
+            
+            # Determine index
+            if is_custom and current_bank_name:
+                default_index = len(bank_options) - 1  # "Druga banka..."
+            elif current_bank_name in bank_options:
+                default_index = bank_options.index(current_bank_name)
+            else:
+                default_index = 0
+            
+            # Dropdown
+            selected = st.selectbox(
+                label=self._format_label(label, required, full_key),
+                options=bank_options,
+                index=default_index,
+                key=f"{session_key}_selector",
+                help=help_text
+            )
+            
+            # Handle selection
+            if selected == 'Druga banka...':
+                # Show custom input
+                custom_bank = st.text_input(
+                    "Vnesite naziv banke",
+                    key=f"{session_key}_custom",
+                    value=current_bank_name if is_custom else ""
+                )
+                final_value = custom_bank
+                
+                # Store in session state
+                self.context.set_field_value(full_key, custom_bank)
+                st.session_state['bank_name'] = custom_bank
+            else:
+                final_value = selected
+                self.context.set_field_value(full_key, selected)
+                st.session_state['bank_name'] = selected
+                
+                # Auto-populate SWIFT if available
+                if selected:
+                    for bank in banks:
+                        if bank['name'] == selected and bank.get('swift'):
+                            st.session_state['swift'] = bank['swift']
+                            break
+            
+            # Validation
+            if required and not final_value:
+                self.context.add_validation_error(full_key, f"{label} je obvezen")
+            
+            return final_value
+            
+        except Exception as e:
+            # Fallback to simple text input if database not available
+            st.warning(f"Bančni register ni na voljo: {e}")
+            value = st.text_input(
+                label=self._format_label(label, required, full_key),
+                value=current_value or "",
+                key=f"{session_key}_fallback",
+                help=help_text
+            )
+            self.context.set_field_value(full_key, value)
+            return value
