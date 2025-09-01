@@ -58,7 +58,32 @@ DOCUMENT_TYPES = {
 PROMPT_SECTIONS = {
     'vrsta_narocila': {
         'title': 'Vrsta javnega naročila',
-        'fields': ['posebne_zahteve_sofinancerja']
+        'fields': [
+            'posebne_zahteve_sofinancerja',  # Existing
+            'specialRequirements',            # NEW - unified field name
+            'cofinancer_special_requirements', # NEW - alternative name
+            'cofinancer_program_requirements', # NEW - program specific
+            'useAIForRequirements'            # NEW - checkbox field
+        ]
+    },
+    'mesano_narocilo': {                     # NEW SECTION
+        'title': 'Mešano javno naročilo',
+        'fields': [
+            'mixedOrder_specialRequirements',
+            'mixedOrder_cofinancer_requirements',
+            'mixedOrderComponents_requirements'
+        ]
+    },
+    'sofinanciranje': {                      # NEW SECTION
+        'title': 'Sofinanciranje',
+        'fields': [
+            'programName_context',            # Context fields
+            'programArea_context',
+            'programCode_context',
+            'eu_funding_requirements',
+            'national_funding_requirements',
+            'reporting_requirements'
+        ]
     },
     'pogajanja': {
         'title': 'Pogajanja',
@@ -2228,8 +2253,123 @@ def delete_prompt(prompt_id: int) -> bool:
         st.error(f"Napaka pri brisanju: {str(e)}")
         return False
 
+def get_field_type(field_key: str) -> str:
+    """Enhanced field type detection for proper UI rendering"""
+    
+    # Checkbox fields
+    if any(indicator in field_key.lower() for indicator in [
+        'useai', 'checkbox', 'enable', 'allow', 'is_'
+    ]):
+        return 'boolean'
+    
+    # Large text fields
+    elif any(indicator in field_key.lower() for indicator in [
+        'requirements', 'description', 'specification', 
+        'criteria', 'conditions', 'notes'
+    ]):
+        return 'textarea'
+    
+    # Context fields (read-only)
+    elif any(indicator in field_key.lower() for indicator in [
+        'context', 'reference', 'code', 'id'
+    ]):
+        return 'context'
+    
+    # Select/dropdown fields
+    elif any(indicator in field_key.lower() for indicator in [
+        'type', 'category', 'status', 'program'
+    ]):
+        return 'select'
+    
+    # Default to text
+    return 'text'
+
+
+def prepare_prompt_context(form_data: dict, field_key: str) -> dict:
+    """Extract context variables for prompt"""
+    
+    context = {
+        'order_type': form_data.get('vrsta_narocila', 'blago'),
+        'programName': form_data.get('programName', ''),
+        'programArea': form_data.get('programArea', ''),
+        'programCode': form_data.get('programCode', ''),
+        'estimatedValue': form_data.get('estimatedValue', 0),
+    }
+    
+    # For mixed orders, add component breakdown
+    if form_data.get('vrsta_narocila') == 'mešano javno naročilo':
+        components = form_data.get('mixedOrderComponents', [])
+        breakdown = "\n".join([
+            f"- {c['type']}: {c['percentage']}%"
+            for c in components
+        ])
+        context['componentBreakdown'] = breakdown
+    
+    return context
+
+
 def get_default_prompt(section: str, field: str) -> str:
-    """Get default prompt for a field"""
+    """Get default prompt for a field with enhanced context awareness"""
+    
+    # Specific field prompts for new fields
+    specific_prompts = {
+        'specialRequirements': """
+Glede na program sofinanciranja {programName} s področja 
+{programArea}, generiraj posebne zahteve sofinancerja.
+
+Vključi:
+- Obveznosti poročanja
+- Promocijske zahteve
+- Revizijske sledi
+- Rok hrambe dokumentacije
+
+Odgovori v slovenščini s konkretnimi zahtevami.
+""",
+        'mixedOrder_specialRequirements': """
+Za mešano javno naročilo z deleži:
+{componentBreakdown}
+
+Pripravi konsolidirane zahteve sofinancerja,
+ki pokrivajo vse komponente.
+
+Odgovori v slovenščini.
+""",
+        'eu_funding_requirements': """
+Za EU sredstva iz programa {programCode}:
+
+Standardne zahteve:
+- Vidnost EU financiranja
+- Pravila državnih pomoči
+- Horizontalni cilji EU
+- Trajnostni razvoj
+
+Odgovori v slovenščini.
+""",
+        'national_funding_requirements': """
+Za nacionalno sofinanciranje pripravi zahteve:
+- Poročanje ministrstvu
+- Nacionalni standardi
+- Lokalna zaposlitev
+- Slovenski jezik v dokumentaciji
+
+Odgovori v slovenščini.
+""",
+        'reporting_requirements': """
+Določi zahteve poročanja za sofinancerja:
+- Frekvenca: mesečna/četrtletna/letna
+- Vsebina poročil
+- Finančno poročanje
+- Kazalniki uspešnosti
+
+Odgovori v slovenščini.
+"""
+    }
+    
+    # Check if we have a specific prompt for this field
+    if field in specific_prompts:
+        return specific_prompts[field]
+    
+    # Original default prompts
     default_prompts = {
         'vrsta_narocila_posebne_zahteve_sofinancerja': """
 Ti si AI asistent za javna naročila. Na podlagi konteksta dokumentov in podatkov obrazca 
@@ -2487,3 +2627,192 @@ Vprašanje: {query}
                 return result[0] if result else "Unknown"
         except:
             return "Unknown"
+
+
+def render_ai_help_documentation():
+    """Render help documentation in admin panel"""
+    
+    st.markdown("""
+    ## 📚 Vodnik za AI upravljanje
+    
+    ### Razpoložljiva polja
+    
+    #### Zahteve sofinancerja
+    - **specialRequirements**: Glavno polje za posebne zahteve
+    - **useAIForRequirements**: Omogoči/onemogoči AI pomoč
+    - **eu_funding_requirements**: Specifične EU zahteve
+    - **national_funding_requirements**: Nacionalne zahteve
+    - **reporting_requirements**: Zahteve poročanja
+    
+    #### Mešana naročila
+    - **mixedOrder_specialRequirements**: Zahteve za mešana naročila
+    - **mixedOrderComponents_requirements**: Zahteve po komponentah
+    
+    ### Spremenljivke v promptih
+    
+    | Spremenljivka | Opis | Primer |
+    |--------------|------|--------|
+    | {order_type} | Vrsta naročila | blago, storitve, gradnje |
+    | {programName} | Ime programa | Kohezijski sklad |
+    | {programArea} | Področje | Digitalizacija |
+    | {programCode} | Koda programa | EU-2021-2027 |
+    | {estimatedValue} | Ocenjena vrednost | 100000 |
+    | {componentBreakdown} | Razdelitev komponet | blago: 60%, storitve: 40% |
+    
+    ### Primeri promptov
+    
+    #### Osnovni prompt za zahteve:
+    ```
+    Glede na program {programName} in področje {programArea},
+    pripravi seznam posebnih zahtev sofinancerja v slovenščini.
+    Vključi zahteve za poročanje, promocijo in revizijo.
+    ```
+    
+    #### EU zahteve:
+    ```
+    Za EU sredstva iz programa {programCode}, navedi:
+    - Zahteve vidnosti EU financiranja
+    - Pravila državnih pomoči
+    - Horizontalne cilje (enakost spolov, trajnost)
+    ```
+    
+    ### Najboljše prakse
+    
+    1. **Vedno definiraj jezik**: Eksplicitno zahtevaj slovenščino
+    2. **Uporabi kontekst**: Vključi spremenljivke za personalizacijo
+    3. **Strukturiraj output**: Zahtevaj sezname ali odstavke
+    4. **Testiraj**: Preveri generirano vsebino pred produkcijo
+    
+    ### Pogosta vprašanja
+    
+    **V: Prompt ne generira vsebine?**
+    O: Preveri, če so vse spremenljivke na voljo v kontekstu.
+    
+    **V: Vsebina ni v slovenščini?**
+    O: Dodaj "v slovenščini" ali "v slovenskem jeziku" v prompt.
+    
+    **V: AI generira predolgo vsebino?**
+    O: Omeji z "največ 200 besed" ali "3-5 alinej".
+    """)
+
+
+def add_field_help_tooltips():
+    """Add contextual help to each field - returns dictionary of help texts"""
+    
+    field_help = {
+        'specialRequirements': """
+            💡 **Posebne zahteve sofinancerja**
+            
+            To polje vsebuje specifične zahteve, ki jih postavlja
+            sofinancer. AI lahko pomaga generirati standardne
+            zahteve glede na program financiranja.
+            
+            Primer vsebine:
+            - Obvezno mesečno poročanje
+            - Vidnost logotipa EU
+            - Revizijska sled 5 let
+        """,
+        
+        'useAIForRequirements': """
+            🤖 **Omogoči AI pomoč**
+            
+            Ko je označeno, bo AI predlagal vsebino za
+            polje zahtev na podlagi programa sofinanciranja.
+        """,
+        
+        'eu_funding_requirements': """
+            🇪🇺 **EU zahteve**
+            
+            Standardne zahteve za EU financiranje:
+            - Promocija in vidnost
+            - Enake možnosti
+            - Trajnostni razvoj
+            - Digitalna agenda
+        """,
+        
+        'national_funding_requirements': """
+            🇸🇮 **Nacionalne zahteve**
+            
+            Zahteve slovenskega sofinanciranja:
+            - Poročanje ministrstvu
+            - Slovenski standardi
+            - Lokalna zaposlitev
+            - Dokumentacija v slovenščini
+        """,
+        
+        'reporting_requirements': """
+            📊 **Zahteve poročanja**
+            
+            Definicija poročanja:
+            - Frekvenca (mesečno/četrtletno/letno)
+            - Vsebina poročil
+            - Finančni kazalniki
+            - Kazalniki uspešnosti
+        """,
+        
+        'mixedOrder_specialRequirements': """
+            🔀 **Zahteve mešanega naročila**
+            
+            Konsolidirane zahteve za vse komponente:
+            - Blago
+            - Storitve  
+            - Gradnje
+        """
+    }
+    
+    return field_help
+
+
+def generate_test_scenarios():
+    """Generate test data for different scenarios"""
+    
+    scenarios = [
+        {
+            'name': 'EU Kohezijski sklad - Digitalizacija',
+            'data': {
+                'programName': 'Kohezijski sklad',
+                'programArea': 'Digitalna transformacija',
+                'programCode': 'SI-EU-KS-2021',
+                'vrsta_narocila': 'blago'
+            },
+            'expected_requirements': [
+                'Vidnost EU financiranja',
+                'Digitalna dostopnost',
+                'GDPR skladnost'
+            ]
+        },
+        {
+            'name': 'Nacionalno sofinanciranje - Infrastruktura',
+            'data': {
+                'programName': 'Slovenski regionalni razvoj',
+                'programArea': 'Cestna infrastruktura',
+                'programCode': 'SI-RR-2024',
+                'vrsta_narocila': 'gradnje'
+            },
+            'expected_requirements': [
+                'Lokalna zaposlitev',
+                'Slovenski standardi',
+                'Okoljska presoja'
+            ]
+        },
+        {
+            'name': 'Mešano naročilo - IT in svetovanje',
+            'data': {
+                'programName': 'Digitalna Slovenija',
+                'programArea': 'Digitalizacija javne uprave',
+                'programCode': 'SI-DIG-2024',
+                'vrsta_narocila': 'mešano javno naročilo',
+                'mixedOrderComponents': [
+                    {'type': 'blago', 'percentage': 40},
+                    {'type': 'storitve', 'percentage': 60}
+                ]
+            },
+            'expected_requirements': [
+                'Licenčni pogoji',
+                'Vzdrževanje in podpora',
+                'Prenos znanja'
+            ]
+        }
+    ]
+    
+    return scenarios
