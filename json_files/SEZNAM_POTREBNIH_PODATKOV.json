@@ -27,7 +27,28 @@
                 },
                 "singleClientStreetAddress": {
                     "type": "string",
-                    "title": "Ulica in hišna številka",
+                    "title": "Ulica in hišna številka (zastarelo)",
+                    "deprecated": true,
+                    "description": "Uporabite singleClientStreet in singleClientHouseNumber",
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientStreet": {
+                    "type": "string",
+                    "title": "Ulica",
+                    "minLength": 2,
+                    "render_if": {
+                        "field": "clientInfo.isSingleClient",
+                        "value": true
+                    }
+                },
+                "singleClientHouseNumber": {
+                    "type": "string",
+                    "title": "Hišna številka",
+                    "pattern": "^[0-9]+[a-zA-Z]?(/[0-9]+[a-zA-Z]?)?$",
+                    "description": "npr. 15, 15a, 15/2",
                     "render_if": {
                         "field": "clientInfo.isSingleClient",
                         "value": true
@@ -104,7 +125,20 @@
                             },
                             "streetAddress": {
                                 "type": "string",
-                                "title": "Ulica in hišna številka"
+                                "title": "Ulica in hišna številka (zastarelo)",
+                                "deprecated": true,
+                                "description": "Uporabite street in houseNumber"
+                            },
+                            "street": {
+                                "type": "string",
+                                "title": "Ulica",
+                                "minLength": 2
+                            },
+                            "houseNumber": {
+                                "type": "string",
+                                "title": "Hišna številka",
+                                "pattern": "^[0-9]+[a-zA-Z]?(/[0-9]+[a-zA-Z]?)?$",
+                                "description": "npr. 15, 15a, 15/2"
                             },
                             "postalCode": {
                                 "type": "string",
@@ -1158,13 +1192,32 @@
                             },
                             "cofinancerStreetAddress": {
                                 "type": "string",
-                                "title": "Naslov (ulica/cesta in hišna številka)",
+                                "title": "Naslov (zastarelo)",
+                                "deprecated": true,
+                                "description": "Uporabite cofinancerStreet in cofinancerHouseNumber",
                                 "placeholder": "npr. Slovenska cesta 1"
+                            },
+                            "cofinancerStreet": {
+                                "type": "string",
+                                "title": "Ulica",
+                                "minLength": 2
+                            },
+                            "cofinancerHouseNumber": {
+                                "type": "string",
+                                "title": "Hišna številka",
+                                "pattern": "^[0-9]+[a-zA-Z]?(/[0-9]+[a-zA-Z]?)?$",
+                                "description": "npr. 15, 15a, 15/2"
                             },
                             "cofinancerPostalCode": {
                                 "type": "string",
-                                "title": "Poštna številka in kraj",
-                                "placeholder": "npr. 1000 Ljubljana"
+                                "title": "Poštna številka",
+                                "pattern": "^[0-9]{4}$",
+                                "description": "4 številke (npr. 1000)"
+                            },
+                            "cofinancerCity": {
+                                "type": "string",
+                                "title": "Kraj",
+                                "minLength": 2
                             },
                             "programName": {
                                 "type": "string",

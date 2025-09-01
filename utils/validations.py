@@ -734,6 +734,7 @@ class ValidationManager:
         - Single customer: all fields required
         - Multiple customers: minimum 2 complete entries (handled by _validate_multiple_entries)
         - Logo upload: file required if option selected
+        - Address fields validation (new separate fields)
         """
         errors = []
         
@@ -741,18 +742,60 @@ class ValidationManager:
         # We just need to handle single customer here
         is_single_client = self.session_state.get('clientInfo.isSingleClient', True)
         if is_single_client:
-            # Single customer validation
-            required_fields = {
-                'clientInfo.singleClientName': 'Ime naročnika',
-                'clientInfo.singleClientStreetAddress': 'Ulica in hišna številka',
-                'clientInfo.singleClientPostalCode': 'Poštna številka in kraj',
-                'clientInfo.singleClientLegalRepresentative': 'Zakoniti zastopnik (ime in priimek)'
-            }
+            # Check if we're using new address fields or old combined field
+            using_new_fields = 'clientInfo.singleClientStreet' in self.session_state or \
+                             'clientInfo.singleClientHouseNumber' in self.session_state
             
-            for field_key, field_label in required_fields.items():
-                value = self._safe_strip(self.session_state.get(field_key, '')) if self.session_state.get(field_key) else ''
-                if not value:
-                    errors.append(f"{field_label} je obvezno polje")
+            if using_new_fields:
+                # Validate new separate address fields
+                required_fields = {
+                    'clientInfo.singleClientName': 'Ime naročnika',
+                    'clientInfo.singleClientStreet': 'Ulica',
+                    'clientInfo.singleClientHouseNumber': 'Hišna številka',
+                    'clientInfo.singleClientPostalCode': 'Poštna številka',
+                    'clientInfo.singleClientCity': 'Kraj',
+                    'clientInfo.singleClientLegalRepresentative': 'Zakoniti zastopnik (ime in priimek)'
+                }
+                
+                # Basic required field validation
+                for field_key, field_label in required_fields.items():
+                    value = self._safe_strip(self.session_state.get(field_key, '')) if self.session_state.get(field_key) else ''
+                    if not value:
+                        errors.append(f"{field_label} je obvezno polje")
+                
+                # Advanced validation for address fields
+                street = self.session_state.get('clientInfo.singleClientStreet', '')
+                if street:
+                    is_valid, street_errors = validate_street(street)
+                    errors.extend(street_errors)
+                
+                house_number = self.session_state.get('clientInfo.singleClientHouseNumber', '')
+                if house_number:
+                    is_valid, house_errors = validate_house_number(house_number)
+                    errors.extend(house_errors)
+                
+                city = self.session_state.get('clientInfo.singleClientCity', '')
+                if city:
+                    is_valid, city_errors = validate_city(city)
+                    errors.extend(city_errors)
+                
+                postal_code = self.session_state.get('clientInfo.singleClientPostalCode', '')
+                if postal_code:
+                    is_valid, postal_errors = validate_postal_code(postal_code)
+                    errors.extend(postal_errors)
+            else:
+                # Fall back to old combined field validation
+                required_fields = {
+                    'clientInfo.singleClientName': 'Ime naročnika',
+                    'clientInfo.singleClientStreetAddress': 'Ulica in hišna številka',
+                    'clientInfo.singleClientPostalCode': 'Poštna številka in kraj',
+                    'clientInfo.singleClientLegalRepresentative': 'Zakoniti zastopnik (ime in priimek)'
+                }
+                
+                for field_key, field_label in required_fields.items():
+                    value = self._safe_strip(self.session_state.get(field_key, '')) if self.session_state.get(field_key) else ''
+                    if not value:
+                        errors.append(f"{field_label} je obvezno polje")
         
         # Logo validation - check if user wants logo but hasn't uploaded file
         if self.session_state.get('clientInfo.wantsLogo', False):
@@ -1521,6 +1564,11 @@ class ValidationManager:
                 errors.append("Datum začetka je obvezen pri datumskem roku")
             if not end_date:
                 errors.append("Datum konca je obvezen pri datumskem roku")
+            
+            # Validate date range - end date must be after start date
+            if start_date and end_date:
+                is_valid, date_errors = validate_date_range(start_date, end_date, "Rok izvedbe")
+                errors.extend(date_errors)
                 
         elif deadline_type == 'v dnevih':
             days = self.session_state.get(f'{prefix}.days') or self.session_state.get(f'widget_{prefix}.days')
@@ -2890,11 +2938,10 @@ class ValidationManager:
                 
                 total_points += points
         
-        # Warning if total points != 100 (but only if we have selected criteria)
-        if any(criteria_selected.values()) and total_points > 0 and total_points != 100:
-            warnings.append(
-                f"Skupna vsota točk je {total_points:.0f}. "
-                f"Priporočamo skupno vsoto 100 točk."
+        # Error if total points != 100 (but only if we have selected criteria)
+        if any(criteria_selected.values()) and total_points > 0 and abs(total_points - 100) > 0.01:
+            errors.append(
+                f"Vsota točk mora biti 100 (trenutno: {total_points:.0f})"
             )
         
         # Rule 3: Social criteria sub-options validation
@@ -4010,3 +4057,368 @@ def get_validation_summary(cpv_codes: List[str]) -> Dict:
         )
     
     return summary
+
+
+def validate_cpv_criteria_restrictions(form_data: Dict) -> Tuple[bool, List[str]]:
+    """
+    Validate CPV-based criteria restrictions.
+    
+    Args:
+        form_data: Form data dictionary
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    errors = []
+    
+    # Extract CPV codes from form data
+    cpv_codes = []
+    project_info = form_data.get('projectInfo', {})
+    if isinstance(project_info.get('cpvCodes'), list):
+        cpv_codes = project_info.get('cpvCodes', [])
+    elif isinstance(project_info.get('cpvCode'), str):
+        cpv_codes = [project_info.get('cpvCode')]
+    
+    if not cpv_codes:
+        return True, []
+    
+    # Get selected criteria
+    selection_criteria = form_data.get('selectionCriteria', {})
+    
+    # Check for CPV codes that require additional criteria
+    restricted_cpv = check_cpv_requires_additional_criteria(cpv_codes)
+    if restricted_cpv:
+        # Check if only price criterion is selected
+        price_only = selection_criteria.get('priceCriteria', False)
+        other_criteria = any([
+            selection_criteria.get('qualityCriteria', False),
+            selection_criteria.get('timeCriteria', False),
+            selection_criteria.get('socialCriteria', False),
+            selection_criteria.get('environmentalCriteria', False),
+            selection_criteria.get('innovationCriteria', False),
+            selection_criteria.get('costEfficiency', False),
+            selection_criteria.get('additionalTechnicalRequirements', False),
+            selection_criteria.get('otherCriteriaCustom', False)
+        ])
+        
+        if price_only and not other_criteria:
+            for cpv_code, info in restricted_cpv.items():
+                errors.append(f"CPV {cpv_code} zahteva dodatna merila poleg cene")
+    
+    # Check for CPV codes that require social criteria
+    social_cpv = check_cpv_requires_social_criteria(cpv_codes)
+    if social_cpv:
+        if not selection_criteria.get('socialCriteria', False):
+            for cpv_code, info in social_cpv.items():
+                errors.append(f"CPV {cpv_code} zahteva socialna merila")
+    
+    return len(errors) == 0, errors
+
+
+def validate_criteria_points(criteria: Dict) -> Tuple[bool, List[str]]:
+    """
+    Validate that criteria points sum to 100.
+    
+    Args:
+        criteria: Dictionary with criteria selections and ratios
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    errors = []
+    total_points = 0
+    
+    # Map criteria fields to their ratio fields
+    ratio_fields = {
+        'priceCriteria': 'priceCriteriaRatio',
+        'qualityCriteria': 'qualityCriteriaRatio',
+        'timeCriteria': 'timeCriteriaRatio',
+        'socialCriteria': 'socialCriteriaRatio',
+        'environmentalCriteria': 'environmentalCriteriaRatio',
+        'innovationCriteria': 'innovationCriteriaRatio',
+        'costEfficiency': 'costEfficiencyRatio',
+        'additionalTechnicalRequirements': 'technicalRequirementsRatio',
+        'otherCriteriaCustom': 'otherCriteriaCustomRatio'
+    }
+    
+    # For social criteria, we also need to check sub-ratios
+    social_ratio_fields = [
+        'socialCriteriaYoungRatio',
+        'socialCriteriaElderlyRatio', 
+        'socialCriteriaStaffRatio',
+        'socialCriteriaSalaryRatio',
+        'socialCriteriaOtherRatio'
+    ]
+    
+    # Check each selected criterion
+    for criterion, ratio_field in ratio_fields.items():
+        if criteria.get(criterion, False):
+            if criterion == 'socialCriteria':
+                # Sum all social sub-criteria points
+                social_total = 0
+                for social_field in social_ratio_fields:
+                    points = criteria.get(social_field, 0)
+                    try:
+                        points = float(points) if points else 0
+                        social_total += points
+                    except (ValueError, TypeError):
+                        pass
+                
+                if social_total <= 0:
+                    errors.append(f"Vnesite točke za socialna merila")
+                total_points += social_total
+            else:
+                # Regular criterion
+                points = criteria.get(ratio_field, 0)
+                try:
+                    points = float(points) if points else 0
+                except (ValueError, TypeError):
+                    points = 0
+                
+                if points <= 0:
+                    criterion_name = {
+                        'priceCriteria': 'Cena',
+                        'qualityCriteria': 'Kakovost',
+                        'timeCriteria': 'Rok izvedbe',
+                        'environmentalCriteria': 'Okoljska merila',
+                        'innovationCriteria': 'Inovativnost',
+                        'costEfficiency': 'Stroškovna učinkovitost',
+                        'additionalTechnicalRequirements': 'Dodatne tehnične zahteve',
+                        'otherCriteriaCustom': 'Drugo merilo'
+                    }.get(criterion, criterion)
+                    errors.append(f"Vnesite točke za '{criterion_name}'")
+                
+                total_points += points
+    
+    # Check if total equals 100 (allow small floating point differences)
+    if total_points > 0 and abs(total_points - 100) > 0.01:
+        errors.append(f"Vsota točk mora biti 100 (trenutno: {total_points:.0f})")
+    
+    return len(errors) == 0, errors
+
+
+def validate_date_range(start_date: str, end_date: str, field_name: str) -> Tuple[bool, List[str]]:
+    """
+    Validate that end date is after start date.
+    
+    Args:
+        start_date: Start date string (dd.mm.yyyy format)
+        end_date: End date string (dd.mm.yyyy format)
+        field_name: Name of the field for error message
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    from datetime import datetime
+    
+    errors = []
+    
+    if not start_date or not end_date:
+        return True, []  # Skip validation if either date is empty
+    
+    try:
+        # Parse dates in dd.mm.yyyy format
+        start = datetime.strptime(start_date, "%d.%m.%Y")
+        end = datetime.strptime(end_date, "%d.%m.%Y")
+        
+        if end < start:
+            errors.append(f"{field_name}: Končni datum ne more biti pred začetnim")
+    except ValueError as e:
+        # Date format error - this should be caught by format validation
+        pass
+    
+    return len(errors) == 0, errors
+
+
+def validate_street(value: str) -> Tuple[bool, List[str]]:
+    """
+    Validate street name.
+    
+    Args:
+        value: Street name to validate
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    import re
+    errors = []
+    
+    if not value or len(value.strip()) < 2:
+        errors.append("Ulica mora imeti vsaj 2 znaka")
+        return False, errors
+    
+    # Street should not be just numbers
+    if re.match(r'^[0-9]+$', value.strip()):
+        errors.append("Ulica ne more biti samo številka")
+        return False, errors
+    
+    return True, []
+
+
+def validate_house_number(value: str) -> Tuple[bool, List[str]]:
+    """
+    Validate house number format.
+    
+    Args:
+        value: House number to validate
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    import re
+    errors = []
+    
+    if not value:
+        errors.append("Hišna številka je obvezna")
+        return False, errors
+    
+    # Pattern: number optionally followed by letter, optionally followed by /number[letter]
+    pattern = r'^[0-9]+[a-zA-Z]?(/[0-9]+[a-zA-Z]?)?$'
+    if not re.match(pattern, value.strip()):
+        errors.append("Neveljavna hišna številka (npr. 15, 15a, 15/2)")
+        return False, errors
+    
+    return True, []
+
+
+def validate_city(value: str) -> Tuple[bool, List[str]]:
+    """
+    Validate city name.
+    
+    Args:
+        value: City name to validate
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    import re
+    errors = []
+    
+    if not value or len(value.strip()) < 2:
+        errors.append("Kraj mora imeti vsaj 2 znaka")
+        return False, errors
+    
+    # City should only contain letters, spaces, and hyphens
+    if not re.match(r'^[a-zA-ZČčŠšŽžĆćĐđ\s\-]+$', value.strip()):
+        errors.append("Kraj lahko vsebuje samo črke, presledke in vezaje")
+        return False, errors
+    
+    return True, []
+
+
+def validate_postal_code(value: str) -> Tuple[bool, List[str]]:
+    """
+    Validate Slovenian postal code.
+    
+    Args:
+        value: Postal code to validate
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    import re
+    errors = []
+    
+    if not value:
+        errors.append("Poštna številka je obvezna")
+        return False, errors
+    
+    # Must be exactly 4 digits
+    if not re.match(r'^[0-9]{4}$', value.strip()):
+        errors.append("Poštna številka mora imeti 4 številke")
+        return False, errors
+    
+    # Must be in valid range (1000-9999)
+    code = int(value.strip())
+    if code < 1000 or code > 9999:
+        errors.append("Poštna številka mora biti med 1000 in 9999")
+        return False, errors
+    
+    return True, []
+
+
+def validate_address_fields(form_data: Dict) -> Tuple[bool, List[str]]:
+    """
+    Validate all address fields in the form.
+    
+    Args:
+        form_data: Form data dictionary
+        
+    Returns:
+        Tuple of (is_valid, list of error messages)
+    """
+    errors = []
+    
+    # Validate single client address if applicable
+    client_info = form_data.get('clientInfo', {})
+    if client_info.get('isSingleClient', True):
+        # Validate new address fields if present
+        if 'singleClientStreet' in client_info:
+            is_valid, street_errors = validate_street(client_info.get('singleClientStreet', ''))
+            if not is_valid:
+                errors.extend([f"Naročnik - {e}" for e in street_errors])
+        
+        if 'singleClientHouseNumber' in client_info:
+            is_valid, house_errors = validate_house_number(client_info.get('singleClientHouseNumber', ''))
+            if not is_valid:
+                errors.extend([f"Naročnik - {e}" for e in house_errors])
+        
+        if 'singleClientCity' in client_info:
+            is_valid, city_errors = validate_city(client_info.get('singleClientCity', ''))
+            if not is_valid:
+                errors.extend([f"Naročnik - {e}" for e in city_errors])
+        
+        if 'singleClientPostalCode' in client_info:
+            is_valid, postal_errors = validate_postal_code(client_info.get('singleClientPostalCode', ''))
+            if not is_valid:
+                errors.extend([f"Naročnik - {e}" for e in postal_errors])
+    
+    # Validate multiple clients addresses
+    else:
+        clients = client_info.get('clients', [])
+        for i, client in enumerate(clients):
+            if 'street' in client:
+                is_valid, street_errors = validate_street(client.get('street', ''))
+                if not is_valid:
+                    errors.extend([f"Naročnik {i+1} - {e}" for e in street_errors])
+            
+            if 'houseNumber' in client:
+                is_valid, house_errors = validate_house_number(client.get('houseNumber', ''))
+                if not is_valid:
+                    errors.extend([f"Naročnik {i+1} - {e}" for e in house_errors])
+            
+            if 'city' in client:
+                is_valid, city_errors = validate_city(client.get('city', ''))
+                if not is_valid:
+                    errors.extend([f"Naročnik {i+1} - {e}" for e in city_errors])
+            
+            if 'postalCode' in client:
+                is_valid, postal_errors = validate_postal_code(client.get('postalCode', ''))
+                if not is_valid:
+                    errors.extend([f"Naročnik {i+1} - {e}" for e in postal_errors])
+    
+    # Validate cofinancers addresses
+    order_type = form_data.get('orderType', {})
+    cofinancers = order_type.get('cofinancers', [])
+    for i, cofinancer in enumerate(cofinancers):
+        if 'cofinancerStreet' in cofinancer:
+            is_valid, street_errors = validate_street(cofinancer.get('cofinancerStreet', ''))
+            if not is_valid:
+                errors.extend([f"Sofinancer {i+1} - {e}" for e in street_errors])
+        
+        if 'cofinancerHouseNumber' in cofinancer:
+            is_valid, house_errors = validate_house_number(cofinancer.get('cofinancerHouseNumber', ''))
+            if not is_valid:
+                errors.extend([f"Sofinancer {i+1} - {e}" for e in house_errors])
+        
+        if 'cofinancerCity' in cofinancer:
+            is_valid, city_errors = validate_city(cofinancer.get('cofinancerCity', ''))
+            if not is_valid:
+                errors.extend([f"Sofinancer {i+1} - {e}" for e in city_errors])
+        
+        if 'cofinancerPostalCode' in cofinancer:
+            is_valid, postal_errors = validate_postal_code(cofinancer.get('cofinancerPostalCode', ''))
+            if not is_valid:
+                errors.extend([f"Sofinancer {i+1} - {e}" for e in postal_errors])
+    
+    return len(errors) == 0, errors

@@ -600,3 +600,116 @@ class FieldRenderer:
             return float(cleaned)
         except (ValueError, TypeError):
             return 0.0
+    
+    def render_address_fields(self, prefix: str, schema: dict, parent_key: str = "") -> dict:
+        """
+        Render address fields with side-by-side layout.
+        Story 2.2: Address UI Components and Rendering
+        
+        Args:
+            prefix: Field prefix (e.g., 'singleClient', 'cofinancer')
+            schema: Schema containing address field definitions
+            parent_key: Parent key for nested fields
+            
+        Returns:
+            Dictionary with address field values
+        """
+        address_data = {}
+        
+        # Check if we're using new separated fields or old combined field
+        has_new_fields = (f"{prefix}Street" in schema or 
+                         f"{prefix}HouseNumber" in schema)
+        
+        if has_new_fields:
+            # Render new separated address fields with side-by-side layout
+            
+            # Row 1: Street and House Number
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                street_key = f"{prefix}Street"
+                if street_key in schema:
+                    street_schema = schema[street_key]
+                    street_value = self._render_string_field(
+                        street_key,
+                        street_schema,
+                        parent_key,
+                        street_schema.get('required', False)
+                    )
+                    address_data[street_key] = street_value
+            
+            with col2:
+                house_key = f"{prefix}HouseNumber"
+                if house_key in schema:
+                    house_schema = schema[house_key]
+                    house_value = self._render_string_field(
+                        house_key,
+                        house_schema,
+                        parent_key,
+                        house_schema.get('required', False)
+                    )
+                    address_data[house_key] = house_value
+            
+            # Row 2: Postal Code and City
+            col3, col4 = st.columns([1, 3])
+            
+            with col3:
+                postal_key = f"{prefix}PostalCode"
+                if postal_key in schema:
+                    postal_schema = schema[postal_key]
+                    postal_value = self._render_string_field(
+                        postal_key,
+                        postal_schema,
+                        parent_key,
+                        postal_schema.get('required', False)
+                    )
+                    address_data[postal_key] = postal_value
+            
+            with col4:
+                city_key = f"{prefix}City"
+                if city_key in schema:
+                    city_schema = schema[city_key]
+                    city_value = self._render_string_field(
+                        city_key,
+                        city_schema,
+                        parent_key,
+                        city_schema.get('required', False)
+                    )
+                    address_data[city_key] = city_value
+        
+        else:
+            # Fall back to old combined field rendering
+            street_address_key = f"{prefix}StreetAddress"
+            if street_address_key in schema:
+                street_address_schema = schema[street_address_key]
+                street_address_value = self._render_string_field(
+                    street_address_key,
+                    street_address_schema,
+                    parent_key,
+                    street_address_schema.get('required', False)
+                )
+                address_data[street_address_key] = street_address_value
+            
+            # Old postal code field (combined with city)
+            postal_key = f"{prefix}PostalCode"
+            if postal_key in schema:
+                postal_schema = schema[postal_key]
+                postal_value = self._render_string_field(
+                    postal_key,
+                    postal_schema,
+                    parent_key,
+                    postal_schema.get('required', False)
+                )
+                address_data[postal_key] = postal_value
+        
+        return address_data
+    
+    def is_mobile(self) -> bool:
+        """
+        Check if the user is on a mobile device.
+        Returns True if the viewport width suggests mobile.
+        """
+        # This is a simplified check - in production you might use JavaScript
+        # to get actual viewport width
+        # For now, we'll assume desktop
+        return False

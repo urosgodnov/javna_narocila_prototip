@@ -442,3 +442,8 @@ SEZNAM POTREBNIH PODATKOV ZA APLIKACIJO - navezava na dokumentacijo.pdf
 package.json
 /docs/stories/
 /.playwright-mcp/
+config_fixed_steps.py
+config_fixed.py
+screenshots/brezpoljpng.png
+screenshots/brezpoljpng2.png
+debug_production_keys.py

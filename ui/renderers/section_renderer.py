@@ -276,7 +276,58 @@ class SectionRenderer:
         """Render all properties of an object."""
         section_data = {}
         
+        # Story 2.2: Check if this is clientInfo section with address fields
+        is_client_info = parent_key == 'clientInfo' or parent_key.endswith('.clientInfo')
+        is_cofinancer = 'cofinancer' in parent_key.lower()
+        
+        # Detect address field groups for special rendering
+        address_prefixes = []
+        if is_client_info:
+            # Check for single client address fields
+            if 'singleClientStreet' in properties or 'singleClientHouseNumber' in properties:
+                address_prefixes.append('singleClient')
+        elif is_cofinancer:
+            # Check for cofinancer address fields
+            if 'cofinancerStreet' in properties or 'cofinancerHouseNumber' in properties:
+                address_prefixes.append('cofinancer')
+        
+        # For client array items
+        if 'street' in properties or 'houseNumber' in properties:
+            address_prefixes.append('')  # No prefix for client array items
+        
+        # Track which fields have been rendered as part of address groups
+        rendered_fields = set()
+        
+        # Render address fields as groups if detected
+        for prefix in address_prefixes:
+            address_fields = ['Street', 'HouseNumber', 'PostalCode', 'City']
+            if not prefix:
+                # For client array items, field names don't have prefix
+                address_fields = ['street', 'houseNumber', 'postalCode', 'city']
+            else:
+                address_fields = [f"{prefix}{field}" for field in address_fields]
+            
+            # Check if we have these fields in properties
+            has_address_fields = any(field in properties for field in address_fields)
+            
+            if has_address_fields:
+                # Render address fields as a group
+                address_data = self.field_renderer.render_address_fields(
+                    prefix, properties, parent_key
+                )
+                section_data.update(address_data)
+                
+                # Mark these fields as rendered
+                for field in address_fields:
+                    if field in properties:
+                        rendered_fields.add(field)
+        
+        # Render remaining fields normally
         for prop_name, prop_schema in properties.items():
+            # Skip if already rendered as part of address group
+            if prop_name in rendered_fields:
+                continue
+            
             # Check conditional rendering
             if not self._should_render(prop_schema):
                 continue
