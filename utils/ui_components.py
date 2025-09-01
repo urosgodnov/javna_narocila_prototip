@@ -1,6 +1,37 @@
 import streamlit as st
 from typing import Optional, List
 
+def render_warning_box(title: str, content: str):
+    """Render a consistent warning box with yellow/orange styling."""
+    # Remove any existing warning prefixes from content
+    content = content.replace("⚠️", "").replace("ℹ️", "").replace("**Opozorilo:**", "").replace("**OPOZORILO:**", "").strip()
+    
+    # Create custom HTML for warning box
+    warning_html = f"""
+    <div style="
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 0.25rem;
+        padding: 1rem;
+        margin: 1rem 0;
+    ">
+        <div style="
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        ">
+            <span style="font-size: 1.2rem;">⚠️</span>
+            <div style="flex: 1;">
+                <strong style="color: #856404; font-size: 1rem;">{title}</strong>
+                <div style="color: #856404; margin-top: 0.5rem; line-height: 1.5;">
+                    {content}
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(warning_html, unsafe_allow_html=True)
+
 
 def render_field_with_validation(field_renderer, field_key: str, 
                                 validator, **kwargs):
@@ -58,7 +89,7 @@ def render_section_validation_summary(errors: list, warnings: list = None):
     if warnings:
         with st.expander(f"⚠️ Opozorila ({len(warnings)})"):
             for warning in warnings:
-                st.warning(warning)
+                render_warning_box("Opozorilo", warning)
     
     if not errors and not warnings:
         st.success("✅ Vsa polja so pravilno izpolnjena")

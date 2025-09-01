@@ -1043,8 +1043,8 @@ def load_procurement_to_form(procurement_id):
                                     st.session_state[full_key] = field_value
                                     logging.info(f"[load_procurement_to_form] Set lot field {full_key} = {field_value}")
                         
-                        # Set all lot fields
-                        set_lot_fields(lot, f'lot_{i}')
+                        # Set all lot fields using proper lot-scoped format
+                        set_lot_fields(lot, f'lots.{i}')
                 
                 # Still set the lots array for compatibility
                 st.session_state[key] = value
@@ -1060,7 +1060,7 @@ def load_procurement_to_form(procurement_id):
                 
                 # Special handling for estimatedValue to ensure it's always available
                 if 'estimatedValue' in key:
-                    logging.info(f"[ESTIMATED_VALUE] Setting {key} = {value} and {general_key} = {value}")
+                    logging.info(f"[ESTIMATED_VALUE] Setting {key} = {value} and {lot_key} = {value}")
             else:
                 # For lots mode or special keys, use as is
                 st.session_state[key] = value

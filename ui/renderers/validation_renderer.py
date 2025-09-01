@@ -64,27 +64,62 @@ class ValidationRenderer:
         # Get the widget key used by Streamlit
         widget_key = f"widget_{self.context.get_field_key(field_key)}"
         
+        # Generate unique CSS ID to avoid duplicate styles
+        css_id = f"validation_error_{field_key.replace('.', '_')}"
+        
         # Inject CSS for red border on invalid fields
-        # Using both widget key and field key for better matching
+        # Using multiple selectors for better coverage
         st.markdown(
             f"""
-            <style>
-            /* Target by widget key */
+            <style id="{css_id}">
+            /* Target Streamlit input fields with various selectors */
+            
+            /* Target by data-testid containing the widget key */
             div[data-testid*="{widget_key}"] input,
             div[data-testid*="{widget_key}"] textarea,
             div[data-testid*="{widget_key}"] select,
-            /* Target by field key in aria-label */
+            div[data-testid*="{widget_key}"] > div > div > input,
+            
+            /* Target by aria-label containing the field key */
             div[data-testid="stTextInput"] input[aria-label*="{field_key}"],
             div[data-testid="stNumberInput"] input[aria-label*="{field_key}"],
             div[data-testid="stSelectbox"] > div[aria-label*="{field_key}"],
             div[data-testid="stTextArea"] textarea[aria-label*="{field_key}"],
-            /* Target by key attribute */
+            div[data-testid="stDateInput"] input[aria-label*="{field_key}"],
+            div[data-testid="stTimeInput"] input[aria-label*="{field_key}"],
+            
+            /* Target by key attribute containing widget key */
             input[key*="{widget_key}"],
             textarea[key*="{widget_key}"],
-            select[key*="{widget_key}"] {{
+            select[key*="{widget_key}"],
+            
+            /* Target Streamlit containers that might contain the field */
+            div[data-baseweb="input"]:has(input[aria-label*="{field_key}"]),
+            div[data-baseweb="select"]:has([aria-label*="{field_key}"]),
+            div[data-baseweb="textarea"]:has(textarea[aria-label*="{field_key}"]) {{
                 border: 2px solid #ff4444 !important;
                 background-color: #fff5f5 !important;
                 box-shadow: 0 0 0 1px #ff4444 !important;
+                outline: 2px solid #ff4444 !important;
+                outline-offset: -2px;
+            }}
+            
+            /* Also style the parent container for better visibility */
+            div:has(> div[data-testid*="{widget_key}"]) {{
+                position: relative;
+            }}
+            
+            div:has(> div[data-testid*="{widget_key}"]):after {{
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                border: 2px solid #ff4444;
+                border-radius: 4px;
+                pointer-events: none;
+                z-index: 1;
             }}
             </style>
             """,
@@ -170,6 +205,21 @@ class ValidationRenderer:
     
     def clear_field_errors(self) -> None:
         """Clear all field error markings."""
+        # Clear CSS styles for previously invalid fields
+        if self._invalid_fields:
+            css_clear = "<style>"
+            for field_key in self._invalid_fields:
+                css_id = f"validation_error_{field_key.replace('.', '_')}"
+                # Override previous error styles
+                css_clear += f"""
+                /* Clear error styles for {field_key} */
+                #{css_id} {{
+                    display: none !important;
+                }}
+                """
+            css_clear += "</style>"
+            st.markdown(css_clear, unsafe_allow_html=True)
+        
         self._invalid_fields.clear()
     
     def update_dynamic_requirements(self, form_data: Dict[str, Any]) -> None:

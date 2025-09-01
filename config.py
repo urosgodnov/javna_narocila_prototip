@@ -84,11 +84,8 @@ def get_dynamic_form_steps(session_state):
         has_lots = True
         session_state["lotsInfo.hasLots"] = True
     
-    # Only add lot configuration step if user selected to have lots
+    # Handle lot configuration (now integrated into lotsInfo step)
     if has_lots:
-        # Add lot configuration step
-        steps.append(LOT_CONFIG_STEP)
-        
         # Determine lot mode based on configured lots
         lots = session_state.get("lots", [])
         lot_names = session_state.get("lot_names", [])

@@ -222,6 +222,8 @@ class ValidationManager:
         # Use base keys for validation matching
         if any('clientInfo' in key for key in base_keys):
             validator_func = self.validate_screen_1_customers
+        elif any('submissionProcedure' in key for key in base_keys):
+            validator_func = self.validate_submission_procedure
         elif any('legalBasis' in key for key in base_keys):
             validator_func = self.validate_screen_3_legal_basis
         elif any('lotsInfo' in key for key in base_keys):
@@ -853,6 +855,28 @@ class ValidationManager:
         
         return len(errors) == 0, errors
     
+    def validate_submission_procedure(self) -> Tuple[bool, List[str]]:
+        """
+        Validate submission procedure including conditional justification.
+        """
+        errors = []
+        
+        # Get procedure type
+        procedure = self.session_state.get('submissionProcedure.procedure')
+        justification = self.session_state.get('submissionProcedure.justification', '').strip()
+        
+        # Check if procedure is selected
+        if not procedure:
+            errors.append("Postopek oddaje javnega naročila mora biti izbran")
+        
+        # Check if justification is required and provided
+        if procedure and procedure not in ['odprti postopek', 'vseeno']:
+            # Justification is required for all procedures except open procedure
+            if not justification:
+                errors.append("Napišite zakaj želite izvesti ta postopek - to polje je obvezno za izbrani postopek")
+        
+        return len(errors) == 0, errors
+    
     def validate_screen_3_legal_basis(self) -> Tuple[bool, List[str]]:
         """
         Validate legal basis for screen 3.
@@ -1109,12 +1133,34 @@ class ValidationManager:
         
         logging.info(f"[validate_order_type] Final is_cofinanced: {is_cofinanced}")
         
-        # Debug: Print all relevant session state keys for debugging
+        # DEBUG: Enhanced logging for cofinancer validation
         import logging
+        logging.info("="*80)
+        logging.info("[VALIDATE_ORDER_TYPE] === STARTING COFINANCER VALIDATION DEBUG ===")
+        logging.info(f"[VALIDATE_ORDER_TYPE] is_cofinanced: {is_cofinanced}")
+        logging.info(f"[VALIDATE_ORDER_TYPE] lot_mode: {lot_mode}")
+        logging.info(f"[VALIDATE_ORDER_TYPE] current_lot_index: {current_lot_index}")
+        
+        # Show ALL keys related to cofinancers or orderType
+        relevant_keys = []
         for key in self.session_state.keys() if hasattr(self.session_state, 'keys') else []:
-            if 'isCofinanced' in key or 'cofinancer' in key.lower():
+            if 'cofinancer' in key.lower() or 'orderType' in key:
+                relevant_keys.append(key)
                 value = self.session_state.get(key)
-                logging.info(f"[validate_order_type] DEBUG - Session key '{key}': {value} (type: {type(value)})")
+                if isinstance(value, str) and len(value) > 100:
+                    value = value[:100] + "..."
+                logging.info(f"[VALIDATE_ORDER_TYPE] Key: '{key}' = {value} (type: {type(value).__name__})")
+        
+        logging.info(f"[VALIDATE_ORDER_TYPE] Total relevant keys found: {len(relevant_keys)}")
+        
+        # Also check for lot-scoped keys specifically
+        lot_keys = [k for k in self.session_state.keys() if k.startswith('lots.')]
+        logging.info(f"[VALIDATE_ORDER_TYPE] Keys starting with 'lots.': {len(lot_keys)}")
+        for key in lot_keys[:10]:  # Show first 10
+            if 'cofinancer' in key.lower():
+                value = self.session_state.get(key)
+                logging.info(f"[VALIDATE_ORDER_TYPE] Lot-scoped: '{key}' = {value}")
+        logging.info("="*80)
         
         if is_cofinanced:
             # Check cofinancers array - build keys based on context
@@ -1172,64 +1218,95 @@ class ValidationManager:
             if cofinancer_count == 0 and not cofinancers:
                 logging.info("[validate_order_type] No cofinancers found and count is 0 - will trigger validation error")
             
-            for key in cofinancer_keys:
-                if key in self.session_state:
-                    cofinancers = self.session_state.get(key, [])
-                    logging.info(f"[validate_order_type] Found cofinancers at {key}: {cofinancers}")
-                    break
+            # SKIP the array - it may have wrong field structure
+            # Always collect from individual fields for accuracy
+            logging.info("[validate_order_type] Skipping cofinancers array, collecting from individual fields instead")
+            cofinancers = []
             
-            # Try to collect from individual fields if array is empty
-            if not cofinancers:
+            # Always try to collect from individual fields
+            if True:  # Changed from 'if not cofinancers:'
                 logging.info("[validate_order_type] Trying to collect cofinancers from individual fields")
                 collected_cofinancers = []
-                # Build prefixes based on context
+                # Build prefixes based on unified lot architecture
                 prefixes = []
                 
-                if lot_mode == 'multiple' and current_lot_index is not None:
-                    # Check for double-prefixed keys first (form renderer bug)
-                    prefixes.append(f'lot_{current_lot_index}.orderType')
-                    prefixes.append(f'lot_{current_lot_index}.orderType')
-                elif lot_mode == 'single':
-                    # Check for double-prefixed keys first (form renderer bug)
-                    prefixes.append(f'lot_0.orderType')
-                    prefixes.append(f'lot_0.orderType')
-                elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
-                    # For general step or when lot_mode is 'none', check general prefix first
-                    prefixes.append('general.orderType')
-                else:
-                    prefixes.append('general.orderType')
-                
-                # Always also check root orderType as fallback
-                prefixes.append('orderType')
+                # ALWAYS use lot-scoped keys (unified architecture)
+                prefixes.append('lots.0.orderType')  # Primary lot-scoped key
+                prefixes.append('orderType')  # Fallback for compatibility
                 for prefix in prefixes:
                     i = 0
                     while True:
-                        # Try new field names first
-                        name_key = f'{prefix}.cofinancers.{i}.cofinancerName'
-                        old_name_key = f'{prefix}.cofinancers.{i}.name'
+                        # Try both direct and lot-scoped keys (unified lot architecture)
+                        name_keys = [
+                            f'{prefix}.cofinancers.{i}.cofinancerName',
+                            f'lots.0.{prefix}.cofinancers.{i}.cofinancerName',
+                            f'{prefix}.cofinancers.{i}.name'  # Old structure fallback
+                        ]
                         
-                        if name_key not in self.session_state and old_name_key not in self.session_state:
+                        # DEBUG: Log what we're checking
+                        if i == 0:  # Only log for first cofinancer to avoid spam
+                            logging.info(f"[COLLECT_COFINANCERS] Checking index {i} with prefix '{prefix}'")
+                            logging.info(f"[COLLECT_COFINANCERS] Name keys to check: {name_keys}")
+                        
+                        # Check if any cofinancer exists at this index
+                        found = False
+                        for key in name_keys:
+                            if key in self.session_state:
+                                found = True
+                                if i == 0:
+                                    logging.info(f"[COLLECT_COFINANCERS] FOUND key: {key} = {self.session_state.get(key)}")
+                                break
+                        
+                        if not found:
+                            if i == 0:
+                                logging.info(f"[COLLECT_COFINANCERS] No cofinancer found at index {i}")
                             break
                         
-                        # Use new field names if available
-                        if name_key in self.session_state:
-                            name_value = self.session_state.get(f'{prefix}.cofinancers.{i}.cofinancerName', '')
-                            street_value = self.session_state.get(f'{prefix}.cofinancers.{i}.cofinancerStreetAddress', '')
-                            postal_value = self.session_state.get(f'{prefix}.cofinancers.{i}.cofinancerPostalCode', '')
-                            program_value = self.session_state.get(f'{prefix}.cofinancers.{i}.programName', '')
-                            logging.info(f"[validate_order_type] Found new structure cofinancer {i}: name={name_value}, street={street_value}, postal={postal_value}, program={program_value}")
-                        else:
-                            # Fallback to old field names
-                            name_value = self.session_state.get(f'{prefix}.cofinancers.{i}.name', '')
-                            street_value = ''
-                            postal_value = ''
-                            program_value = self.session_state.get(f'{prefix}.cofinancers.{i}.program', '')
-                            logging.info(f"[validate_order_type] Found old structure cofinancer {i}: name={name_value}, program={program_value}")
+                        # Get values - try lot-scoped keys first (unified architecture)
+                        name_value = ''
+                        for key in [f'lots.0.{prefix}.cofinancers.{i}.cofinancerName', f'{prefix}.cofinancers.{i}.cofinancerName', f'{prefix}.cofinancers.{i}.name']:
+                            if key in self.session_state:
+                                name_value = self.session_state.get(key, '')
+                                break
+                        
+                        street_value = ''
+                        for key in [f'lots.0.{prefix}.cofinancers.{i}.cofinancerStreet', f'{prefix}.cofinancers.{i}.cofinancerStreet']:
+                            if key in self.session_state:
+                                street_value = self.session_state.get(key, '')
+                                break
+                        
+                        house_value = ''
+                        for key in [f'lots.0.{prefix}.cofinancers.{i}.cofinancerHouseNumber', f'{prefix}.cofinancers.{i}.cofinancerHouseNumber']:
+                            if key in self.session_state:
+                                house_value = self.session_state.get(key, '')
+                                break
+                        
+                        postal_value = ''
+                        for key in [f'lots.0.{prefix}.cofinancers.{i}.cofinancerPostalCode', f'{prefix}.cofinancers.{i}.cofinancerPostalCode']:
+                            if key in self.session_state:
+                                postal_value = self.session_state.get(key, '')
+                                break
+                        
+                        city_value = ''
+                        for key in [f'lots.0.{prefix}.cofinancers.{i}.cofinancerCity', f'{prefix}.cofinancers.{i}.cofinancerCity']:
+                            if key in self.session_state:
+                                city_value = self.session_state.get(key, '')
+                                break
+                        
+                        program_value = ''
+                        for key in [f'lots.0.{prefix}.cofinancers.{i}.programName', f'{prefix}.cofinancers.{i}.programName', f'{prefix}.cofinancers.{i}.program']:
+                            if key in self.session_state:
+                                program_value = self.session_state.get(key, '')
+                                break
+                        
+                        logging.info(f"[validate_order_type] Cofinancer {i}: name={name_value}, street={street_value}, house={house_value}, postal={postal_value}, city={city_value}, program={program_value}")
                         
                         cofinancer = {
                             'cofinancerName': name_value,
-                            'cofinancerStreetAddress': street_value,
+                            'cofinancerStreet': street_value,
+                            'cofinancerHouseNumber': house_value,
                             'cofinancerPostalCode': postal_value,
+                            'cofinancerCity': city_value,
                             'programName': program_value,
                             # Keep old keys for backward compatibility
                             'name': name_value,
@@ -1255,47 +1332,66 @@ class ValidationManager:
                     # Try to find the actual values in session state
                     # Check for new field structure with split address
                     cofinancer_name = None
-                    street_address = None
+                    street = None
+                    house_number = None
                     postal_code = None
+                    city = None
                     program_name = None
                     
-                    # Build prefixes based on context
+                    # Build prefixes based on unified lot architecture
                     prefixes = []
                     
-                    # For general step or when lot_mode is 'none', check general prefix
-                    if (current_step and 'general' in str(current_step).lower()) or lot_mode == 'none':
-                        prefixes.append('general.orderType')
-                        prefixes.append('orderType')
-                    elif lot_mode == 'multiple' and current_lot_index is not None:
-                        # Check for double-prefixed keys first (form renderer bug)
-                        prefixes.append(f'lot_{current_lot_index}.orderType')
-                        prefixes.append(f'lot_{current_lot_index}.orderType')
-                        prefixes.append('orderType')
-                    elif lot_mode == 'single':
-                        # Check for double-prefixed keys first (form renderer bug)
-                        prefixes.append(f'lot_0.orderType')
-                        prefixes.append(f'lot_0.orderType')
-                        prefixes.append('orderType')
-                    else:
-                        prefixes.append('general.orderType')
-                        prefixes.append('orderType')
+                    # ALWAYS use lot-scoped keys (unified architecture)
+                    prefixes.append('lots.0.orderType')  # Primary lot-scoped key
+                    prefixes.append('orderType')  # Fallback for compatibility
                     
-                    logging.info(f"[validate_order_type] Checking cofinancer {idx} with prefixes: {prefixes}")
+                    # DEBUG: Show all cofinancer-related keys in session state
+                    logging.info("="*60)
+                    logging.info(f"[COFINANCER_DEBUG] Checking cofinancer {idx}")
+                    logging.info(f"[COFINANCER_DEBUG] Prefixes to check: {prefixes}")
+                    
+                    # List ALL keys containing 'cofinancer' in session state
+                    cofinancer_keys = [k for k in self.session_state.keys() if 'cofinancer' in k.lower()]
+                    logging.info(f"[COFINANCER_DEBUG] All cofinancer keys in session: {cofinancer_keys}")
+                    
+                    # Show values for each cofinancer key
+                    for key in cofinancer_keys:
+                        value = self.session_state.get(key, 'NOT_FOUND')
+                        logging.info(f"[COFINANCER_DEBUG]   {key} = {value}")
+                    
+                    logging.info("="*60)
                     
                     for prefix in prefixes:
-                        # New field structure
+                        # New field structure with separate fields
                         name_key = f'{prefix}.cofinancers.{idx}.cofinancerName'
-                        street_key = f'{prefix}.cofinancers.{idx}.cofinancerStreetAddress'
+                        street_key = f'{prefix}.cofinancers.{idx}.cofinancerStreet'
+                        house_key = f'{prefix}.cofinancers.{idx}.cofinancerHouseNumber'
                         postal_key = f'{prefix}.cofinancers.{idx}.cofinancerPostalCode'
+                        city_key = f'{prefix}.cofinancers.{idx}.cofinancerCity'
                         program_key = f'{prefix}.cofinancers.{idx}.programName'
+                        
+                        # DEBUG: Show what keys we're checking
+                        logging.info(f"[COFINANCER_DEBUG] Checking with prefix '{prefix}':")
+                        logging.info(f"[COFINANCER_DEBUG]   name_key: {name_key} -> exists: {name_key in self.session_state}")
+                        logging.info(f"[COFINANCER_DEBUG]   street_key: {street_key} -> exists: {street_key in self.session_state}")
+                        logging.info(f"[COFINANCER_DEBUG]   house_key: {house_key} -> exists: {house_key in self.session_state}")
+                        logging.info(f"[COFINANCER_DEBUG]   city_key: {city_key} -> exists: {city_key in self.session_state}")
                         
                         # Check for new structure first
                         if name_key in self.session_state:
                             cofinancer_name = self.session_state.get(name_key, '')
-                            street_address = self.session_state.get(street_key, '')
+                            street = self.session_state.get(street_key, '')
+                            house_number = self.session_state.get(house_key, '')
                             postal_code = self.session_state.get(postal_key, '')
+                            city = self.session_state.get(city_key, '')
                             program_name = self.session_state.get(program_key, '')
-                            logging.info(f"[validate_order_type] Found new structure cofinancer {idx} at {prefix}: name={cofinancer_name}, street={street_address}, postal={postal_code}, program={program_name}")
+                            logging.info(f"[COFINANCER_DEBUG] FOUND cofinancer {idx} at prefix '{prefix}':")
+                            logging.info(f"[COFINANCER_DEBUG]   name='{cofinancer_name}'")
+                            logging.info(f"[COFINANCER_DEBUG]   street='{street}'")
+                            logging.info(f"[COFINANCER_DEBUG]   house='{house_number}'")
+                            logging.info(f"[COFINANCER_DEBUG]   postal='{postal_code}'")
+                            logging.info(f"[COFINANCER_DEBUG]   city='{city}'")
+                            logging.info(f"[COFINANCER_DEBUG]   program='{program_name}'")
                             break
                         
                         # Fallback to old structure
@@ -1308,20 +1404,41 @@ class ValidationManager:
                             logging.info(f"[validate_order_type] Found old structure cofinancer {idx} at {prefix}: name={cofinancer_name}, program={program_name}")
                             break
                     
+                    # DEBUG: Show final values before validation
+                    logging.info(f"[COFINANCER_DEBUG] Final values for cofinancer {idx}:")
+                    logging.info(f"[COFINANCER_DEBUG]   cofinancer_name: '{cofinancer_name}'")
+                    logging.info(f"[COFINANCER_DEBUG]   street: '{street}'")
+                    logging.info(f"[COFINANCER_DEBUG]   house_number: '{house_number}'")
+                    logging.info(f"[COFINANCER_DEBUG]   postal_code: '{postal_code}'")
+                    logging.info(f"[COFINANCER_DEBUG]   city: '{city}'")
+                    logging.info(f"[COFINANCER_DEBUG]   program_name: '{program_name}'")
+                    
                     # Validate required fields
                     if cofinancer_name and cofinancer_name.strip():
+                        logging.info(f"[COFINANCER_DEBUG] Name is present, checking other fields...")
                         # If name is present, validate other required fields
-                        if street_address and street_address.strip() and postal_code and postal_code.strip() and program_name and program_name.strip():
+                        if street and street.strip() and house_number and house_number.strip() and postal_code and postal_code.strip() and city and city.strip() and program_name and program_name.strip():
                             has_valid_cofinancer = True
+                            logging.info(f"[COFINANCER_DEBUG] ✓ All fields valid for cofinancer {idx+1}")
                         else:
                             # Report specific missing fields
-                            if not street_address or not street_address.strip():
-                                errors.append(f"Sofinancer {idx+1}: Vnesite naslov (ulica/cesta in hišna številka)")
+                            logging.info(f"[COFINANCER_DEBUG] Missing fields for cofinancer {idx+1}:")
+                            if not street or not street.strip():
+                                errors.append(f"Sofinancer {idx+1}: Vnesite ulico/cesto")
+                                logging.info(f"[COFINANCER_DEBUG]   ✗ Missing street")
+                            if not house_number or not house_number.strip():
+                                errors.append(f"Sofinancer {idx+1}: Vnesite hišno številko")
+                                logging.info(f"[COFINANCER_DEBUG]   ✗ Missing house number")
                             if not postal_code or not postal_code.strip():
-                                errors.append(f"Sofinancer {idx+1}: Vnesite poštno številko in kraj")
+                                errors.append(f"Sofinancer {idx+1}: Vnesite poštno številko")
+                                logging.info(f"[COFINANCER_DEBUG]   ✗ Missing postal code")
+                            if not city or not city.strip():
+                                errors.append(f"Sofinancer {idx+1}: Vnesite kraj")
+                                logging.info(f"[COFINANCER_DEBUG]   ✗ Missing city")
                             if not program_name or not program_name.strip():
                                 errors.append(f"Sofinancer {idx+1}: Vnesite naziv programa/projekta")
-                    elif street_address or postal_code or program_name:
+                                logging.info(f"[COFINANCER_DEBUG]   ✗ Missing program name")
+                    elif street or house_number or postal_code or city or program_name:
                         # If any field is filled but name is missing
                         errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv sofinancerja")
             else:
@@ -1330,8 +1447,21 @@ class ValidationManager:
                     if isinstance(cofinancer, dict):
                         # Check for new field structure first
                         cofinancer_name = cofinancer.get('cofinancerName', '').strip()
-                        street_address = cofinancer.get('cofinancerStreetAddress', '').strip()
+                        
+                        # Handle separate street and house number fields
+                        street = cofinancer.get('cofinancerStreet', '').strip()
+                        house_number = cofinancer.get('cofinancerHouseNumber', '').strip()
+                        street_address = f"{street} {house_number}".strip() if street or house_number else ''
+                        
+                        # Also check for combined field
+                        if not street_address:
+                            street_address = cofinancer.get('cofinancerStreetAddress', '').strip()
+                        
+                        # Handle separate postal code and city
                         postal_code = cofinancer.get('cofinancerPostalCode', '').strip()
+                        city = cofinancer.get('cofinancerCity', '').strip()
+                        postal_location = f"{postal_code} {city}".strip() if postal_code or city else ''
+                        
                         program_name = cofinancer.get('programName', '').strip()
                         
                         # Fallback to old structure if new fields not found
@@ -1340,19 +1470,23 @@ class ValidationManager:
                         if not program_name:
                             program_name = cofinancer.get('program', '').strip()
                         
-                        # Validate required fields
+                        # Validate required fields - need all components
                         if cofinancer_name:
-                            if street_address and postal_code and program_name:
+                            if street and house_number and postal_code and city and program_name:
                                 has_valid_cofinancer = True
                             else:
                                 # Report specific missing fields
-                                if not street_address:
-                                    errors.append(f"Sofinancer {idx+1}: Vnesite naslov (ulica/cesta in hišna številka)")
+                                if not street:
+                                    errors.append(f"Sofinancer {idx+1}: Vnesite ulico/cesto")
+                                if not house_number:
+                                    errors.append(f"Sofinancer {idx+1}: Vnesite hišno številko")
                                 if not postal_code:
-                                    errors.append(f"Sofinancer {idx+1}: Vnesite poštno številko in kraj")
+                                    errors.append(f"Sofinancer {idx+1}: Vnesite poštno številko")
+                                if not city:
+                                    errors.append(f"Sofinancer {idx+1}: Vnesite kraj")
                                 if not program_name:
                                     errors.append(f"Sofinancer {idx+1}: Vnesite naziv programa/projekta")
-                        elif street_address or postal_code or program_name:
+                        elif street or house_number or postal_code or city or program_name:
                             errors.append(f"Sofinancer {idx+1}: Vnesite polni naziv sofinancerja")
             
             if not has_valid_cofinancer:
@@ -1768,6 +1902,71 @@ class ValidationManager:
             if not doc_uploaded and not has_file_info:
                 errors.append("Pri pripravljenem ponudbenem predračunu morate naložiti dokument")
         
+        # Check priceFixation field for "drugo" and "prosim za predlog AI" options
+        price_fixation = None
+        fixation_keys = []
+        
+        # Build keys to check for price fixation
+        if current_lot_index is not None:
+            fixation_keys.extend([
+                f'lot_{current_lot_index}_priceInfo.priceFixation',
+                f'lot_{current_lot_index}.priceInfo.priceFixation',
+                f'lot_{current_lot_index}.priceInfo.priceFixation'
+            ])
+        
+        fixation_keys.extend([
+            'general.priceInfo.priceFixation',
+            'priceInfo.priceFixation',
+        ])
+        
+        # Find the price fixation value
+        for key in fixation_keys:
+            value = self.session_state.get(key)
+            if value:
+                price_fixation = value
+                break
+        
+        # Check if "drugo" is selected for priceFixation
+        if price_fixation == 'drugo':
+            # Check for other price fixation description
+            other_fixation_keys = []
+            if prefix:
+                other_fixation_keys.append(f'{prefix}.otherPriceFixation')
+            other_fixation_keys.extend([
+                'priceInfo.otherPriceFixation',
+                'otherPriceFixation'
+            ])
+            
+            other_fixation = None
+            for key in other_fixation_keys:
+                value = self.session_state.get(key, '').strip() if key in self.session_state else ''
+                if value:
+                    other_fixation = value
+                    break
+            
+            if not other_fixation:
+                errors.append("Pri izbiri 'drugo' morate opisati željeni način oblikovanja cen")
+        
+        elif price_fixation == 'prosim za predlog AI':
+            # Check for AI price fixation custom input
+            ai_custom_keys = []
+            if prefix:
+                ai_custom_keys.append(f'{prefix}.aiPriceFixationCustom')
+            ai_custom_keys.extend([
+                'priceInfo.aiPriceFixationCustom',
+                'aiPriceFixationCustom'
+            ])
+            
+            ai_custom = None
+            for key in ai_custom_keys:
+                value = self.session_state.get(key, '').strip() if key in self.session_state else ''
+                if value:
+                    ai_custom = value
+                    break
+            
+            if not ai_custom:
+                errors.append("Pri izbiri AI predloga morate izbrati ali dopolniti predlog")
+        
         # Check valorization period if valorization is selected
         price_adjustment = None
         adjustment_keys = []
@@ -1818,7 +2017,7 @@ class ValidationManager:
         # Check for the period type value
         for key in period_type_keys:
             value = self.session_state.get(key)
-            if value and value in ['v letih', 'v mesecih', 'v dnevih']:
+            if value and value in ['v letih', 'v mesecih', 'v dnevih', 'datumsko']:
                 period_type = value
                 break
         
@@ -1836,6 +2035,52 @@ class ValidationManager:
             elif period_type == 'v dnevih':
                 field_suffix = 'days'
                 error_msg = "Pri izbiri 'v dnevih' morate vnesti število dni"
+            elif period_type == 'datumsko':
+                # Handle date range validation
+                date_from_keys = []
+                date_to_keys = []
+                
+                if current_lot_index is not None:
+                    date_from_keys.extend([
+                        f'lot_{current_lot_index}_priceInfo.valorization.dateFrom',
+                        f'lot_{current_lot_index}.priceInfo.valorization.dateFrom',
+                    ])
+                    date_to_keys.extend([
+                        f'lot_{current_lot_index}_priceInfo.valorization.dateTo',
+                        f'lot_{current_lot_index}.priceInfo.valorization.dateTo',
+                    ])
+                
+                date_from_keys.extend([
+                    'general.priceInfo.valorization.dateFrom',
+                    'priceInfo.valorization.dateFrom',
+                ])
+                date_to_keys.extend([
+                    'general.priceInfo.valorization.dateTo',
+                    'priceInfo.valorization.dateTo',
+                ])
+                
+                # Check for date from
+                date_from = None
+                for key in date_from_keys:
+                    value = self.session_state.get(key)
+                    if value:
+                        date_from = value
+                        break
+                
+                # Check for date to
+                date_to = None
+                for key in date_to_keys:
+                    value = self.session_state.get(key)
+                    if value:
+                        date_to = value
+                        break
+                
+                if not date_from:
+                    errors.append("Pri izbiri 'datumsko' morate vnesti datum od")
+                if not date_to:
+                    errors.append("Pri izbiri 'datumsko' morate vnesti datum do")
+                
+                field_suffix = None  # Skip the generic field_suffix logic
             else:
                 field_suffix = None
                 error_msg = None

@@ -120,8 +120,15 @@ def get_form_data_from_session():
                         d = array_data[array_key][index]
                         field_parts = field_path.split('.')
                         for fp in field_parts[:-1]:
+                            # Only use setdefault if d is a dict
+                            if not isinstance(d, dict):
+                                # Cannot navigate further - skip this key
+                                break
                             d = d.setdefault(fp, {})
-                        d[field_parts[-1]] = st.session_state[key]
+                        else:
+                            # Only set value if we successfully navigated
+                            if isinstance(d, dict):
+                                d[field_parts[-1]] = st.session_state[key]
                     else:
                         # Direct value
                         array_data[array_key][index] = st.session_state[key]
@@ -270,8 +277,15 @@ def get_form_data_from_session():
                     # Navigate to the correct position in lot_data
                     d = lot_data
                     for part in parts[:-1]:
+                        # Ensure d is a dictionary before calling setdefault
+                        if not isinstance(d, dict):
+                            # Skip this field if we can't build nested structure
+                            break
                         d = d.setdefault(part, {})
-                    d[parts[-1]] = array_value
+                    else:
+                        # Only set the final value if we successfully navigated the structure
+                        if isinstance(d, dict):
+                            d[parts[-1]] = array_value
                     
                     logging.info(f"[get_form_data_from_session] Added lot array {array_key} to lot {i}")
             

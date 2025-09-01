@@ -38,6 +38,37 @@ class SectionRenderer:
         """
         self.context = context
         self.field_renderer = field_renderer
+    
+    def _render_warning_box(self, title: str, content: str):
+        """Render a custom warning box with consistent styling."""
+        # Remove any existing warning prefixes from content
+        content = content.replace("⚠️ **OPOZORILO:**", "").replace("**POZOR:**", "").strip()
+        
+        # Create custom HTML for warning box
+        warning_html = f"""
+        <div style="
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 0.25rem;
+            padding: 1rem;
+            margin: 1rem 0;
+        ">
+            <div style="
+                display: flex;
+                align-items: flex-start;
+                gap: 0.5rem;
+            ">
+                <span style="font-size: 1.2rem;">⚠️</span>
+                <div style="flex: 1;">
+                    <strong style="color: #856404; font-size: 1rem;">{title}</strong>
+                    <div style="color: #856404; margin-top: 0.5rem; line-height: 1.5;">
+                        {content}
+                    </div>
+                </div>
+            </div>
+        </div>
+        """
+        st.markdown(warning_html, unsafe_allow_html=True)
         
     def render_section(self, 
                       section_name: str, 
@@ -73,15 +104,25 @@ class SectionRenderer:
                               level: int) -> Dict[str, Any]:
         """Render an object section with nested properties."""
         full_key = f"{parent_key}.{section_name}" if parent_key else section_name
-        properties = section_schema.get('properties', {})
+        
+        # IMPORTANT: Skip rendering if both $ref and properties exist
+        # This happens when app.py resolves $ref but leaves both in the schema
+        # We should only use the properties, not process the $ref again
+        if '$ref' in section_schema and 'properties' in section_schema:
+            # The $ref has already been resolved by app.py, just use properties
+            properties = section_schema.get('properties', {})
+        else:
+            properties = section_schema.get('properties', {})
+        
         required_fields = section_schema.get('required', [])
+        conditionally_required = section_schema.get('conditionally_required', [])
         
         # Get section title
         title = section_schema.get('title', section_name)
         description = section_schema.get('description')
         
         # Check if this section should be rendered (conditional rendering)
-        if not self._should_render(section_schema):
+        if not self._should_render(section_schema, parent_key):
             return {}
         
         # Special handling for legalBasis field - use info icons with expanders
@@ -96,9 +137,17 @@ class SectionRenderer:
             # Use expander for collapsible sections
             with st.expander(title, expanded=True):
                 if description:
-                    st.caption(description)
+                    # Special handling for very long descriptions (technical specifications)
+                    if len(description) > 1000:
+                        # Display as info box for better visibility
+                        st.info(description)
+                    elif description.startswith("⚠️ **OPOZORILO:**"):
+                        # Display as custom warning box
+                        self._render_warning_box("Opozorilo", description)
+                    else:
+                        st.caption(description)
                 section_data = self._render_properties(
-                    properties, full_key, required_fields, level + 1
+                    properties, full_key, required_fields, level + 1, conditionally_required
                 )
         elif use_container:
             # Use container with border
@@ -109,10 +158,18 @@ class SectionRenderer:
                     st.markdown(f"**{title}**")
                     
                 if description:
-                    st.caption(description)
+                    # Special handling for very long descriptions (technical specifications)
+                    if len(description) > 1000:
+                        # Display as info box for better visibility
+                        st.info(description)
+                    elif description.startswith("⚠️ **OPOZORILO:**"):
+                        # Display as custom warning box
+                        self._render_warning_box("Opozorilo", description)
+                    else:
+                        st.caption(description)
                     
                 section_data = self._render_properties(
-                    properties, full_key, required_fields, level + 1
+                    properties, full_key, required_fields, level + 1, conditionally_required
                 )
         else:
             # No container (for top-level sections)
@@ -122,10 +179,18 @@ class SectionRenderer:
                 st.markdown(f"**{title}**")
                 
             if description:
-                st.caption(description)
+                # Special handling for very long descriptions (technical specifications)
+                if len(description) > 1000:
+                    # Display as info box for better visibility
+                    st.info(description)
+                elif description.startswith("⚠️ **OPOZORILO:**"):
+                    # Display as custom warning box
+                    self._render_warning_box("Opozorilo", description)
+                else:
+                    st.caption(description)
                 
             section_data = self._render_properties(
-                properties, full_key, required_fields, level + 1
+                properties, full_key, required_fields, level + 1, conditionally_required
             )
         
         return section_data
@@ -181,7 +246,15 @@ class SectionRenderer:
         # Render array header
         st.markdown(f"**{title}**")
         if description:
-            st.caption(description)
+            # Special handling for very long descriptions (technical specifications)
+            if len(description) > 1000:
+                # Display as info box for better visibility  
+                st.info(description)
+            elif description.startswith("⚠️ **OPOZORILO:**"):
+                # Display as custom warning box
+                self._render_warning_box("Opozorilo", description)
+            else:
+                st.caption(description)
         
         # Render each array item
         updated_array = []
@@ -299,7 +372,8 @@ class SectionRenderer:
                           properties: dict, 
                           parent_key: str, 
                           required_fields: list,
-                          level: int) -> dict:
+                          level: int,
+                          conditionally_required: list = None) -> dict:
         """Render all properties of an object."""
         section_data = {}
         
@@ -370,11 +444,17 @@ class SectionRenderer:
                 continue
             
             # Check conditional rendering
-            if not self._should_render(prop_schema):
+            if not self._should_render(prop_schema, parent_key):
                 continue
             
             prop_type = prop_schema.get('type')
             is_required = prop_name in required_fields
+            
+            # Check if field is conditionally required and currently visible
+            if conditionally_required and prop_name in conditionally_required:
+                # Check if the field should be rendered (visible)
+                if self._should_render(prop_schema, parent_key):
+                    is_required = True
             
             # Check if this is an address field that should be grouped
             if prop_name in address_field_names and any(prefix for prefix in address_prefixes):
@@ -425,7 +505,7 @@ class SectionRenderer:
         
         return section_data
     
-    def _should_render(self, schema: dict) -> bool:
+    def _should_render(self, schema: dict, parent_key: str = "") -> bool:
         """
         Check if a field/section should be rendered based on conditions.
         Supports render_if, render_if_any, render_if_all conditions.
@@ -433,34 +513,85 @@ class SectionRenderer:
         # Check render_if condition
         if 'render_if' in schema:
             condition = schema['render_if']
-            if not self._check_condition(condition):
+            if not self._check_condition(condition, parent_key):
                 return False
         
         # Check render_if_any conditions (OR logic)
         if 'render_if_any' in schema:
             conditions = schema['render_if_any']
-            if not any(self._check_condition(c) for c in conditions):
+            if not any(self._check_condition(c, parent_key) for c in conditions):
                 return False
         
         # Check render_if_all conditions (AND logic)
         if 'render_if_all' in schema:
             conditions = schema['render_if_all']
-            if not all(self._check_condition(c) for c in conditions):
+            if not all(self._check_condition(c, parent_key) for c in conditions):
                 return False
         
         return True
     
-    def _check_condition(self, condition: dict) -> bool:
+    def _check_condition(self, condition: dict, parent_key: str = "") -> bool:
         """Check a single render condition."""
         field = condition.get('field')
-        expected_value = condition.get('value')
-        operator = condition.get('operator', 'equals')
+        field_parent = condition.get('field_parent')
+        
+        # Debug logging for justification field
+        if field and 'justification' in str(parent_key):
+            import logging
+            logging.info(f"[RENDER_CONDITION] Checking condition for justification: field={field}, condition={condition}")
+        
+        # Handle field_parent conditions (used in nested objects like orderType)
+        if field_parent:
+            # field_parent refers to a sibling field in the same parent object
+            # Construct the full field path based on parent_key
+            if parent_key:
+                field = f"{parent_key}.{field_parent}"
+            else:
+                field = field_parent
+            
         
         if not field:
             return True
         
-        # Get field value (might be lot-scoped or global)
+        # ALWAYS use context to get field value (it handles lot scoping)
         actual_value = self.context.get_field_value(field)
+        
+        # Debug logging for justification/procedure fields
+        if field and ('justification' in str(parent_key) or 'procedure' in field):
+            import logging
+            lot_key = self.context.get_field_key(field)
+            logging.info(f"[RENDER_CONDITION] Field {field}: actual_value='{actual_value}', lot_scoped_key={lot_key}")
+        
+        # If value is None and we're checking orderType.type, use the default
+        if actual_value is None and field.endswith('.type') and 'orderType' in field:
+            actual_value = 'blago'  # Default value from schema
+        
+        # Handle different condition formats
+        # Format 1: {"field": "x", "value": "y", "operator": "equals"}
+        # Format 2: {"field": "x", "value": "y"} (implicit equals)
+        # Format 3: {"field": "x", "not_in": ["a", "b"]} (operator as key)
+        # Format 4: {"field_parent": "x", "not_in": ["a", "b"]} (with field_parent)
+        
+        # Check for operator as a key (Format 3/4)
+        if 'not_in' in condition:
+            result = actual_value not in condition['not_in']
+            # Debug logging for justification field
+            if field and 'justification' in str(parent_key):
+                import logging
+                logging.info(f"[RENDER_CONDITION] not_in check: actual_value='{actual_value}', not_in={condition['not_in']}, result={result}")
+            return result
+        elif 'in' in condition:
+            return actual_value in condition['in']
+        elif 'not_equals' in condition:
+            return actual_value != condition['not_equals']
+        elif 'exists' in condition:
+            return actual_value is not None and actual_value != ""
+        elif 'not_exists' in condition:
+            return actual_value is None or actual_value == ""
+        
+        # Fall back to traditional format (Format 1/2)
+        expected_value = condition.get('value')
+        operator = condition.get('operator', 'equals')
         
         # Check condition based on operator
         if operator == 'equals':
@@ -546,59 +677,63 @@ class SectionRenderer:
         use_additional_key = f"{full_key}.useAdditional"
         additional_bases_key = f"{full_key}.additionalLegalBases"
         
-        if not self.context.field_exists(use_additional_key):
-            self.context.set_field_value(use_additional_key, False)
+        # ALWAYS use lot-scoped keys through context
+        lot_scoped_use_key = self.context.get_field_key(use_additional_key)
+        lot_scoped_bases_key = self.context.get_field_key(additional_bases_key)
         
-        if not self.context.field_exists(additional_bases_key):
-            self.context.set_field_value(additional_bases_key, [])
+        # Get values using lot-scoped keys
+        use_additional_value = self.context.session_state.get(lot_scoped_use_key, False)
+        additional_bases_value = self.context.session_state.get(lot_scoped_bases_key, [])
         
         # Checkbox for additional legal bases
+        widget_key = f"widget_{lot_scoped_use_key}"
         use_additional = st.checkbox(
             "Želim, da se upošteva še kakšna pravna podlaga",
-            value=self.context.get_field_value(use_additional_key, False),
-            key=f"widget_{self.context.get_field_key(use_additional_key)}",
+            value=use_additional_value,
+            key=widget_key,
             help="Označite, če želite dodati dodatne pravne podlage poleg osnovne"
         )
+        
+        # Save using context (which handles lot scoping)
         self.context.set_field_value(use_additional_key, use_additional)
         
         # Show additional legal bases if checkbox is checked
         if use_additional:
-            additional_bases = self.context.get_field_value(additional_bases_key, [])
+            # Get current additional bases with fallback
+            additional_bases = additional_bases_value if additional_bases_value else []
             
             st.markdown("**Dodatne pravne podlage:**")
             
-            # Display existing legal bases
-            updated_bases = []
-            for idx, basis in enumerate(additional_bases):
+            # Display existing legal bases with proper state management
+            for idx in range(len(additional_bases)):
                 col1, col2 = st.columns([5, 1])
                 with col1:
-                    new_value = st.text_input(
+                    # Use unique widget key for each input
+                    widget_key = f"widget_legal_basis_{self.context.lot_index}_{idx}"
+                    
+                    # Update the value in the list directly
+                    additional_bases[idx] = st.text_input(
                         f"Pravna podlaga {idx + 1}",
-                        value=basis,
-                        key=f"legal_basis_{idx}",
+                        value=additional_bases[idx] if idx < len(additional_bases) else "",
+                        key=widget_key,
                         placeholder="Vnesite pravno podlago (npr. člen zakona, uredba...)"
                     )
-                    if new_value:
-                        updated_bases.append(new_value)
                 with col2:
-                    if st.button("🗑️", key=f"remove_legal_{idx}", help="Odstrani"):
-                        # Skip this item (don't add to updated_bases)
-                        pass
-                    else:
-                        if new_value:
-                            updated_bases.append(new_value)
+                    if st.button("🗑️", key=f"remove_legal_{self.context.lot_index}_{idx}", help="Odstrani"):
+                        additional_bases.pop(idx)
+                        self.context.set_field_value(additional_bases_key, additional_bases)
+                        st.rerun()
             
-            # Update if changed
-            if updated_bases != additional_bases:
-                self.context.set_field_value(additional_bases_key, updated_bases)
+            # Save changes using context (which handles lot scoping)
+            self.context.set_field_value(additional_bases_key, additional_bases)
             
             # Add new legal basis button
-            if st.button("➕ Dodaj pravno podlago", key="add_legal_basis"):
+            if st.button("➕ Dodaj pravno podlago", key=f"add_legal_basis_{self.context.lot_index}"):
                 additional_bases.append("")
                 self.context.set_field_value(additional_bases_key, additional_bases)
                 st.rerun()
         
-        # Return the data
+        # Return the data using context (which handles lot scoping)
         return {
             'useAdditional': self.context.get_field_value(use_additional_key, False),
             'additionalLegalBases': self.context.get_field_value(additional_bases_key, [])

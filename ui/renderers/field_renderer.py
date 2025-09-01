@@ -144,9 +144,7 @@ class FieldRenderer:
             )
             self.context.set_field_value(full_key, value)
             
-            # Validate CPV if required
-            if required and not value:
-                self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+            # Don't validate during rendering - only show existing errors
             
             # Show validation error message below field if exists
             errors = self.context.get_validation_errors(full_key)
@@ -202,9 +200,7 @@ class FieldRenderer:
             # Update session state
             self.context.set_field_value(full_key, value)
             
-            # Add validation error if required and empty
-            if required and not value:
-                self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+            # Don't validate during rendering - only show existing errors
             
             # Show validation error message below field if exists
             errors = self.context.get_validation_errors(full_key)
@@ -240,6 +236,11 @@ class FieldRenderer:
         # Check if this is a financial field
         is_financial = self._is_financial_field(field_name, parent_key)
         
+        # Debug logging for financial fields
+        if 'estimatedValue' in field_name or 'guaranteedFunds' in field_name:
+            import logging
+            logging.info(f"[FINANCIAL_FIELD_CHECK] field_name={field_name}, parent_key={parent_key}, is_financial={is_financial}")
+        
         # Check if field has validation errors to add red border
         has_error = self.context.has_errors(full_key)
         if has_error:
@@ -273,9 +274,7 @@ class FieldRenderer:
                     number_value = 0.0
                 self.context.set_field_value(full_key, number_value)
                 
-                # Add validation error if required and empty
-                if required and number_value == 0.0 and not value_str.strip():
-                    self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+                # Don't validate during rendering - only show existing errors
                 
                 # Show validation error message below field if exists
                 errors = self.context.get_validation_errors(full_key)
@@ -311,9 +310,14 @@ class FieldRenderer:
         
         current_value = self.context.get_field_value(full_key, default)
         
+        # Ensure value is at least the minimum
+        display_value = int(current_value)
+        if display_value < minimum:
+            display_value = minimum
+        
         value = st.number_input(
             label=self._format_label(label, required, full_key),
-            value=int(current_value),
+            value=display_value,
             min_value=minimum,
             max_value=maximum,
             step=step,
@@ -447,9 +451,7 @@ class FieldRenderer:
         
         self.context.set_field_value(full_key, value)
         
-        # Add validation error if required and empty
-        if required and value is None:
-            self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+        # Don't validate during rendering - only show existing errors
         
         # Show validation error message below field if exists
         errors = self.context.get_validation_errors(full_key)
@@ -508,30 +510,51 @@ class FieldRenderer:
         session_key = self.context.get_field_key(full_key)
         widget_key = f"widget_{session_key}"
         
+        # Debug logging for procedure dropdown
+        if 'procedure' in full_key:
+            import logging
+            logging.info(f"[SELECT_BOX] {full_key}: current_value='{current_value}', options={options}")
+        
         # Check if field has validation errors to add red border
         has_error = self.context.has_errors(full_key)
         if has_error:
             self._add_field_error_style(widget_key)
         
         # Ensure current value is in options
+        # Only reset to first option if current_value is None or empty string
         if current_value not in options and options:
-            current_value = options[0]
+            if current_value is None or current_value == '':
+                current_value = options[0]
+            # If current_value has a value but it's not in options, keep it
+            # This might happen during form updates
         
         index = options.index(current_value) if current_value in options else 0
         
-        value = st.selectbox(
-            label=self._format_label(label, required, full_key),
-            options=options,
-            index=index,
-            key=widget_key,
-            help=help_text
-        )
+        # For very long descriptions (like technical specifications), show as info after dropdown
+        if help_text and len(help_text) > 1000:
+            # Show dropdown without help text
+            value = st.selectbox(
+                label=self._format_label(label, required, full_key),
+                options=options,
+                index=index,
+                key=widget_key,
+                help=None  # Don't show as help text
+            )
+            # Show long description as info below
+            st.info(help_text)
+        else:
+            # Normal dropdown with help text
+            value = st.selectbox(
+                label=self._format_label(label, required, full_key),
+                options=options,
+                index=index,
+                key=widget_key,
+                help=help_text
+            )
         
         self.context.set_field_value(full_key, value)
         
-        # Add validation error if required and no selection
-        if required and (not value or value == ""):
-            self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+        # Don't validate during rendering - only show existing errors
         
         # Show validation error message below field if exists
         errors = self.context.get_validation_errors(full_key)
@@ -564,8 +587,7 @@ class FieldRenderer:
         
         self.context.set_field_value(full_key, value)
         
-        if required and not value:
-            self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+        # Don't validate during rendering - only show existing errors
         
         # Show validation error message below field if exists
         errors = self.context.get_validation_errors(full_key)
@@ -625,9 +647,7 @@ class FieldRenderer:
             # Clear the field value if no file
             self.context.set_field_value(full_key, None)
         
-        # Validation
-        if required and not uploaded_file and not file_info:
-            self.context.add_validation_error(full_key, f"{label} je obvezno")
+        # Don't validate during rendering - only show existing errors
         
         return uploaded_file
     
@@ -717,9 +737,7 @@ class FieldRenderer:
             if 'estimatedValue' in full_key:
                 logging.info(f"[ESTIMATED_VALUE] {full_key}={parsed_value}")
             
-            # Add validation error if required and empty
-            if required and parsed_value == 0.0 and not value_str.strip():
-                self.context.add_validation_error(full_key, f"{label} je obvezno polje")
+            # Don't validate during rendering - only show existing errors
             
             # Show validation error message below field if exists
             errors = self.context.get_validation_errors(full_key)

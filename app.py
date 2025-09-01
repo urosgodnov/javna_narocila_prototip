@@ -30,6 +30,37 @@ from utils.optimized_database_logger import configure_optimized_logging as confi
 from utils.qdrant_init import init_qdrant_on_startup
 from utils.loading_state import render_loading_indicator, set_loading_state, LOADING_MESSAGES
 
+def render_warning_box(title: str, content: str):
+    """Render a consistent warning box with yellow/orange styling."""
+    # Remove any existing warning prefixes from content
+    content = content.replace("⚠️", "").replace("ℹ️", "").replace("**Opozorilo:**", "").replace("**OPOZORILO:**", "").strip()
+    
+    # Create custom HTML for warning box
+    warning_html = f"""
+    <div style="
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 0.25rem;
+        padding: 1rem;
+        margin: 1rem 0;
+    ">
+        <div style="
+            display: flex;
+            align-items: flex-start;
+            gap: 0.5rem;
+        ">
+            <span style="font-size: 1.2rem;">⚠️</span>
+            <div style="flex: 1;">
+                <strong style="color: #856404; font-size: 1rem;">{title}</strong>
+                <div style="color: #856404; margin-top: 0.5rem; line-height: 1.5;">
+                    {content}
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(warning_html, unsafe_allow_html=True)
+
 # Initialize CPV data on startup (outside of Streamlit context)
 def init_app_data():
     """Initialize application data on startup."""
@@ -411,6 +442,13 @@ def main():
             try:
                 load_procurement_to_form(st.session_state.edit_record_id)
                 st.session_state.edit_data_loaded = True
+                
+                # Mark all steps with data as completed for sidebar navigation
+                from utils.edit_mode_helper import mark_completed_steps_for_edit
+                from utils.schema_utils import get_form_data_from_session
+                form_data = get_form_data_from_session()
+                mark_completed_steps_for_edit(form_data)
+                
                 logging.info(f"=== AUTO-LOADING COMPLETED ===")
             except Exception as e:
                 logging.error(f"=== AUTO-LOADING ERROR: {e} ===")
@@ -759,7 +797,7 @@ def navigate_to_step(target_step, lot_id=None):
         st.session_state['current_step'] = target_step
         st.rerun()
     else:
-        st.warning("⚠️ Ne morete skočiti na ta korak - prejšnji koraki niso izpolnjeni")
+        render_warning_box("Opozorilo", "Ne morete skočiti na ta korak - prejšnji koraki niso izpolnjeni")
 
 def get_required_fields_for_step(step_keys):
     """
@@ -773,8 +811,8 @@ def get_required_fields_for_step(step_keys):
         ],
         'orderInfo': ['title', 'description', 'estimatedValue'],
         'cpvInfo': ['mainCPV'],
-        'submissionProcedure': ['procedureType'],
-        'orderType': ['type'],
+        'submissionProcedure': ['procedure', 'justification'],
+        'orderType': ['type', 'estimatedValue'],
         'lotsInfo': ['hasLots'],
         'executionDeadline': ['deadlineType'],
         'submissionDeadline': ['deadlineDate', 'deadlineTime'],
@@ -812,9 +850,9 @@ def render_quick_navigation():
     accessible_steps = []
     
     for idx in range(len(steps)):
-        # In edit mode, all steps are accessible
-        # In normal mode, only completed steps and current step
-        if is_edit_mode or idx <= current or completed.get(idx, False):
+        # Only show completed steps and current step
+        # In edit mode, same rule applies
+        if idx <= current or completed.get(idx, False):
             step_name = get_step_name(idx)
             # Add step number to the name for clarity
             accessible_steps.append((idx, f"{idx+1}. {step_name}"))
@@ -822,10 +860,7 @@ def render_quick_navigation():
     if accessible_steps and len(accessible_steps) > 1:
         with st.sidebar:
             st.markdown("##### Hitra navigacija")
-            if is_edit_mode:
-                st.caption("Pri urejanju lahko skočite na katerikoli korak")
-            else:
-                st.caption("Skočite na že izpolnjene korake")
+            st.caption("Skočite na že izpolnjene korake")
             
             # Show overall progress
             total_steps = len(steps)
@@ -1144,41 +1179,73 @@ def validate_step(step_keys, schema):
     # Run general validation
     is_valid, errors = validator.validate_step(step_keys, current_step)
     
-    # Display general validation errors and add field styling
-    if not is_valid:
-        # Try to add red border styling to invalid fields
-        try:
-            from ui.renderers.validation_renderer import ValidationRenderer
-            from ui.contexts.form_context import FormContext
-            
-            # Create a validation renderer if we can
-            context = FormContext(st.session_state)
-            validation_renderer = ValidationRenderer(context)
-            
-            # Mark fields with errors for red border styling
-            for field_key in step_keys:
-                # Check if this is a property key that might have required subfields
-                if field_key in schema.get('properties', {}):
-                    field_schema = schema['properties'][field_key]
-                    if field_schema.get('type') == 'object' and 'properties' in field_schema:
-                        # Check subfields for clientInfo
-                        for subfield_key, subfield_schema in field_schema['properties'].items():
-                            full_key = f"{field_key}.{subfield_key}"
-                            field_value = st.session_state.get(full_key)
-                            # Check if field is required and empty
-                            if subfield_key in validator.get_required_fields():
-                                if not field_value or (isinstance(field_value, str) and not field_value.strip()):
-                                    validation_renderer.add_field_error_style(full_key)
-        except Exception as e:
-            logging.warning(f"Could not apply field error styling: {e}")
+    # Create validation renderer for visual feedback
+    from ui.renderers.validation_renderer import ValidationRenderer
+    from utils.form_helpers import FormContext
     
-    # Display general validation errors
-    for error in errors:
-        st.error(f"⚠️ {error}")
+    context = FormContext(st.session_state)
+    validation_renderer = ValidationRenderer(context)
+    
+    # Clear previous error styles first
+    validation_renderer.clear_field_errors()
+    
+    # Display validation errors with red borders using existing system
+    if not is_valid:
+        
+        # Collect fields with errors
+        error_fields = set()
+        
+        # Check each field in step_keys for errors
+        for field_key in step_keys:
+            if field_key in schema.get('properties', {}):
+                field_schema = schema['properties'][field_key]
+                
+                # Handle object properties (like clientInfo, orderType, etc.)
+                if field_schema.get('type') == 'object' and 'properties' in field_schema:
+                    # Get required fields for this section
+                    required_fields = get_required_fields_for_step([field_key])
+                    
+                    for subfield_key in field_schema['properties']:
+                        full_key = f"{field_key}.{subfield_key}"
+                        field_value = st.session_state.get(full_key)
+                        
+                        # Check if field is required and empty
+                        if subfield_key in required_fields:
+                            if not field_value or (isinstance(field_value, str) and not field_value.strip()):
+                                error_fields.add(full_key)
+                                validation_renderer.add_field_error_style(full_key)
+                
+                # Handle direct fields
+                else:
+                    field_value = st.session_state.get(field_key)
+                    required_fields = get_required_fields_for_step(step_keys)
+                    
+                    if field_key in required_fields:
+                        if not field_value or (isinstance(field_value, str) and not field_value.strip()):
+                            error_fields.add(field_key)
+                            validation_renderer.add_field_error_style(field_key)
+        
+        # Also check for fields mentioned in error messages
+        for error in errors:
+            # Try to extract field names from error messages
+            if "mora biti vnešen" in error or "je obvezno" in error or "morate vnesti" in error:
+                # Mark any field that might be mentioned
+                for key in st.session_state.keys():
+                    if not key.startswith('widget_') and not key.startswith('_'):
+                        # Check if this field is empty and might be causing the error
+                        value = st.session_state.get(key)
+                        if not value or (isinstance(value, str) and not value.strip()):
+                            if any(part in error.lower() for part in key.lower().split('.')):
+                                error_fields.add(key)
+                                validation_renderer.add_field_error_style(key)
+        
+        # Display validation errors
+        for error in errors:
+            st.error(f"❌ {error}")
     
     # Display warnings if any (for Merila and other sections that generate warnings)
     for warning in validator.get_warnings():
-        st.warning(f"ℹ️ {warning}")
+        render_warning_box("Opozorilo", warning)
     
     
     # The centralized ValidationManager now handles:
@@ -1410,7 +1477,7 @@ def render_main_form():
         if st.button("← Nazaj na pregled", type="secondary"):
             # Check for unsaved changes
             if st.session_state.get('unsaved_changes', False):
-                st.warning("⚠️ Imate neshranjene spremembe. Ali res želite zapustiti obrazec?")
+                render_warning_box("Opozorilo", "Imate neshranjene spremembe. Ali res želite zapustiti obrazec?")
                 col_yes, col_no = st.columns(2)
                 with col_yes:
                     if st.button("Da, zapusti"):
@@ -1525,6 +1592,9 @@ def render_main_form():
                         if ref_definition and "properties" in ref_definition:
                             # Merge the referenced properties into prop_copy
                             prop_copy["properties"] = ref_definition["properties"]
+                            # Merge required fields if they exist
+                            if "required" in ref_definition:
+                                prop_copy["required"] = ref_definition.get("required", [])
                             # Ensure type is set to object
                             prop_copy["type"] = "object"
                             # Remove the $ref since we've resolved it
@@ -1550,6 +1620,9 @@ def render_main_form():
                         if ref_definition and "properties" in ref_definition:
                             # Merge the referenced properties into prop_copy
                             prop_copy["properties"] = ref_definition["properties"]
+                            # Merge required fields if they exist
+                            if "required" in ref_definition:
+                                prop_copy["required"] = ref_definition.get("required", [])
                             # Ensure type is set to object
                             prop_copy["type"] = "object"
                             # Remove the $ref since we've resolved it
@@ -1579,11 +1652,24 @@ def render_main_form():
         # Render form with enhanced styling and lot context
         st.markdown('<div class="form-content">', unsafe_allow_html=True)
         
-        # Special handling for lotConfiguration step only
-        if 'lotConfiguration' in current_step_keys:
-            # Import and render lot configuration
-            from utils.lot_configuration_renderer import render_lot_configuration
-            render_lot_configuration()
+        # Special handling for lotsInfo step - integrate lot configuration
+        if 'lotsInfo' in current_step_keys:
+            # Import and render enhanced lotsInfo with integrated lot configuration
+            from ui.renderers.lots_info_renderer import render_lots_info
+            # Use FormController to render the lotsInfo field with lot configuration
+            required_fields = get_required_fields_for_step(current_step_keys)
+            form_controller.set_schema({
+                'properties': current_step_properties,
+                'required': required_fields
+            })
+            # Render lotsInfo with integrated lot configuration
+            render_lots_info(form_controller.field_renderer, 
+                           current_step_properties.get('lotsInfo', {}).get('properties', {}),
+                           'lotsInfo')
+        # Special handling for lotConfiguration step only (kept for backwards compatibility)
+        elif 'lotConfiguration' in current_step_keys:
+            # Skip - lot configuration is now integrated into lotsInfo
+            st.info("Konfiguracija sklopov se sedaj izvaja direktno pri izbiri sklopov.")
         # Special handling for step 15 - otherInfo
         elif 'otherInfo' in current_step_keys:
             # Get the session key for otherInfo field using new architecture
@@ -1639,7 +1725,7 @@ def render_main_form():
         
         # Story 25.1: Cancel confirmation dialog
         if st.session_state.get('show_cancel_dialog', False):
-            st.warning("⚠️ **Opozorilo**")
+            render_warning_box("Opozorilo", "Validacija koraka ni uspela")
             st.write("Ali res želite opustiti? Vsi podatki bodo izgubljeni.")
             
             col1, col2 = st.columns(2)
@@ -2445,7 +2531,7 @@ def switch_to_lot(lot_index):
     """Switch to a different lot with validation."""
     # Check for unsaved changes
     if st.session_state.get('unsaved_changes'):
-        st.warning("⚠️ Imate neshranjene spremembe. Prosim, shranite pred preklopom.")
+        render_warning_box("Opozorilo", "Imate neshranjene spremembe. Prosim, shranite pred preklopom.")
         return
     
     # Update current lot index
@@ -2645,7 +2731,7 @@ def render_navigation_buttons_in_form(current_step_keys):
                 
                 # Show warning if validation was skipped
                 if validation_skipped:
-                    st.warning("⚠️ **Opozorilo**: Nekateri koraki niso bili validirani. Ali ste prepričani, da želite nadaljevati?")
+                    render_warning_box("Opozorilo", "Nekateri koraki niso bili validirani. Ali ste prepričani, da želite nadaljevati?")
                     col1, col2 = st.columns(2)
                     with col1:
                         confirm_submit = st.checkbox("Da, razumem in želim nadaljevati", key="confirm_skip_validation")
