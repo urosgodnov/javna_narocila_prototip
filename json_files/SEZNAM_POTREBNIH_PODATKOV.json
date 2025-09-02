@@ -433,34 +433,6 @@
                         "prosim za predlog AI"
                     ]
                 },
-                "otherPriceFixation": {
-                    "type": "string",
-                    "title": "Opišite željeni način oblikovanja cen",
-                    "description": "Podrobno opišite, kako želite, da se oblikujejo cene v pogodbi.",
-                    "render_if": {
-                        "field": "priceInfo.priceFixation",
-                        "value": "drugo"
-                    }
-                },
-                "aiPriceFixationSuggestion": {
-                    "type": "object",
-                    "title": "AI predlog za oblikovanje cen",
-                    "render_if": {
-                        "field": "priceInfo.priceFixation",
-                        "value": "prosim za predlog AI"
-                    },
-                    "properties": {},
-                    "description": "Glede na vrsto vašega javnega naročila priporočamo naslednje možnosti:\n\n**1. Kombiniran pristop:** Fiksne cene za prvo leto, nato letna valorizacija po indeksu cen življenjskih potrebščin (SURS)\n\n**2. Postopna valorizacija:** Cene ostanejo fiksne 6 mesecev, nato četrtletna prilagoditev glede na gibanje cen materialov\n\n**3. Pragovna valorizacija:** Cene se prilagodijo samo, če inflacija preseže 3% na letni ravni\n\n**Priložnost za lastni vnos:**"
-                },
-                "aiPriceFixationCustom": {
-                    "type": "string",
-                    "title": "Izberite ali dopolnite AI predlog",
-                    "description": "Lahko uporabite enega od zgornjih predlogov ali vnesete svoj način oblikovanja cen.",
-                    "render_if": {
-                        "field": "priceInfo.priceFixation",
-                        "value": "prosim za predlog AI"
-                    }
-                },
                 "valorization": {
                     "title": "Navedite obdobje po sklenitvi pogodbe, za katero želite, da so cene fiksne",
                     "type": "object",
@@ -569,7 +541,7 @@
                     }
                 }
             },
-            "conditionally_required": ["otherPriceClause", "otherPriceFixation", "aiPriceFixationCustom"]
+            "conditionally_required": ["otherPriceClause"]
         },
         "inspectionInfo": {
             "title": "Ogled lokacije",
@@ -593,7 +565,7 @@
                 },
                 "inspectionDates": {
                     "type": "array",
-                    "title": "Datumi in ure ogledov",
+                    "title": "Datum in ura ogledov",
                     "items": {
                         "type": "object",
                         "title": "Termin",
@@ -1263,16 +1235,14 @@
                                 "title": "Oznaka programa/projekta",
                                 "description": "💡 Predlog umetne inteligence: Uporabite kratico programa (npr. ESRR, ESS+, NOO) ali projektno šifro iz pogodbe o sofinanciranju"
                             },
-                            "specialRequirements": {
+                            "specialRequirementsOption": {
                                 "type": "string",
-                                "format": "textarea",
-                                "title": "Posebne zahteve sofinancerja"
-                            },
-                            "useAIForRequirements": {
-                                "type": "boolean",
-                                "title": "drugo, prosim za predlog umetne inteligence",
-                                "description": "AI bo predlagal posebne zahteve glede na program sofinanciranja",
-                                "default": false
+                                "title": "Posebne zahteve sofinancerja",
+                                "enum": [
+                                    "Vnesem sam",
+                                    "drugo, prosim za predlog AI"
+                                ],
+                                "default": "Vnesem sam"
                             },
                             "logo": {
                                 "type": "string",
@@ -1373,16 +1343,14 @@
                                             "type": "string",
                                             "title": "Oznaka programa/projekta"
                                         },
-                                        "specialRequirements": {
+                                        "specialRequirementsOption": {
                                             "type": "string",
-                                            "format": "textarea",
-                                            "title": "Posebne zahteve sofinancerja"
-                                        },
-                                        "useAIForRequirements": {
-                                            "type": "boolean",
-                                            "title": "drugo, prosim za predlog umetne inteligence",
-                                            "description": "AI bo predlagal posebne zahteve glede na program sofinanciranja",
-                                            "default": false
+                                            "title": "Posebne zahteve sofinancerja",
+                                            "enum": [
+                                                "Vnesem sam",
+                                                "drugo, prosim za predlog AI"
+                                            ],
+                                            "default": "Vnesem sam"
                                         },
                                         "logo": {
                                             "type": "string",
@@ -1559,10 +1527,24 @@
                                 "value": true
                             }
                         },
-                        "professionalAI": {
-                            "type": "boolean",
-                            "title": "drugo, prosim za predlog umetne inteligence",
-                            "default": false
+                        "professionalOption": {
+                            "type": "string",
+                            "title": "Dodatne zahteve",
+                            "enum": [
+                                "Brez dodatnih zahtev",
+                                "Vnesem sam",
+                                "drugo, prosim za predlog AI"
+                            ],
+                            "default": "Brez dodatnih zahtev"
+                        },
+                        "professionalOther": {
+                            "type": "string",
+                            "format": "textarea",
+                            "title": "Vnesite dodatne zahteve",
+                            "render_if": {
+                                "field": "participationConditions.professionalSuitabilitySection.professionalOption",
+                                "value": ["Vnesem sam", "drugo, prosim za predlog AI"]
+                            }
                         }
                     }
                 },
@@ -1692,10 +1674,24 @@
                                 "value": true
                             }
                         },
-                        "economicAI": {
-                            "type": "boolean",
-                            "title": "drugo, prosim za predlog umetne inteligence",
-                            "default": false
+                        "economicOption": {
+                            "type": "string",
+                            "title": "Dodatne zahteve",
+                            "enum": [
+                                "Brez dodatnih zahtev",
+                                "Vnesem sam",
+                                "drugo, prosim za predlog AI"
+                            ],
+                            "default": "Brez dodatnih zahtev"
+                        },
+                        "economicOther": {
+                            "type": "string",
+                            "format": "textarea",
+                            "title": "Vnesite dodatne zahteve",
+                            "render_if": {
+                                "field": "participationConditions.economicFinancialSection.economicOption",
+                                "value": ["Vnesem sam", "drugo, prosim za predlog AI"]
+                            }
                         }
                     }
                 },
@@ -1772,10 +1768,24 @@
                                 "value": true
                             }
                         },
-                        "technicalAI": {
-                            "type": "boolean",
-                            "title": "drugo, prosim za predlog umetne inteligence",
-                            "default": false
+                        "technicalOption": {
+                            "type": "string",
+                            "title": "Dodatne zahteve",
+                            "enum": [
+                                "Brez dodatnih zahtev",
+                                "Vnesem sam",
+                                "drugo, prosim za predlog AI"
+                            ],
+                            "default": "Brez dodatnih zahtev"
+                        },
+                        "technicalOther": {
+                            "type": "string",
+                            "format": "textarea",
+                            "title": "Vnesite dodatne zahteve",
+                            "render_if": {
+                                "field": "participationConditions.technicalProfessionalSection.technicalOption",
+                                "value": ["Vnesem sam", "drugo, prosim za predlog AI"]
+                            }
                         }
                     }
                 }
@@ -2136,10 +2146,24 @@
                         "value": true
                     }
                 },
-                "otherCriteriaAI": {
-                    "type": "boolean",
-                    "title": "drugo, prosim za predlog umetne inteligence",
-                    "default": false
+                "otherCriteriaOption": {
+                    "type": "string",
+                    "title": "Druga merila",
+                    "enum": [
+                        "Brez drugih meril",
+                        "Vnesem sam",
+                        "drugo, prosim za predlog AI"
+                    ],
+                    "default": "Brez drugih meril"
+                },
+                "otherCriteriaText": {
+                    "type": "string",
+                    "format": "textarea",
+                    "title": "Vnesite druga merila",
+                    "render_if": {
+                        "field": "selectionCriteria.otherCriteriaOption",
+                        "value": ["Vnesem sam", "drugo, prosim za predlog AI"]
+                    }
                 },
                 "socialCriteria": {
                     "type": "boolean",
@@ -2304,13 +2328,13 @@
                         "value": true
                     }
                 },
-                "otherCriteriaAIRatio": {
+                "otherCriteriaRatio": {
                     "type": "number",
-                    "title": "drugo, prosim za predlog umetne inteligence (točke)",
+                    "title": "Točke za druga merila",
                     "minimum": 0,
                     "render_if": {
-                        "field": "selectionCriteria.otherCriteriaAI",
-                        "value": true
+                        "field": "selectionCriteria.otherCriteriaOption",
+                        "value": ["Vnesem sam", "drugo, prosim za predlog AI"]
                     }
                 },
                 "tiebreakerHeader": {

@@ -57,32 +57,26 @@ DOCUMENT_TYPES = {
 # Form section mappings for prompts
 PROMPT_SECTIONS = {
     'vrsta_narocila': {
-        'title': 'Vrsta javnega naročila',
+        'title': 'Vrsta javnega naročila - VSA naročila',
         'fields': [
             'posebne_zahteve_sofinancerja',  # Existing
-            'specialRequirements',            # NEW - unified field name
-            'cofinancer_special_requirements', # NEW - alternative name
-            'cofinancer_program_requirements', # NEW - program specific
-            'useAIForRequirements'            # NEW - checkbox field
+            'specialRequirements',            # Unified field name
+            'cofinancer_special_requirements', # Alternative name
+            'cofinancer_program_requirements', # Program specific
+            'useAIForRequirements'            # Checkbox field
         ]
     },
-    'mesano_narocilo': {                     # NEW SECTION
-        'title': 'Mešano javno naročilo',
-        'fields': [
-            'mixedOrder_specialRequirements',
-            'mixedOrder_cofinancer_requirements',
-            'mixedOrderComponents_requirements'
-        ]
-    },
-    'sofinanciranje': {                      # NEW SECTION
-        'title': 'Sofinanciranje',
+    'sofinanciranje': {                      
+        'title': 'Sofinanciranje - VSA naročila',
         'fields': [
             'programName_context',            # Context fields
             'programArea_context',
             'programCode_context',
             'eu_funding_requirements',
             'national_funding_requirements',
-            'reporting_requirements'
+            'reporting_requirements',
+            'cofinancers.specialRequirements',  # Cofinancer specific requirements
+            'cofinancers.useAIForRequirements'  # AI checkbox for cofinancers
         ]
     },
     'pogajanja': {
@@ -100,6 +94,15 @@ PROMPT_SECTIONS = {
     'variante_merila': {
         'title': 'Variante merila',
         'fields': ['merila_drugo']
+    },
+    'informacije_o_ceni': {
+        'title': 'Informacije o ceni',
+        'fields': [
+            'price_formation',
+            'priceFixation',
+            'otherPriceFixation',
+            'aiPriceFixationCustom'
+        ]
     }
 }
 
@@ -2313,6 +2316,19 @@ def get_default_prompt(section: str, field: str) -> str:
     
     # Specific field prompts for new fields
     specific_prompts = {
+        'price_formation': """
+Glede na vrsto javnega naročila in predmet naročila, 
+predlagaj primeren način oblikovanja cen.
+
+Razmisli o:
+- Stabilnosti cen glede na trajanje pogodbe
+- Volatilnosti materialov/surovin
+- Inflacijskih trendih
+- Sezonskih nihanj
+- Valutnih tveganj (če gre za mednarodno naročilo)
+
+Predlagaj konkreten mehanizem oblikovanja cen v slovenščini.
+""",
         'specialRequirements': """
 Glede na program sofinanciranja {programName} s področja 
 {programArea}, generiraj posebne zahteve sofinancerja.

@@ -28,6 +28,14 @@ from localization import get_text, format_step_indicator
 from init_database import initialize_cpv_data, check_cpv_data_status
 from utils.optimized_database_logger import configure_optimized_logging as configure_database_logging
 from utils.qdrant_init import init_qdrant_on_startup
+
+# Import AI integration patch
+try:
+    from patches.ai_integration_patch import apply_ai_integration
+    AI_INTEGRATION_AVAILABLE = True
+except ImportError:
+    AI_INTEGRATION_AVAILABLE = False
+    logging.warning("AI integration patch not available")
 from utils.loading_state import render_loading_indicator, set_loading_state, LOADING_MESSAGES
 
 def render_warning_box(title: str, content: str):
@@ -1701,6 +1709,18 @@ def render_main_form():
                 'properties': current_step_properties,
                 'required': required_fields
             })
+            
+            # Apply AI integration BEFORE rendering if available
+            if AI_INTEGRATION_AVAILABLE:
+                try:
+                    # Inject AI into the form controller's field renderer
+                    from patches.ai_integration_patch import inject_ai_into_renderer
+                    inject_ai_into_renderer(form_controller.field_renderer)
+                    # Also apply general AI integration
+                    apply_ai_integration()
+                except Exception as e:
+                    logging.debug(f"AI integration could not be applied: {e}")
+            
             form_controller.render_form()
         
         st.markdown('</div>', unsafe_allow_html=True)

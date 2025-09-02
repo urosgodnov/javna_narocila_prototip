@@ -46,8 +46,11 @@ class AIFieldSuggestionService:
         Returns:
             Dictionary with suggestions, source, confidence, and context used
         """
+        logger.info(f"Getting AI suggestions for field: {field_context}, type: {field_type}")
+        
         # Collect complete form context
         full_context = self._collect_form_context(form_data or {})
+        logger.debug(f"Collected context keys: {list(full_context.keys())[:10]}")
         
         # Build intelligent search query using full context
         search_query = self._build_contextual_query(field_context, field_type, full_context)
@@ -202,28 +205,40 @@ class AIFieldSuggestionService:
         Search Qdrant knowledge base with context-aware filters.
         """
         try:
-            # Build filters based on context
-            filters = {
-                'document_type': ['pogodbe', 'razpisi', 'navodila']
-            }
+            # Try multiple searches with different document types
+            all_results = []
             
-            # Add cofinancing filter if applicable
-            if context.get('cofinancers'):
-                filters['has_cofinancing'] = True
-                # Try to match specific cofinancer if possible
-                if context['cofinancers']:
-                    filters['funding_source'] = context['cofinancers'][0]
+            # Search relevant document types
+            for doc_type in ['pogodbe', 'razpisi', 'navodila']:
+                filters = {
+                    'document_type': doc_type
+                }
+                
+                # Add cofinancing filter if applicable
+                if context.get('cofinancers'):
+                    filters['has_cofinancing'] = True
+                
+                # Add procurement type filter if available
+                if context.get('procurement_type'):
+                    filters['procurement_type'] = context['procurement_type']
+                
+                # Search with filters
+                try:
+                    results, total = self.qdrant_service.search_documents(
+                        query=query,
+                        filters=filters,
+                        limit=2  # Get top 2 from each type
+                    )
+                    all_results.extend(results)
+                except Exception as e:
+                    logger.debug(f"Search failed for {doc_type}: {e}")
+                    continue
             
-            # Add procurement type filter if available
-            if context.get('procurement_type'):
-                filters['procurement_type'] = context['procurement_type']
+            # Sort by relevance score if available
+            all_results.sort(key=lambda x: x.get('score', 0), reverse=True)
             
-            # Search with filters
-            results, total = self.qdrant_service.search_documents(
-                query=query,
-                filters=filters,
-                limit=5  # Get top 5 results
-            )
+            # Return top 5 results
+            results = all_results[:5]
             
             logger.info(f"Found {len(results)} results in knowledge base for query: {query[:100]}...")
             
@@ -312,11 +327,10 @@ class AIFieldSuggestionService:
                 # Vary the prompt slightly for diversity
                 variation = "Predlagaj alternativo: " if i > 0 else ""
                 
-                ai_response = self.ai_response_service.generate_response(
+                # Use the new get_ai_response method for pure AI generation
+                ai_response = self.ai_response_service.get_ai_response(
                     query=variation + prompt,
-                    chunks=[],  # No chunks since we're using general AI
-                    context_mode="form",
-                    language="sl"
+                    field_type=field_type
                 )
                 
                 if ai_response and not ai_response.startswith("❌"):

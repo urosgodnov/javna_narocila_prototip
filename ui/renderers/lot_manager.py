@@ -75,7 +75,7 @@ class LotManager:
         
         # Add "+" tab if allowed
         if allow_add and (max_lots is None or len(lots) < max_lots):
-            tab_labels.append(f"{self.ICONS['add']} Add Lot")
+            tab_labels.append(f"{self.ICONS['add']} Dodaj sklop")
         
         # Render tabs
         selected_tab = st.tabs(tab_labels)
@@ -175,25 +175,25 @@ class LotManager:
             # Lot actions menu
             actions = []
             if allow_add and (max_lots is None or len(lots) < max_lots):
-                actions.append(f"{self.ICONS['add']} Add Lot")
+                actions.append(f"{self.ICONS['add']} Dodaj sklop")
             if allow_remove and len(lots) > 1:
-                actions.append(f"{self.ICONS['delete']} Remove Current")
-            actions.append("✏️ Rename Current")
-            actions.append(f"{self.ICONS['copy']} Duplicate Current")
-            actions.append(f"{self.ICONS['clear']} Clear Current")
+                actions.append(f"{self.ICONS['delete']} Odstrani trenutni")
+            actions.append("✏️ Preimenuj trenutni")
+            actions.append(f"{self.ICONS['copy']} Podvoji trenutni")
+            actions.append(f"{self.ICONS['clear']} Počisti trenutni")
             
             action = st.selectbox("Dejanja", options=["Izberi dejanje..."] + actions, key="lot_actions")
             
             if action and action != "Izberi dejanje...":
                 if "Dodaj sklop" in action:
                     self._show_add_lot_dialog()
-                elif "Remove Current" in action:
+                elif "Odstrani trenutni" in action:
                     self.remove_current_lot()
-                elif "Rename Current" in action:
+                elif "Preimenuj trenutni" in action:
                     self._show_rename_dialog()
-                elif "Duplicate Current" in action:
+                elif "Podvoji trenutni" in action:
                     self.duplicate_current_lot()
-                elif "Clear Current" in action:
+                elif "Počisti trenutni" in action:
                     self.clear_current_lot()
     
     def _render_lot_controls(self, 

@@ -19,21 +19,62 @@ class AIIntegrationHelper:
     # Fields that should have AI assistance enabled
     AI_ENABLED_FIELDS = {
         # Cofinancer requirements - ALL procurement types
-        'vrsta_narocila.posebne_zahteve_sofinancerja': {
+        # Note: These patterns will match array indices too (e.g., cofinancers.0.specialRequirementsOption)
+        'specialRequirementsOption': {
             'type': 'cofinancer_requirements',
-            'trigger': 'checkbox',
+            'trigger': 'radio',
             'priority': 'high'
         },
-        'procurementType.specialRequirements': {
-            'type': 'cofinancer_requirements', 
-            'trigger': 'checkbox',
+        'cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'projectInfo.cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'orderType.blago.lot_sklopi.cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'orderType.blago.en_sklop.cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'orderType.storitve.lot_sklopi.cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'orderType.storitve.en_sklop.cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'orderType.gradnje.lot_sklopi.cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'orderType.gradnje.en_sklop.cofinancers.specialRequirementsOption': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'vrsta_narocila.posebne_zahteve_sofinancerja': {
+            'type': 'cofinancer_requirements',
+            'trigger': 'radio',
             'priority': 'high'
         },
         
         # Price information fields
         'priceInfo.priceFixation': {
             'type': 'price_formation',
-            'trigger': 'dropdown',
+            'trigger': 'radio',  # Changed to radio for conditional text area
             'priority': 'high'
         },
         'priceInfo.otherPriceFixation': {
@@ -72,6 +113,26 @@ class AIIntegrationHelper:
         },
         
         # Participation conditions
+        'participationConditions.professionalSuitabilitySection.professionalOption': {
+            'type': 'professional_requirements',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
+        'participationConditions.economicFinancialSection.economicOption': {
+            'type': 'economic_requirements',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
+        'participationConditions.technicalProfessionalSection.technicalOption': {
+            'type': 'technical_requirements',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
+        'selectionCriteria.otherCriteriaOption': {
+            'type': 'selection_criteria',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
         'participationConditions.professionalSuitability.other': {
             'type': 'professional_requirements',
             'trigger': 'button',
@@ -105,21 +166,58 @@ class AIIntegrationHelper:
         Returns:
             True if field should use AI renderer
         """
-        # Check if field is in our AI-enabled list
+        # Debug logging for cofinancer fields
+        if 'cofinancer' in field_key.lower() or 'specialrequirements' in field_key.lower():
+            logger.info(f"[AI_FIELD_CHECK] Checking field: {field_key}")
+            logger.info(f"[AI_FIELD_CHECK] Schema type: {schema.get('type')}, Has enum: {'enum' in schema}")
+            if 'enum' in schema:
+                logger.info(f"[AI_FIELD_CHECK] Enum options: {schema['enum']}")
+        
+        # Check if field is in our AI-enabled list (exact match)
         if field_key in self.AI_ENABLED_FIELDS:
+            logger.info(f"[AI_FIELD_MATCH] Direct match for field: {field_key}")
             return True
+        
+        # Check for array patterns (e.g., cofinancers.0.specialRequirementsOption)
+        # Remove array indices to check against our patterns
+        normalized_key = field_key
+        import re
+        # Replace array indices with just the array name
+        normalized_key = re.sub(r'\.\d+\.', '.', normalized_key)
+        
+        if normalized_key in self.AI_ENABLED_FIELDS:
+            logger.info(f"[AI_FIELD_MATCH] Normalized match for field: {field_key} -> {normalized_key}")
+            return True
+        
+        # Also check for patterns where array index might be at different position
+        # e.g., orderType.cofinancers.0.specialRequirementsOption
+        parts = field_key.split('.')
+        for i, part in enumerate(parts):
+            if part.isdigit():
+                # Remove the numeric index and rejoin
+                test_key = '.'.join(parts[:i] + parts[i+1:])
+                if test_key in self.AI_ENABLED_FIELDS:
+                    return True
+                # Also try with the array name before the index
+                if i > 0:
+                    test_key2 = '.'.join(parts[:i-1] + [parts[i-1]] + parts[i+1:])
+                    if test_key2 in self.AI_ENABLED_FIELDS:
+                        return True
         
         # Check for patterns that indicate AI should be enabled
         key_lower = field_key.lower()
+        
+        # IMPORTANT: Exclude specialRequirements without Option suffix
+        if 'specialrequirements' in key_lower and 'option' not in key_lower:
+            logger.info(f"[AI_FIELD_EXCLUDE] Excluding specialRequirements field (no Option suffix): {field_key}")
+            return False
+        
         ai_patterns = [
+            'specialrequirementsoption',  # The new enum field name
             'drugo',  # "Other" fields
             'custom',  # Custom fields
             'ai',  # Explicitly AI fields
-            'predlog',  # Suggestion fields
-            'requirements',  # Requirements often need AI
-            'zahteve',  # Requirements in Slovenian
-            'special',  # Special fields
-            'posebn'  # Special in Slovenian
+            'predlog'  # Suggestion fields
         ]
         
         for pattern in ai_patterns:
@@ -140,7 +238,12 @@ class AIIntegrationHelper:
         if 'enum' in schema:
             for option in schema['enum']:
                 if 'prosim' in str(option).lower() and 'ai' in str(option).lower():
+                    logger.info(f"[AI_FIELD_MATCH] Enum option match for field: {field_key} - found AI option")
                     return True
+        
+        # Final logging if no match
+        if 'specialrequirements' in field_key.lower():
+            logger.info(f"[AI_FIELD_NO_MATCH] No AI match for field: {field_key}")
         
         return False
     
@@ -154,9 +257,36 @@ class AIIntegrationHelper:
         Returns:
             Configuration dictionary with type, trigger, and priority
         """
-        # Return specific config if field is in our list
+        # Return specific config if field is in our list (exact match)
         if field_key in self.AI_ENABLED_FIELDS:
             return self.AI_ENABLED_FIELDS[field_key]
+        
+        # Check for array patterns (same logic as should_use_ai_renderer)
+        import re
+        normalized_key = re.sub(r'\.\d+\.', '.', field_key)
+        
+        if normalized_key in self.AI_ENABLED_FIELDS:
+            return self.AI_ENABLED_FIELDS[normalized_key]
+        
+        # Check with removed indices
+        parts = field_key.split('.')
+        for i, part in enumerate(parts):
+            if part.isdigit():
+                test_key = '.'.join(parts[:i] + parts[i+1:])
+                if test_key in self.AI_ENABLED_FIELDS:
+                    return self.AI_ENABLED_FIELDS[test_key]
+                if i > 0:
+                    test_key2 = '.'.join(parts[:i-1] + [parts[i-1]] + parts[i+1:])
+                    if test_key2 in self.AI_ENABLED_FIELDS:
+                        return self.AI_ENABLED_FIELDS[test_key2]
+        
+        # Check if it's a special requirements option field
+        if 'specialrequirementsoption' in field_key.lower():
+            return {
+                'type': 'cofinancer_requirements',
+                'trigger': 'radio',
+                'priority': 'high'
+            }
         
         # Return default config for other AI fields
         return {
@@ -287,3 +417,51 @@ class AIIntegrationHelper:
         logger.info("AI integration injected into section renderer")
         
         return section_renderer_instance
+    
+    @staticmethod
+    def inject_ai_into_field_renderer(field_renderer_instance):
+        """
+        Monkey-patch the field renderer directly to use AI for appropriate fields.
+        
+        Args:
+            field_renderer_instance: Instance of FieldRenderer to enhance
+        """
+        # Store original render method
+        original_render = field_renderer_instance.render_field
+        
+        # Create AI helper - note: context might not be available here
+        ai_helper = AIIntegrationHelper(getattr(field_renderer_instance, 'context', None))
+        
+        # Create enhanced render method
+        def enhanced_render_field(prop_name, prop_schema, parent_key, required=False):
+            """Enhanced field renderer with AI support."""
+            full_key = f"{parent_key}.{prop_name}" if parent_key else prop_name
+            
+            # Check if this field should use AI
+            if ai_helper.should_use_ai_renderer(full_key, prop_schema):
+                # Try to get current value from session state
+                import streamlit as st
+                current_value = st.session_state.get(full_key, prop_schema.get('default', ''))
+                
+                # Render with AI
+                value = ai_helper.render_field_with_ai(
+                    full_key,
+                    prop_schema,
+                    parent_key,
+                    current_value
+                )
+                
+                if value is not None:
+                    # Store the value in session state
+                    st.session_state[full_key] = value
+                    return value
+            
+            # Fall back to original renderer
+            return original_render(prop_name, prop_schema, parent_key, required)
+        
+        # Replace the render method
+        field_renderer_instance.render_field = enhanced_render_field
+        
+        logger.info("AI integration injected into field renderer")
+        
+        return field_renderer_instance

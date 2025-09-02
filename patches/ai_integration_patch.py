@@ -69,8 +69,13 @@ def inject_ai_into_renderer(renderer_instance):
     try:
         from ui.renderers.ai_integration_helper import AIIntegrationHelper
         
-        # Apply injection
-        AIIntegrationHelper.inject_ai_into_section_renderer(renderer_instance)
+        # Check if it's a FieldRenderer or SectionRenderer
+        if hasattr(renderer_instance, 'field_renderer'):
+            # It's a SectionRenderer
+            AIIntegrationHelper.inject_ai_into_section_renderer(renderer_instance)
+        else:
+            # It's a FieldRenderer
+            AIIntegrationHelper.inject_ai_into_field_renderer(renderer_instance)
         
         logger.info("AI successfully injected into renderer")
         return renderer_instance

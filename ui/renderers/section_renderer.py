@@ -135,7 +135,9 @@ class SectionRenderer:
         
         if use_expander:
             # Use expander for collapsible sections
-            with st.expander(title, expanded=True):
+            # Default to collapsed for better UX (especially for info sections)
+            expanded_default = section_schema.get('expanded', False)
+            with st.expander(title, expanded=expanded_default):
                 if description:
                     # Special handling for very long descriptions (technical specifications)
                     if len(description) > 1000:
@@ -152,19 +154,24 @@ class SectionRenderer:
         elif use_container:
             # Use container with border
             with st.container(border=True):
-                if level == 0:
-                    st.subheader(title)
-                else:
-                    st.markdown(f"**{title}**")
+                # Check if this is a warning section
+                is_warning_section = (description and (description.startswith("⚠️ **OPOZORILO:**") or description.startswith("**POZOR:**"))) or (title and "⚠️" in title and description and "POZOR" in description)
+                
+                if not is_warning_section:
+                    # Only show title if not a warning section
+                    if level == 0:
+                        st.subheader(title)
+                    else:
+                        st.markdown(f"**{title}**")
                     
                 if description:
                     # Special handling for very long descriptions (technical specifications)
                     if len(description) > 1000:
                         # Display as info box for better visibility
                         st.info(description)
-                    elif description.startswith("⚠️ **OPOZORILO:**"):
-                        # Display as custom warning box
-                        self._render_warning_box("Opozorilo", description)
+                    elif description.startswith("⚠️ **OPOZORILO:**") or description.startswith("**POZOR:**"):
+                        # Display as custom warning box with unified title (emoji added by warning box)
+                        self._render_warning_box("Pomembno opozorilo", description)
                     else:
                         st.caption(description)
                     
@@ -173,19 +180,24 @@ class SectionRenderer:
                 )
         else:
             # No container (for top-level sections)
-            if title and level == 0:
-                st.subheader(title)
-            elif title:
-                st.markdown(f"**{title}**")
+            # Check if this is a warning section
+            is_warning_section = (description and (description.startswith("⚠️ **OPOZORILO:**") or description.startswith("**POZOR:**"))) or (title and "⚠️" in title and description and "POZOR" in description)
+            
+            if not is_warning_section:
+                # Only show title if not a warning section
+                if title and level == 0:
+                    st.subheader(title)
+                elif title:
+                    st.markdown(f"**{title}**")
                 
             if description:
                 # Special handling for very long descriptions (technical specifications)
                 if len(description) > 1000:
                     # Display as info box for better visibility
                     st.info(description)
-                elif description.startswith("⚠️ **OPOZORILO:**"):
-                    # Display as custom warning box
-                    self._render_warning_box("Opozorilo", description)
+                elif description.startswith("⚠️ **OPOZORILO:**") or description.startswith("**POZOR:**"):
+                    # Display as custom warning box with unified title (emoji added by warning box)
+                    self._render_warning_box("Pomembno opozorilo", description)
                 else:
                     st.caption(description)
                 
@@ -299,8 +311,12 @@ class SectionRenderer:
                 st.markdown(f"**{item_title} {index + 1}**")
             
             with col_remove:
-                remove_key = f"remove_{session_key}"
-                if st.button(self.ICONS['delete'], key=remove_key, help="Remove item"):
+                # Use a more unique key format to avoid conflicts
+                remove_key = f"btn_remove_{session_key}"
+                # Remove any existing session state for this button to avoid conflicts
+                if remove_key in st.session_state:
+                    del st.session_state[remove_key]
+                if st.button(self.ICONS['delete'], key=remove_key, help="Odstrani element"):
                     return False  # Signal to remove this item
             
             # Render item properties
@@ -328,17 +344,31 @@ class SectionRenderer:
     
     def _render_add_button(self, array_key: str, items_schema: dict, title: str):
         """Render add button for array."""
-        session_key = self.context.get_field_key(array_key)
-        add_key = f"add_{session_key}"
+        import logging
+        logger = logging.getLogger(__name__)
         
-        if st.button(f"{self.ICONS['add']} Add {title}", key=add_key):
+        session_key = self.context.get_field_key(array_key)
+        # Use a more unique key format to avoid conflicts with session state
+        add_key = f"btn_add_{session_key}"
+        
+        logger.debug(f"[ADD_BUTTON] Rendering for array: {array_key}, session_key: {session_key}, add_key: {add_key}")
+        
+        # Remove any existing session state for this button to avoid conflicts
+        if add_key in st.session_state:
+            del st.session_state[add_key]
+        
+        if st.button(f"{self.ICONS['add']} Dodaj {title}", key=add_key):
+            logger.info(f"[ADD_BUTTON] Clicked for array: {array_key}")
             # Create new empty item
             new_item = self._create_empty_item(items_schema)
+            logger.info(f"[ADD_BUTTON] Created new item: {new_item}")
             
             # Add to array
             current_array = self.context.get_field_value(array_key, [])
+            logger.info(f"[ADD_BUTTON] Current array has {len(current_array)} items")
             current_array.append(new_item)
             self.context.set_field_value(array_key, current_array)
+            logger.info(f"[ADD_BUTTON] Array now has {len(current_array)} items, triggering rerun")
             st.rerun()
     
     def _create_empty_item(self, items_schema: dict) -> dict:

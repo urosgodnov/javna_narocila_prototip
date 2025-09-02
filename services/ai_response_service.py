@@ -67,8 +67,55 @@ class AIResponseService:
         """
         if not self.client:
             return "❌ OpenAI ni konfiguriran. Preverite API ključ."
+    
+    def get_ai_response(self, query: str, field_type: str = None) -> str:
+        """
+        Generate AI response without document context (pure AI generation).
+        Used for form field suggestions.
         
-        if not chunks:
+        Args:
+            query: The request or prompt
+            field_type: Optional field type for context
+            
+        Returns:
+            Generated response text
+        """
+        if not self.client:
+            return "❌ OpenAI ni konfiguriran. Preverite API ključ."
+        
+        # Build appropriate system message
+        system_message = """Ti si AI asistent za javna naročila v Sloveniji. 
+        Pomagaš pri izpolnjevanju obrazcev za javna naročila.
+        Odgovori morajo biti konkretni, praktični in skladni s slovensko zakonodajo.
+        Odgovori v slovenščini."""
+        
+        if field_type == "price_formation":
+            system_message += "\nOsredotoči se na načine oblikovanja cen v javnih naročilih."
+        elif field_type == "cofinancer_requirements":
+            system_message += "\nOsredotoči se na zahteve sofinancerjev in EU skladov."
+        
+        messages = [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": query}
+        ]
+        
+        try:
+            current_model = self._get_current_model()
+            response = self.client.chat.completions.create(
+                model=current_model,
+                messages=messages,
+                max_tokens=500,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"AI generation error: {e}")
+            return f"❌ Napaka pri generiranju odgovora: {str(e)}"
+        
+        # Allow empty chunks for form context mode (pure AI generation)
+        if not chunks and context_mode != "form":
             return "🔍 Ni najdenih relevantnih informacij za odgovor na vaše vprašanje."
         
         # Check if user is asking for summary

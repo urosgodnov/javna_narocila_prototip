@@ -161,6 +161,18 @@ class FieldRenderer:
                 full_key, label, help_text, required, current_value
             )
         elif 'enum' in schema:
+            # Log when we're about to render an enum field
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"[ENUM_FIELD] Rendering enum field: {full_key}")
+            logger.info(f"[ENUM_FIELD] Options: {schema.get('enum', [])}")
+            
+            # Check if this field should use AI renderer for special requirements
+            if 'specialRequirementsOption' in full_key and any('prosim' in str(opt).lower() and 'ai' in str(opt).lower() for opt in schema.get('enum', [])):
+                logger.warning(f"[ENUM_FIELD] ALERT: specialRequirementsOption with AI option detected but not using AI renderer!")
+                logger.warning(f"[ENUM_FIELD] Field key: {full_key}")
+                logger.warning(f"[ENUM_FIELD] This field should be rendered with radio buttons!")
+            
             return self._render_select_box(
                 full_key, label, schema['enum'], help_text, required, current_value
             )
