@@ -104,14 +104,17 @@ def render_lots_info(field_renderer, properties, parent_key=""):
         # Set lot mode based on number of lots
         if len(st.session_state.lot_names) > 1:
             st.session_state.lot_mode = 'multiple'
-        elif len(st.session_state.lot_names) == 1:
-            st.session_state.lot_mode = 'single'
         else:
-            st.session_state.lot_mode = 'none'
+            # UNIFIED LOT ARCHITECTURE: Always at least 'single', never 'none'
+            st.session_state.lot_mode = 'single'
+            # Ensure at least one lot exists
+            if len(st.session_state.lot_names) == 0:
+                st.session_state.lot_names = ['Splošni sklop']
     else:
-        # No lots - clear lot configuration
-        if 'lot_names' in st.session_state:
-            del st.session_state.lot_names
-        if 'lots' in st.session_state:
-            del st.session_state.lots
-        st.session_state.lot_mode = 'none'
+        # UNIFIED LOT ARCHITECTURE: Even with no explicit lots, maintain single lot structure
+        # Don't delete lots - ensure at least one exists
+        if 'lot_names' not in st.session_state or not st.session_state.get('lot_names'):
+            st.session_state.lot_names = ['Splošni sklop']
+        if 'lots' not in st.session_state or not st.session_state.get('lots'):
+            st.session_state.lots = [{'name': 'Splošni sklop', 'index': 0}]
+        st.session_state.lot_mode = 'single'  # NEVER 'none'

@@ -114,9 +114,11 @@ class LotFieldManager:
             Current lot index or None if not in lot mode
         """
         # Check if we're in lot mode
-        lot_mode = st.session_state.get("lot_mode", "none")
-        if lot_mode == "none":
-            return None
+        # UNIFIED LOT ARCHITECTURE: Default to 'single', never 'none'
+        lot_mode = st.session_state.get("lot_mode", "single")
+        if lot_mode == "single" and not st.session_state.get("lotsInfo.hasLots", False):
+            # Single implicit lot mode - return 0 for the default lot
+            return 0
         
         # Check for explicit current lot index
         if "current_lot_index" in st.session_state:

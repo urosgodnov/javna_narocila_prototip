@@ -4,10 +4,14 @@ Handles nested objects, arrays of objects, and conditional rendering.
 Preserves EXACT visual design from current form_renderer.py.
 """
 
+import logging
 import streamlit as st
 from typing import Any, Dict, List, Optional
 from utils.form_helpers import FormContext
 from .field_renderer import FieldRenderer
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 
 class SectionRenderer:
@@ -129,6 +133,12 @@ class SectionRenderer:
         if section_name == 'legalBasis':
             return self._render_legal_basis_section(section_schema, full_key, properties, required_fields)
         
+        # Special handling for zjn3ComplianceWarning - render as warning box
+        if section_name == 'zjn3ComplianceWarning':
+            if description:
+                self._render_warning_box("Opozorilo", description)
+            return {}
+        
         # Create container with border for visual grouping
         use_container = section_schema.get('use_container', level > 0)
         use_expander = section_schema.get('use_expander', False)
@@ -213,10 +223,15 @@ class SectionRenderer:
                              parent_key: str,
                              level: int) -> List[Any]:
         """Render an array section (array of objects)."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         full_key = f"{parent_key}.{section_name}" if parent_key else section_name
         items_schema = section_schema.get('items', {})
         title = section_schema.get('title', section_name)
         description = section_schema.get('description')
+        
+        # logger.info(f"[RENDER_ARRAY_SECTION] Starting for: {full_key}, title: {title}")  # Reduced logging
         
         # Check if this is a simple array (handled by FieldRenderer)
         if items_schema.get('type') != 'object':
@@ -282,7 +297,9 @@ class SectionRenderer:
             st.rerun()
         
         # Add button
+        # logger.info(f"[ARRAY_FIELD] About to render add button for {full_key}")  # Reduced logging
         self._render_add_button(full_key, items_schema, title)
+        # logger.info(f"[ARRAY_FIELD] Finished rendering add button for {full_key}")  # Reduced logging
         
         return self.context.get_field_value(full_key, [])
     
@@ -347,28 +364,42 @@ class SectionRenderer:
         import logging
         logger = logging.getLogger(__name__)
         
+        # Log that we're rendering add button
+        # logger.info(f"[ADD_BUTTON_RENDER] Starting render for array: {array_key}, title: {title}")  # Reduced logging
+        
         session_key = self.context.get_field_key(array_key)
-        # Use a more unique key format to avoid conflicts with session state
-        add_key = f"btn_add_{session_key}"
         
-        logger.debug(f"[ADD_BUTTON] Rendering for array: {array_key}, session_key: {session_key}, add_key: {add_key}")
+        # Create a shorter, more stable key for the button
+        # Use hash to avoid issues with long keys and dots
+        import hashlib
+        key_hash = hashlib.md5(session_key.encode()).hexdigest()[:8]
+        add_key = f"btn_add_{key_hash}"
         
-        # Remove any existing session state for this button to avoid conflicts
+        # logger.info(f"[ADD_BUTTON_RENDER] array_key: {array_key}, session_key: {session_key}, add_key: {add_key}, hash: {key_hash}")  # Reduced logging
+        
+        # Don't delete session state for buttons - Streamlit needs it to track clicks!
+        # Only log if the button exists in session state
         if add_key in st.session_state:
-            del st.session_state[add_key]
+            # logger.info(f"[ADD_BUTTON_RENDER] Button {add_key} exists in session state with value: {st.session_state[add_key]}")  # Reduced logging
+            pass  # Keep the if block valid
+        
+        # Create the button
+        # logger.info(f"[ADD_BUTTON_RENDER] Creating button with key: {add_key}")  # Reduced logging
         
         if st.button(f"{self.ICONS['add']} Dodaj {title}", key=add_key):
-            logger.info(f"[ADD_BUTTON] Clicked for array: {array_key}")
+            # logger.info(f"[ADD_BUTTON_CLICKED] Button clicked for array: {array_key}")  # Reduced logging
             # Create new empty item
             new_item = self._create_empty_item(items_schema)
-            logger.info(f"[ADD_BUTTON] Created new item: {new_item}")
+            # logger.info(f"[ADD_BUTTON_CLICKED] Created new item: {new_item}")  # Reduced logging
             
             # Add to array
             current_array = self.context.get_field_value(array_key, [])
-            logger.info(f"[ADD_BUTTON] Current array has {len(current_array)} items")
+            # logger.info(f"[ADD_BUTTON_CLICKED] Current array has {len(current_array)} items")  # Reduced logging
             current_array.append(new_item)
             self.context.set_field_value(array_key, current_array)
-            logger.info(f"[ADD_BUTTON] Array now has {len(current_array)} items, triggering rerun")
+            # logger.info(f"[ADD_BUTTON_CLICKED] Array now has {len(current_array)} items, triggering rerun")  # Reduced logging
+            
+            # Force rerun
             st.rerun()
     
     def _create_empty_item(self, items_schema: dict) -> dict:
@@ -474,7 +505,16 @@ class SectionRenderer:
                 continue
             
             # Check conditional rendering
-            if not self._should_render(prop_schema, parent_key):
+            should_render = self._should_render(prop_schema, parent_key)
+            if prop_name == "inspectionDates":
+                # logger.info(f"[INSPECTION_DATES_CHECK] Checking render condition for inspectionDates: should_render={should_render}")  # Reduced logging
+                if 'render_if' in prop_schema:
+                    # logger.info(f"[INSPECTION_DATES_CHECK] render_if condition: {prop_schema['render_if']}")  # Reduced logging
+                    pass  # Keep the if block valid
+            if not should_render:
+                if prop_name == "inspectionDates":
+                    # logger.info(f"[INSPECTION_DATES_CHECK] Skipping inspectionDates due to render condition")  # Reduced logging
+                    pass  # Keep the if block valid
                 continue
             
             prop_type = prop_schema.get('type')
@@ -562,13 +602,16 @@ class SectionRenderer:
     
     def _check_condition(self, condition: dict, parent_key: str = "") -> bool:
         """Check a single render condition."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         field = condition.get('field')
         field_parent = condition.get('field_parent')
         
-        # Debug logging for justification field
-        if field and 'justification' in str(parent_key):
-            import logging
-            logging.info(f"[RENDER_CONDITION] Checking condition for justification: field={field}, condition={condition}")
+        # Debug logging for inspection fields
+        if field and 'inspection' in field.lower():
+            # logger.info(f"[RENDER_CONDITION_INSPECTION] Checking condition: field={field}, condition={condition}, parent_key={parent_key}")  # Reduced logging
+            pass  # Keep the if block valid
         
         # Handle field_parent conditions (used in nested objects like orderType)
         if field_parent:
@@ -590,7 +633,7 @@ class SectionRenderer:
         if field and ('justification' in str(parent_key) or 'procedure' in field):
             import logging
             lot_key = self.context.get_field_key(field)
-            logging.info(f"[RENDER_CONDITION] Field {field}: actual_value='{actual_value}', lot_scoped_key={lot_key}")
+            # logging.info(f"[RENDER_CONDITION] Field {field}: actual_value='{actual_value}', lot_scoped_key={lot_key}")  # Reduced logging
         
         # If value is None and we're checking orderType.type, use the default
         if actual_value is None and field.endswith('.type') and 'orderType' in field:
@@ -608,7 +651,7 @@ class SectionRenderer:
             # Debug logging for justification field
             if field and 'justification' in str(parent_key):
                 import logging
-                logging.info(f"[RENDER_CONDITION] not_in check: actual_value='{actual_value}', not_in={condition['not_in']}, result={result}")
+                # logging.info(f"[RENDER_CONDITION] not_in check: actual_value='{actual_value}', not_in={condition['not_in']}, result={result}")  # Reduced logging
             return result
         elif 'in' in condition:
             return actual_value in condition['in']

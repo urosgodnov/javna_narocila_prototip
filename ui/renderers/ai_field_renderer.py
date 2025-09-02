@@ -17,10 +17,18 @@ class AIFieldRenderer:
     Supports dropdowns, checkboxes, and buttons as triggers.
     """
     
+    # Class-level cache for AI service to avoid recreation
+    _cached_ai_service = None
+    
     def __init__(self, context=None):
         """Initialize with form context."""
         self.context = context
-        self.ai_service = AIFieldSuggestionService()
+        
+        # Use cached AI service to avoid expensive recreation
+        if AIFieldRenderer._cached_ai_service is None:
+            AIFieldRenderer._cached_ai_service = AIFieldSuggestionService()
+        self.ai_service = AIFieldRenderer._cached_ai_service
+        
         self._init_session_state()
     
     def _init_session_state(self):
@@ -53,9 +61,19 @@ class AIFieldRenderer:
         has_ai_option = schema.get('ai_enabled', False)
         field_title = schema.get('title', full_key.split('.')[-1])
         
+        # FORCE specialNegotiationWishes
+        if 'specialNegotiationWishes' in full_key:
+            logger.warning(f"[AI_FIELD_RENDERER_FORCE] DETECTED specialNegotiationWishes: {full_key}")
+            logger.warning(f"[AI_FIELD_RENDERER_FORCE] Original has_ai: {has_ai_option}, forcing to True")
+            has_ai_option = True
+            schema['ai_enabled'] = True
+        
+        logger.info(f"[AI_FIELD_RENDERER] Processing field: {full_key}, type: {field_type}, has_ai: {has_ai_option}")
+        
         # Check if this field should have AI based on its path
         if not has_ai_option:
             has_ai_option = self._should_have_ai(full_key, schema)
+            logger.info(f"[AI_FIELD_RENDERER] After _should_have_ai check: {full_key} -> has_ai={has_ai_option}")
         
         # Determine AI trigger type and render accordingly
         if field_type == 'string' and 'enum' in schema:
@@ -89,6 +107,7 @@ class AIFieldRenderer:
             'special_requests',
             'negotiation',
             'pogajanja',
+            'specialNegotiationWishes',  # Special negotiation wishes field
             'professionalOption',  # New professional field
             'economicOption',  # New economic field
             'technicalOption',  # New technical field
@@ -100,6 +119,7 @@ class AIFieldRenderer:
         
         # Check if field matches any AI-enabled pattern
         field_lower = full_key.lower()
+        logger.debug(f"[AI_FIELD_RENDERER] Checking field: {full_key}, lowercase: {field_lower}")
         
         # IMPORTANT: Exclude specialRequirements without Option suffix
         if 'specialrequirements' in field_lower and 'option' not in field_lower:
@@ -107,6 +127,7 @@ class AIFieldRenderer:
         
         for pattern in ai_enabled_patterns:
             if pattern.lower() in field_lower:
+                logger.info(f"[AI_FIELD_RENDERER] Field {full_key} matches AI pattern: {pattern}")
                 return True
         
         # Check schema for AI hints
@@ -151,13 +172,16 @@ class AIFieldRenderer:
                         text = text.split(':', 1)[1].strip()
                 # Remove surrounding quotes if present
                 text = text.strip('"').strip("'")
+                # Check if it's a "no suggestion" response
+                if text == "Ne vem oz. nimam predloga" or text.startswith("Ne vem"):
+                    return "Ne vem oz. nimam predloga"
                 return text
             
-            return "Ni bilo mogoče generirati predloga. Prosimo, vnesite ročno."
+            return "Ne vem oz. nimam predloga"
             
         except Exception as e:
             logger.error(f"Error generating AI suggestion: {e}")
-            return "Napaka pri generiranju predloga. Prosimo, vnesite ročno."
+            return "Ne vem oz. nimam predloga"
     
     def _render_radio_with_text_fields(
         self, 
@@ -174,7 +198,7 @@ class AIFieldRenderer:
         """
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"[RADIO_RENDER] Processing field: {full_key}")
+        # logger.info(f"[RADIO_RENDER] Processing field: {full_key}")  # Reduced logging
         options = list(schema['enum'])
         
         # Don't add AI option if it's already in the enum
@@ -209,7 +233,7 @@ class AIFieldRenderer:
         
         # Create radio button selection
         selected = st.radio(
-            "",
+            "Izbira možnosti",  # Provide non-empty label for accessibility
             options=options,
             index=options.index(selected_value) if selected_value in options else 0,
             key=f"{full_key}_radio",
@@ -223,7 +247,7 @@ class AIFieldRenderer:
         if 'priceFixation' in full_key:
             import logging
             logger = logging.getLogger(__name__)
-            logger.info(f"[PRICE_FIXATION] Field: {full_key}, Selected: '{selected}'")
+            # logger.info(f"[PRICE_FIXATION] Field: {full_key}, Selected: '{selected}'")  # Reduced logging
         
         # Determine if text area should be shown
         # For specialRequirements - ALWAYS show text area
@@ -237,7 +261,7 @@ class AIFieldRenderer:
                 selected == "prosim za predlog AI" or
                 'ai' in selected.lower()
             )
-            logger.info(f"[PRICE_FIXATION] needs_text_input: {needs_text_input}")
+            # logger.info(f"[PRICE_FIXATION] needs_text_input: {needs_text_input}")  # Reduced logging
         else:
             # For other fields - conditional based on content
             needs_text_input = ('drugo' in selected.lower() or 'ai' in selected.lower())
@@ -256,6 +280,7 @@ class AIFieldRenderer:
                     textarea_key = f"{full_key}_textarea"
                     if cache_key not in st.session_state:
                         with st.spinner("Generiram AI predlog..."):
+                            logger.info(f"[AI_FIELD_RENDERER] User selected AI option for field: {full_key}")
                             suggestion = self._generate_ai_suggestion_direct(full_key, schema)
                             st.session_state[cache_key] = suggestion
                             text_field_value = suggestion
@@ -295,7 +320,18 @@ class AIFieldRenderer:
                     # Initialize the text area key in session state if needed
                     textarea_key = f"{full_key}_textarea"
                     if textarea_key not in st.session_state:
-                        st.session_state[textarea_key] = text_field_value
+                        # For price fixation, load from the appropriate field
+                        if 'priceFixation' in full_key:
+                            if selected == "drugo":
+                                other_key = full_key.replace('priceFixation', 'otherPriceFixation')
+                                st.session_state[textarea_key] = st.session_state.get(other_key, text_field_value)
+                            elif selected == "prosim za predlog AI" or (ai_option and selected == ai_option):
+                                ai_custom_key = full_key.replace('priceFixation', 'aiPriceFixationCustom')
+                                st.session_state[textarea_key] = st.session_state.get(ai_custom_key, text_field_value)
+                            else:
+                                st.session_state[textarea_key] = text_field_value
+                        else:
+                            st.session_state[textarea_key] = text_field_value
                     
                     # Always show text area with appropriate label
                     # Don't use 'value' parameter when using session state key
@@ -317,14 +353,22 @@ class AIFieldRenderer:
                     
                     # For price fixation, update both fields that validation checks
                     if 'priceFixation' in full_key:
-                        # For "drugo" option
-                        other_key = full_key.replace('priceFixation', 'otherPriceFixation')
-                        st.session_state[other_key] = text_value
-                        
-                        # For "prosim za predlog AI" option - validation checks this field
-                        if selected == "prosim za predlog AI" or (ai_option and selected == ai_option):
+                        # Always update based on selected option
+                        if selected == "drugo":
+                            # For "drugo" option, save to otherPriceFixation
+                            other_key = full_key.replace('priceFixation', 'otherPriceFixation')
+                            st.session_state[other_key] = text_value
+                            # Clear the AI field
+                            ai_custom_key = full_key.replace('priceFixation', 'aiPriceFixationCustom')
+                            if ai_custom_key in st.session_state:
+                                st.session_state[ai_custom_key] = ""
+                        elif selected == "prosim za predlog AI" or (ai_option and selected == ai_option):
+                            # For AI option, save to aiPriceFixationCustom
                             ai_custom_key = full_key.replace('priceFixation', 'aiPriceFixationCustom')
                             st.session_state[ai_custom_key] = text_value
+                            # Also save to otherPriceFixation for compatibility
+                            other_key = full_key.replace('priceFixation', 'otherPriceFixation')
+                            st.session_state[other_key] = text_value
                 
                 with col2:
                     # Add regenerate button only when AI option is selected
@@ -443,7 +487,10 @@ class AIFieldRenderer:
         has_ai_option: bool
     ) -> str:
         """Render text area with radio button AI trigger."""
-        # TODO(human): Convert checkbox to radio pattern
+        
+        # LOGGING FOR specialNegotiationWishes
+        if 'specialNegotiationWishes' in full_key:
+            logger.warning(f"[TEXTAREA_AI] Rendering specialNegotiationWishes with AI: {has_ai_option}")
         
         # Display the field title
         st.markdown(f"**{field_title}**")
@@ -463,7 +510,7 @@ class AIFieldRenderer:
             
             # Create radio button selection
             selected = st.radio(
-                "",
+                "Način vnosa",  # Provide non-empty label for accessibility
                 options=options,
                 index=options.index(st.session_state[ai_selected_key]),
                 key=f"{full_key}_radio",
@@ -474,25 +521,38 @@ class AIFieldRenderer:
             # If AI option selected, generate suggestion
             if selected == "Prosim za pomoč AI":
                 cache_key = f"{full_key}_ai_generated"
+                textarea_key = f"{full_key}_textarea"
+                
                 if cache_key not in st.session_state:
                     with st.spinner("Generiram AI predlog..."):
                         suggestion = self._generate_ai_suggestion_direct(full_key, schema)
                         st.session_state[cache_key] = suggestion
                         value = suggestion
+                        # CRITICAL: Update textarea session state IMMEDIATELY
+                        st.session_state[textarea_key] = suggestion
+                        # Force rerun to update the textarea
+                        st.rerun()
                 else:
                     value = st.session_state.get(cache_key, value)
+                    # CRITICAL: Make sure textarea has the AI value
+                    st.session_state[textarea_key] = value
             
             # Layout with text area and regenerate button
             col1, col2 = st.columns([5, 1])
             
             with col1:
                 # Render text area
+                # Use a unique key for the text area widget
+                textarea_key = f"{full_key}_textarea"
+                
+                # Initialize ONLY if not exists (to avoid warning)
+                if textarea_key not in st.session_state:
+                    st.session_state[textarea_key] = value
+                
                 value = st.text_area(
-                    "",
-                    value=value,
-                    key=f"{full_key}_textarea",
+                    "Vsebina",  # Provide non-empty label for accessibility
+                    key=textarea_key,  # Use ONLY key, not value parameter
                     height=schema.get('height', 150),
-                    help=schema.get('description', ''),
                     placeholder=schema.get('placeholder', 'Vnesite besedilo...'),
                     label_visibility="collapsed"
                 )
@@ -634,7 +694,12 @@ class AIFieldRenderer:
         suggestions = suggestions_data.get('suggestions', [])
         
         if not suggestions:
-            st.warning("Ni najdenih predlogov. Prosimo, vnesite ročno.")
+            st.warning("Ne vem oz. nimam predloga")
+            return
+        
+        # Check if the only suggestion is "no suggestion"
+        if len(suggestions) == 1 and suggestions[0].get('text') == "Ne vem oz. nimam predloga":
+            st.warning("Ne vem oz. nimam predloga")
             return
         
         for idx, suggestion in enumerate(suggestions):
@@ -647,7 +712,11 @@ class AIFieldRenderer:
                 st.markdown(f"**Predlog {idx+1} ({source_label}):**")
                 
                 # Show suggestion text
-                st.info(suggestion['text'])
+                # Special handling for "no suggestion" message
+                if suggestion['text'] == "Ne vem oz. nimam predloga":
+                    st.warning(suggestion['text'])
+                else:
+                    st.info(suggestion['text'])
                 
                 # Show confidence if available
                 if 'confidence' in suggestion and suggestion['confidence'] > 0:
@@ -657,7 +726,8 @@ class AIFieldRenderer:
                 col1, col2, col3 = st.columns([1, 1, 3])
                 
                 with col1:
-                    if st.button(f"Uporabi", key=f"use_{full_key}_{idx}"):
+                    # Don't show "Use" button for "no suggestion" message
+                    if suggestion['text'] != "Ne vem oz. nimam predloga" and st.button(f"Uporabi", key=f"use_{full_key}_{idx}"):
                         # Transfer to field
                         st.session_state.ai_suggestions[full_key] = suggestion['text']
                         
@@ -724,8 +794,10 @@ class AIFieldRenderer:
         key_lower = full_key.lower()
         
         if 'cofinancer' in key_lower or 'sofinancer' in key_lower:
+            logger.debug(f"[AI_FIELD_RENDERER] Field {full_key} identified as cofinancer_requirements")
             return 'cofinancer_requirements'
-        elif 'negotiation' in key_lower or 'pogajanja' in key_lower:
+        elif 'negotiation' in key_lower or 'pogajanja' in key_lower or 'specialnegotiationwishes' in key_lower:
+            logger.debug(f"[AI_FIELD_RENDERER] Field {full_key} identified as negotiation_terms")
             return 'negotiation_terms'
         elif 'price' in key_lower or 'cen' in key_lower:
             return 'price_formation'

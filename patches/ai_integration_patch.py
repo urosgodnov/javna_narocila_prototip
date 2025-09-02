@@ -29,22 +29,15 @@ def apply_ai_integration():
         
         # Check if we're in a form rendering context
         if 'current_step' in st.session_state:
-            current_step = st.session_state.get('current_step', 0)
-            
-            # Log integration
-            logger.info(f"Applying AI integration to step {current_step}")
-            
-            # Initialize AI helper in session state if not present
+            # Initialize AI helper in session state ONLY if not present
+            # This prevents re-initialization on every render
             if 'ai_integration_helper' not in st.session_state:
+                current_step = st.session_state.get('current_step', 0)
+                logger.info(f"Initializing AI integration helper at step {current_step}")
                 st.session_state.ai_integration_helper = AIIntegrationHelper()
             
-            # Add AI status indicator
-            if st.sidebar:
-                with st.sidebar:
-                    st.markdown("---")
-                    st.markdown("**AI Asistent**")
-                    st.success("AI predlogi so na voljo")
-                    st.caption("Poiščite polja z AI opcijami")
+            # Sidebar AI assistant removed - using inline radio buttons instead
+            # This improves performance and provides better UX
         
         return True
         
@@ -72,12 +65,15 @@ def inject_ai_into_renderer(renderer_instance):
         # Check if it's a FieldRenderer or SectionRenderer
         if hasattr(renderer_instance, 'field_renderer'):
             # It's a SectionRenderer
+            logger.info(f"[AI_INJECTION] Injecting AI into SectionRenderer: {renderer_instance}")
             AIIntegrationHelper.inject_ai_into_section_renderer(renderer_instance)
+            logger.info("[AI_INJECTION] Successfully injected AI into SectionRenderer")
         else:
             # It's a FieldRenderer
+            logger.info(f"[AI_INJECTION] Injecting AI into FieldRenderer: {renderer_instance}")
             AIIntegrationHelper.inject_ai_into_field_renderer(renderer_instance)
+            logger.info("[AI_INJECTION] Successfully injected AI into FieldRenderer")
         
-        logger.info("AI successfully injected into renderer")
         return renderer_instance
         
     except Exception as e:

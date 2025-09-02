@@ -81,18 +81,30 @@ class AIResponseService:
             Generated response text
         """
         if not self.client:
+            logger.error("[AI_RESPONSE] OpenAI client not configured")
             return "❌ OpenAI ni konfiguriran. Preverite API ključ."
+        
+        logger.info(f"[AI_RESPONSE] Getting AI response for field_type: {field_type}")
+        logger.debug(f"[AI_RESPONSE] Query (first 500 chars): {query[:500]}...")
         
         # Build appropriate system message
         system_message = """Ti si AI asistent za javna naročila v Sloveniji. 
         Pomagaš pri izpolnjevanju obrazcev za javna naročila.
         Odgovori morajo biti konkretni, praktični in skladni s slovensko zakonodajo.
+        
+        Pravila za odgovarjanje:
+        1. Če imaš dovolj informacij, podaj konkreten in uporaben predlog
+        2. Če je kontekst omejen, lahko podaš splošen predlog z opombo za prilagoditev
+        3. SAMO če vprašanje je popolnoma nejasno ali nima smisla, odgovori "Ne vem oz. nimam predloga"
+        
         Odgovori v slovenščini."""
         
         if field_type == "price_formation":
-            system_message += "\nOsredotoči se na načine oblikovanja cen v javnih naročilih."
+            system_message += "\nOsredotoči se na načine oblikovanja cen v javnih naročilih (fiksne cene, valorizacija, indeksi, ipd.)."
         elif field_type == "cofinancer_requirements":
-            system_message += "\nOsredotoči se na zahteve sofinancerjev in EU skladov."
+            system_message += "\nOsredotoči se na zahteve sofinancerjev in EU skladov (poročanje, označevanje, revizijska sled, ipd.)."
+        elif field_type == "negotiation_terms":
+            system_message += "\nOsredotoči se na pogajanja v javnih naročilih (število krogov, vsebina pogajanj, način izvedbe, ipd.)."
         
         messages = [
             {"role": "system", "content": system_message},
@@ -101,6 +113,10 @@ class AIResponseService:
         
         try:
             current_model = self._get_current_model()
+            logger.info(f"[AI_RESPONSE] Using model: {current_model}")
+            logger.debug(f"[AI_RESPONSE] System message: {system_message[:200]}...")
+            logger.debug(f"[AI_RESPONSE] User query: {query[:200]}...")
+            
             response = self.client.chat.completions.create(
                 model=current_model,
                 messages=messages,
@@ -108,10 +124,14 @@ class AIResponseService:
                 temperature=0.7
             )
             
-            return response.choices[0].message.content
+            result = response.choices[0].message.content
+            logger.info(f"[AI_RESPONSE] Received response: {result[:200] if result else 'None'}...")
+            return result
             
         except Exception as e:
-            logger.error(f"AI generation error: {e}")
+            logger.error(f"[AI_RESPONSE] AI generation error: {e}")
+            import traceback
+            logger.debug(f"[AI_RESPONSE] Traceback: {traceback.format_exc()}")
             return f"❌ Napaka pri generiranju odgovora: {str(e)}"
         
         # Allow empty chunks for form context mode (pure AI generation)

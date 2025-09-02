@@ -72,7 +72,8 @@ def get_dynamic_form_steps(session_state):
     
     # Check lot mode from lotsInfo checkbox
     has_lots = session_state.get("lotsInfo.hasLots", False)
-    lot_mode = session_state.get("lot_mode", "none")  # 'none', 'single', 'multiple'
+    # UNIFIED LOT ARCHITECTURE: Default to 'single' instead of 'none'
+    lot_mode = session_state.get("lot_mode", "single")  # 'single', 'multiple'
     
     # Also check if lot fields exist in session state (for cases where hasLots might be incorrect)
     # This happens when editing forms that have lot data but hasLots is False
@@ -124,14 +125,17 @@ def get_dynamic_form_steps(session_state):
             lot_mode = "single"
         else:
             # User wants lots but hasn't configured them yet
-            lot_mode = "none"  # Will change after configuration
+            # UNIFIED LOT ARCHITECTURE: Use 'single' as default
+            lot_mode = "single"  # Will change after configuration
         session_state["lot_mode"] = lot_mode
     else:
         # No lots - proceed with general procurement
-        lot_mode = "none"
+        # UNIFIED LOT ARCHITECTURE: Always use 'single' for forms without explicit lots
+        lot_mode = "single"
         session_state["lot_mode"] = lot_mode
     
-    if lot_mode == "none":
+    # UNIFIED LOT ARCHITECTURE: Treat 'single' as the base case (was 'none')
+    if lot_mode == "single" and not has_lots:
         # No lots - add procurement steps once for general
         steps.extend(LOT_SPECIFIC_STEPS)
         # Add final steps (contractInfo and otherInfo)
@@ -271,7 +275,8 @@ def get_lot_navigation_buttons(session_state):
     import logging
     
     buttons = []
-    lot_mode = session_state.get("lot_mode", "none")
+    # UNIFIED LOT ARCHITECTURE: Default to 'single' instead of 'none'
+    lot_mode = session_state.get("lot_mode", "single")
     
     if lot_mode != "multiple":
         # Standard navigation for non-lot or single lot

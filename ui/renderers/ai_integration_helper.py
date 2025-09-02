@@ -72,9 +72,19 @@ class AIIntegrationHelper:
         },
         
         # Price information fields
+        'priceInfo.priceClause': {
+            'type': 'price_formation',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
+        'priceInfo.otherPriceClause': {
+            'type': 'price_formation',
+            'trigger': 'text',
+            'priority': 'high'
+        },
         'priceInfo.priceFixation': {
             'type': 'price_formation',
-            'trigger': 'radio',  # Changed to radio for conditional text area
+            'trigger': 'radio',  # Has "prosim za predlog AI" option
             'priority': 'high'
         },
         'priceInfo.otherPriceFixation': {
@@ -83,6 +93,82 @@ class AIIntegrationHelper:
             'priority': 'high'
         },
         'priceInfo.aiPriceFixationCustom': {
+            'type': 'price_formation',
+            'trigger': 'button',
+            'priority': 'high'
+        },
+        # Add lot-aware versions of priceInfo fields
+        'lots.priceInfo.priceClause': {
+            'type': 'price_formation',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
+        'lots.priceInfo.otherPriceClause': {
+            'type': 'price_formation',
+            'trigger': 'text',
+            'priority': 'high'
+        },
+        'lots.priceInfo.priceFixation': {
+            'type': 'price_formation',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'lots.priceInfo.otherPriceFixation': {
+            'type': 'price_formation',
+            'trigger': 'button',
+            'priority': 'high'
+        },
+        'lots.priceInfo.aiPriceFixationCustom': {
+            'type': 'price_formation',
+            'trigger': 'button',
+            'priority': 'high'
+        },
+        'lot_0.priceInfo.priceClause': {
+            'type': 'price_formation',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
+        'lot_0.priceInfo.otherPriceClause': {
+            'type': 'price_formation',
+            'trigger': 'text',
+            'priority': 'high'
+        },
+        'lot_0.priceInfo.priceFixation': {
+            'type': 'price_formation',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'lot_0.priceInfo.otherPriceFixation': {
+            'type': 'price_formation',
+            'trigger': 'button',
+            'priority': 'high'
+        },
+        'lot_0.priceInfo.aiPriceFixationCustom': {
+            'type': 'price_formation',
+            'trigger': 'button',
+            'priority': 'high'
+        },
+        'lots.0.priceInfo.priceClause': {
+            'type': 'price_formation',
+            'trigger': 'dropdown',
+            'priority': 'medium'
+        },
+        'lots.0.priceInfo.otherPriceClause': {
+            'type': 'price_formation',
+            'trigger': 'text',
+            'priority': 'high'
+        },
+        'lots.0.priceInfo.priceFixation': {
+            'type': 'price_formation',
+            'trigger': 'radio',
+            'priority': 'high'
+        },
+        'lots.0.priceInfo.otherPriceFixation': {
+            'type': 'price_formation',
+            'trigger': 'button',
+            'priority': 'high'
+        },
+        'lots.0.priceInfo.aiPriceFixationCustom': {
             'type': 'price_formation',
             'trigger': 'button',
             'priority': 'high'
@@ -97,6 +183,54 @@ class AIIntegrationHelper:
         'pogajanja.posebne_zelje': {
             'type': 'negotiation_terms',
             'trigger': 'checkbox',
+            'priority': 'high'
+        },
+        'negotiationsInfo.specialNegotiationWishes': {
+            'type': 'negotiation_terms',
+            'trigger': 'radio',
+            'priority': 'high',
+            'prompt_key': 'pogajanja_posebne_zelje_pogajanja'
+        },
+        # Add ACTUAL negotiations fields from schema
+        'negotiationsInfo.otherNegotiationSubject': {
+            'type': 'negotiation_terms',
+            'trigger': 'text',
+            'priority': 'high'
+        },
+        # Add lot-prefixed versions of REAL negotiations fields
+        'lots.negotiationsInfo.specialNegotiationWishes': {
+            'type': 'negotiation_terms',
+            'trigger': 'radio',
+            'priority': 'high',
+            'prompt_key': 'pogajanja_posebne_zelje_pogajanja'
+        },
+        'lots.negotiationsInfo.otherNegotiationSubject': {
+            'type': 'negotiation_terms',
+            'trigger': 'text',
+            'priority': 'high'
+        },
+        # Add lot-indexed versions (lot_0, lot_1, etc) for unified architecture
+        'lot_0.negotiationsInfo.specialNegotiationWishes': {
+            'type': 'negotiation_terms',
+            'trigger': 'radio',
+            'priority': 'high',
+            'prompt_key': 'pogajanja_posebne_zelje_pogajanja'
+        },
+        'lot_0.negotiationsInfo.otherNegotiationSubject': {
+            'type': 'negotiation_terms',
+            'trigger': 'text',
+            'priority': 'high'
+        },
+        # Also add pattern for lots.0 format
+        'lots.0.negotiationsInfo.specialNegotiationWishes': {
+            'type': 'negotiation_terms',
+            'trigger': 'radio',
+            'priority': 'high',
+            'prompt_key': 'pogajanja_posebne_zelje_pogajanja'
+        },
+        'lots.0.negotiationsInfo.otherNegotiationSubject': {
+            'type': 'negotiation_terms',
+            'trigger': 'text',
             'priority': 'high'
         },
         
@@ -150,10 +284,17 @@ class AIIntegrationHelper:
         }
     }
     
+    # Class-level cache for AI renderer
+    _cached_ai_renderer = None
+    
     def __init__(self, context=None):
         """Initialize with form context."""
         self.context = context
-        self.ai_renderer = AIFieldRenderer(context)
+        
+        # Use cached AI renderer to avoid recreation
+        if AIIntegrationHelper._cached_ai_renderer is None or AIIntegrationHelper._cached_ai_renderer.context != context:
+            AIIntegrationHelper._cached_ai_renderer = AIFieldRenderer(context)
+        self.ai_renderer = AIIntegrationHelper._cached_ai_renderer
     
     def should_use_ai_renderer(self, field_key: str, schema: dict) -> bool:
         """
@@ -166,12 +307,45 @@ class AIIntegrationHelper:
         Returns:
             True if field should use AI renderer
         """
+        # Add logging for all fields being checked
+        logger.debug(f"[AI_FIELD_CHECK] Checking field: {field_key}")
+        
+        # EXPLICIT EXCLUSION for participationAndExclusion detail fields
+        # These fields should NEVER have AI buttons
+        excluded_fields = [
+            'professionalMisconductDetails',
+            'contractDeficienciesDetails', 
+            'comparableSanctionsDetails'
+        ]
+        for excluded in excluded_fields:
+            if excluded in field_key:
+                logger.info(f"[AI_FIELD_EXCLUDE] Explicitly excluding field from AI: {field_key}")
+                return False
+        
+        # EXPLICIT CHECK FOR specialNegotiationWishes - FORCE AI
+        if 'specialNegotiationWishes' in field_key:
+            logger.warning(f"[NEGOTIATIONS_DEBUG] Found specialNegotiationWishes: {field_key}")
+            logger.warning(f"[NEGOTIATIONS_DEBUG] Schema ai_enabled: {schema.get('ai_enabled', False)}")
+            logger.warning(f"[NEGOTIATIONS_DEBUG] FORCING AI FOR THIS FIELD")
+            return True  # FORCE AI for this field
+        
+        # First check if schema explicitly enables AI
+        if schema.get('ai_enabled', False):
+            logger.info(f"[AI_FIELD_MATCH] Field has ai_enabled=true in schema: {field_key}")
+            return True
+        
+        # Debug logging for specific fields (only for text fields that should have AI)
+        if ('negotiation' in field_key.lower() or 'pogajanja' in field_key.lower()) and schema.get('type') == 'string':
+            logger.debug(f"[AI_FIELD_CHECK] NEGOTIATIONS field detected: {field_key}")
+            logger.debug(f"[AI_FIELD_CHECK] Schema type: {schema.get('type')}, format: {schema.get('format')}, ai_enabled: {schema.get('ai_enabled', False)}")
+        
         # Debug logging for cofinancer fields
         if 'cofinancer' in field_key.lower() or 'specialrequirements' in field_key.lower():
-            logger.info(f"[AI_FIELD_CHECK] Checking field: {field_key}")
-            logger.info(f"[AI_FIELD_CHECK] Schema type: {schema.get('type')}, Has enum: {'enum' in schema}")
+            # logger.info(f"[AI_FIELD_CHECK] Checking field: {field_key}")  # Reduced logging
+            # logger.info(f"[AI_FIELD_CHECK] Schema type: {schema.get('type')}, Has enum: {'enum' in schema}")  # Reduced logging
             if 'enum' in schema:
-                logger.info(f"[AI_FIELD_CHECK] Enum options: {schema['enum']}")
+                # logger.info(f"[AI_FIELD_CHECK] Enum options: {schema['enum']}")  # Reduced logging
+                pass  # Keep the if block valid
         
         # Check if field is in our AI-enabled list (exact match)
         if field_key in self.AI_ENABLED_FIELDS:
@@ -186,7 +360,7 @@ class AIIntegrationHelper:
         normalized_key = re.sub(r'\.\d+\.', '.', normalized_key)
         
         if normalized_key in self.AI_ENABLED_FIELDS:
-            logger.info(f"[AI_FIELD_MATCH] Normalized match for field: {field_key} -> {normalized_key}")
+            # logger.info(f"[AI_FIELD_MATCH] Normalized match for field: {field_key} -> {normalized_key}")  # Reduced logging
             return True
         
         # Also check for patterns where array index might be at different position
@@ -209,7 +383,7 @@ class AIIntegrationHelper:
         
         # IMPORTANT: Exclude specialRequirements without Option suffix
         if 'specialrequirements' in key_lower and 'option' not in key_lower:
-            logger.info(f"[AI_FIELD_EXCLUDE] Excluding specialRequirements field (no Option suffix): {field_key}")
+            # logger.info(f"[AI_FIELD_EXCLUDE] Excluding specialRequirements field (no Option suffix): {field_key}")  # Reduced logging
             return False
         
         ai_patterns = [
@@ -238,12 +412,17 @@ class AIIntegrationHelper:
         if 'enum' in schema:
             for option in schema['enum']:
                 if 'prosim' in str(option).lower() and 'ai' in str(option).lower():
-                    logger.info(f"[AI_FIELD_MATCH] Enum option match for field: {field_key} - found AI option")
+                    # logger.info(f"[AI_FIELD_MATCH] Enum option match for field: {field_key} - found AI option")  # Reduced logging
                     return True
         
         # Final logging if no match
         if 'specialrequirements' in field_key.lower():
-            logger.info(f"[AI_FIELD_NO_MATCH] No AI match for field: {field_key}")
+            # logger.info(f"[AI_FIELD_NO_MATCH] No AI match for field: {field_key}")  # Reduced logging
+            pass  # Keep the if block valid
+        
+        # Log when field doesn't get AI (only for actual text fields, not checkboxes)
+        if ('negotiation' in field_key.lower() or 'pogajanja' in field_key.lower()) and 'specialnegotiationwishes' in field_key.lower():
+            logger.warning(f"[AI_FIELD_NO_MATCH] Negotiations text field NOT getting AI: {field_key}")
         
         return False
     
@@ -315,7 +494,9 @@ class AIIntegrationHelper:
             The field value
         """
         # Check if this field should have AI
+        logger.info(f"[AI_INTEGRATION] Checking field for AI: {field_key}")
         if self.should_use_ai_renderer(field_key, schema):
+            logger.info(f"[AI_INTEGRATION] Field {field_key} will use AI renderer")
             # Get AI configuration
             ai_config = self.get_ai_config(field_key)
             
@@ -387,6 +568,11 @@ class AIIntegrationHelper:
             """Enhanced field renderer with AI support."""
             full_key = f"{parent_key}.{prop_name}" if parent_key else prop_name
             
+            # Log ALL fields being rendered, especially negotiations
+            if 'negotiation' in full_key.lower() or 'pogajanja' in full_key.lower() or 'specialnegotiationwishes' in full_key.lower():
+                logger.info(f"[ENHANCED_RENDER_SECTION] Processing negotiations field: {full_key}")
+                logger.info(f"[ENHANCED_RENDER_SECTION] Schema type: {prop_schema.get('type')}, ai_enabled: {prop_schema.get('ai_enabled', False)}")
+            
             # Check if this field should use AI
             if ai_helper.should_use_ai_renderer(full_key, prop_schema):
                 # Get current value
@@ -414,7 +600,8 @@ class AIIntegrationHelper:
         # Replace the render method
         section_renderer_instance.field_renderer.render_field = enhanced_render_field
         
-        logger.info("AI integration injected into section renderer")
+        logger.info("[AI_INJECTION] AI integration successfully injected into section renderer")
+        logger.info(f"[AI_INJECTION] Enhanced render method installed: {enhanced_render_field}")
         
         return section_renderer_instance
     
@@ -436,6 +623,16 @@ class AIIntegrationHelper:
         def enhanced_render_field(prop_name, prop_schema, parent_key, required=False):
             """Enhanced field renderer with AI support."""
             full_key = f"{parent_key}.{prop_name}" if parent_key else prop_name
+            
+            # Log ALL fields being rendered, especially negotiations
+            if 'negotiation' in full_key.lower() or 'pogajanja' in full_key.lower() or 'specialnegotiationwishes' in full_key.lower():
+                logger.warning(f"[ENHANCED_RENDER_FIELD] Processing negotiations field: {full_key}")
+                logger.warning(f"[ENHANCED_RENDER_FIELD] Schema type: {prop_schema.get('type')}, ai_enabled: {prop_schema.get('ai_enabled', False)}")
+                
+                # FORCE AI FOR specialNegotiationWishes
+                if 'specialNegotiationWishes' in full_key:
+                    logger.warning(f"[ENHANCED_RENDER_FIELD] FORCING AI FOR specialNegotiationWishes")
+                    prop_schema['ai_enabled'] = True  # Force it!
             
             # Check if this field should use AI
             if ai_helper.should_use_ai_renderer(full_key, prop_schema):
@@ -462,6 +659,6 @@ class AIIntegrationHelper:
         # Replace the render method
         field_renderer_instance.render_field = enhanced_render_field
         
-        logger.info("AI integration injected into field renderer")
+        # logger.info("AI integration injected into field renderer")  # Reduced logging
         
         return field_renderer_instance

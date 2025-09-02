@@ -214,7 +214,8 @@ def get_form_data_from_session():
                             logging.info(f"[ESTIMATED_VALUE] Setting in form_data: {'.'.join(field_parts)} = {value}")
     
     # Handle lot-specific data
-    lot_mode = st.session_state.get('lot_mode', 'none')
+    # UNIFIED LOT ARCHITECTURE: Default to 'single', never 'none'
+    lot_mode = st.session_state.get('lot_mode', 'single')
     if lot_mode == 'multiple':
         # Include lot names
         form_data['lot_names'] = st.session_state.get('lot_names', [])

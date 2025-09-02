@@ -930,22 +930,27 @@ def load_procurement_to_form(procurement_id):
         lot_mode = form_data.get('lot_mode', '')
         num_lots = form_data.get('num_lots', 0)
         
-        # Set lot mode based on number of lots
-        if lot_mode == 'multiple':
-            st.session_state.lot_mode = 'multiple'
-            st.session_state.num_lots = num_lots
-        elif len(lots_in_data) <= 1:
-            st.session_state.lot_mode = 'single'
-        else:
-            lots = flattened_data.get('lots', [])
-            if len(lots) > 1:
-                st.session_state.lot_mode = 'multiple'
-            elif len(lots) == 1:
-                st.session_state.lot_mode = 'single'
-            else:
-                st.session_state.lot_mode = 'none'
+        # UNIFIED LOT ARCHITECTURE FIX: Ensure at least one lot always exists
+        # If no lots in data, create the default "Splošni sklop" lot
+        if len(lots_in_data) == 0:
+            lots_in_data = [{'name': 'Splošni sklop', 'index': 0}]
+            form_data['lots'] = lots_in_data
+            logging.info("[LOT_FIX] No lots in data, created default 'Splošni sklop' lot")
         
-        logging.info(f"Lots count: {len(lots_in_data)}, lot_mode: {st.session_state.get('lot_mode')}, num_lots: {num_lots}")
+        # Set lot mode based on number of lots
+        if lot_mode == 'multiple' or len(lots_in_data) > 1:
+            st.session_state.lot_mode = 'multiple'
+            st.session_state.num_lots = len(lots_in_data) if len(lots_in_data) > num_lots else num_lots
+        else:
+            # UNIFIED LOT ARCHITECTURE: Always use 'single' mode, never 'none'
+            st.session_state.lot_mode = 'single'
+            st.session_state.num_lots = 1
+        
+        # CRITICAL: Initialize lots in session state to match unified lot architecture
+        st.session_state['lots'] = lots_in_data
+        st.session_state['current_lot_index'] = 0
+        
+        logging.info(f"Lots count: {len(lots_in_data)}, lot_mode: {st.session_state.get('lot_mode')}, num_lots: {st.session_state.get('num_lots', 0)}")
         logging.info(f"Loading {len(flattened_data)} keys into session state")
         logging.info(f"Sample keys: {list(flattened_data.keys())[:10]}")
         
@@ -1063,8 +1068,13 @@ def load_procurement_to_form(procurement_id):
                     logging.info(f"[ESTIMATED_VALUE] Setting {key} = {value} and {lot_key} = {value}")
             else:
                 # For lots mode or special keys, use as is
-                st.session_state[key] = value
-                logging.debug(f"Set {key} = {value[:50] if isinstance(value, str) else value}")
+                # UNIFIED LOT ARCHITECTURE: Never allow lot_mode='none'
+                if key == 'lot_mode' and value == 'none':
+                    st.session_state[key] = 'single'
+                    logging.info(f"[LOT_MODE_FIX] Corrected lot_mode from 'none' to 'single'")
+                else:
+                    st.session_state[key] = value
+                    logging.debug(f"Set {key} = {value[:50] if isinstance(value, str) else value}")
                 
                 # Special handling for estimatedValue 
                 if 'estimatedValue' in key:

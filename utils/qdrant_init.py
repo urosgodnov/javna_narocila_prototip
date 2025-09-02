@@ -124,7 +124,7 @@ def init_qdrant_collection(force: bool = False) -> Dict[str, Any]:
                 if not force:
                     result['success'] = True
                     result['message'] = f"Collection '{COLLECTION_NAME}' already exists"
-                    logger.info(result['message'])
+                    logger.debug(result['message'])  # Use debug to reduce log noise
                     return result
                 else:
                     # Delete existing collection if force is True
@@ -263,7 +263,8 @@ def init_qdrant_on_startup():
             if result['created']:
                 logger.info(f"✅ Qdrant: {result['message']}")
             else:
-                logger.info(f"ℹ️ Qdrant: {result['message']}")
+                # Use debug level for "already exists" message to reduce noise
+                logger.debug(f"ℹ️ Qdrant: {result['message']}")
         else:
             logger.warning(f"⚠️ Qdrant: {result['message']}")
             # Non-blocking - app continues without vector database

@@ -32,6 +32,12 @@ class FormContext:
     
     def __post_init__(self):
         """Ensure lot structure exists immediately upon creation"""
+        # CRITICAL: Force lot_mode to never be 'none'
+        if self.session_state.get('lot_mode') == 'none':
+            self.session_state['lot_mode'] = 'single'
+            import logging
+            logging.warning("[FORMCONTEXT] Forced lot_mode from 'none' to 'single'")
+        
         self.ensure_lot_structure()
         # Sync lot_index with session state
         self.lot_index = self.session_state.get('current_lot_index', 0)
@@ -60,6 +66,13 @@ class FormContext:
             self.session_state['current_lot_index'] = 0
         elif self.session_state['current_lot_index'] >= len(self.session_state['lots']):
             self.session_state['current_lot_index'] = 0
+    
+    def _initialize_lots(self) -> None:
+        """
+        Alias for ensure_lot_structure for backward compatibility.
+        Some code might still reference the old method name.
+        """
+        self.ensure_lot_structure()
     
     def get_field_key(self, field_name: str, force_global: bool = False) -> str:
         """
@@ -459,7 +472,7 @@ class FormContext:
         
         # Ensure lots exist and are properly structured
         if not lots:
-            self._initialize_lots()
+            self.ensure_lot_structure()
             lots = self.session_state.get('lots', [])
         
         for i, lot in enumerate(lots):

@@ -36,6 +36,29 @@ try:
 except ImportError:
     AI_INTEGRATION_AVAILABLE = False
     logging.warning("AI integration patch not available")
+
+# Import performance optimization patch
+try:
+    from patches.performance_optimization_patch import (
+        get_cached_form_controller, 
+        apply_performance_optimizations,
+        clear_controller_cache
+    )
+    PERFORMANCE_OPTIMIZATION_AVAILABLE = True
+    # Apply optimizations immediately
+    apply_performance_optimizations()
+except ImportError:
+    PERFORMANCE_OPTIMIZATION_AVAILABLE = False
+    logging.warning("Performance optimization patch not available")
+
+# Import logging reduction patch
+try:
+    from patches.reduce_logging_patch import apply_logging_reduction
+    apply_logging_reduction()
+    LOGGING_OPTIMIZED = True
+except ImportError:
+    LOGGING_OPTIMIZED = False
+
 from utils.loading_state import render_loading_indicator, set_loading_state, LOADING_MESSAGES
 
 def render_warning_box(title: str, content: str):
@@ -90,8 +113,19 @@ def init_app_data():
         # Log but continue - non-blocking requirement
         logging.info("App starting without vector database support")
 
-# Run initialization before Streamlit
-init_app_data()
+# Run initialization only once using session state
+# This prevents repeated initialization on every Streamlit rerun
+if 'app_initialized' not in st.session_state:
+    init_app_data()
+    st.session_state.app_initialized = True
+    logging.info("[INIT] Application data initialized (one-time setup)")
+else:
+    logging.debug("[INIT] Application already initialized, skipping setup")
+
+# CRITICAL: Apply lot_mode fix at TOP LEVEL before main() runs
+# This ensures lot_mode is NEVER 'none' even if session state persists
+from patches.lot_mode_none_fix_patch import apply_lot_mode_fix
+apply_lot_mode_fix()
 
 def show_login_form():
     """Display minimalistic and elegant organization login form."""
@@ -422,13 +456,15 @@ def main():
         st.session_state.edit_record_id = None
         del st.session_state['JUST_IMPORTED']
     
+    # Lot mode fix already applied at top level
+    
     if 'schema' not in st.session_state:
         try:
             st.session_state['schema'] = load_json_schema(SCHEMA_FILE)
         except FileNotFoundError:
             st.error(get_text("schema_file_not_found", filename=SCHEMA_FILE))
             st.stop()
-
+    
     # Initialize lot-aware session state
     initialize_lot_session_state()
     migrate_existing_data_to_lot_structure()
@@ -443,6 +479,23 @@ def main():
     if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
         import logging
         logging.info(f"=== CHECKING EDIT MODE: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}, current_page={st.session_state.get('current_page')}")
+        
+        # FORCE RELOAD if lot_mode is 'none' (indicates old data)
+        # But first try to fix it directly to avoid infinite loops
+        if st.session_state.get('lot_mode') == 'none':
+            st.session_state['lot_mode'] = 'single'
+            # Ensure lots structure exists
+            if 'lots' not in st.session_state or not st.session_state.get('lots'):
+                st.session_state['lots'] = [{'name': 'Splošni sklop', 'index': 0}]
+            
+            # Only force reload once per session
+            if 'edit_data_loaded' in st.session_state and not st.session_state.get('force_reload_attempted'):
+                logging.warning("[FORCE_RELOAD] Detected lot_mode='none', forcing data reload with migrations")
+                del st.session_state['edit_data_loaded']
+                st.session_state['force_reload_attempted'] = True
+            else:
+                logging.info("[LOT_MODE_FIXED] Corrected lot_mode from 'none' to 'single' without reload")
+        
         # Check if we need to load the data
         if 'edit_data_loaded' not in st.session_state:
             from ui.dashboard import load_procurement_to_form
@@ -1297,9 +1350,10 @@ def render_main_form():
                                 loaded_data = database.load_draft(draft['id'])
                                 if loaded_data:
                                     import logging
-                                    logging.info(f"[DRAFT LOAD] Loading draft with keys: {list(loaded_data.keys())}")
+                                    # logging.info(f"[DRAFT LOAD] Loading draft with keys: {list(loaded_data.keys())}")  # Reduced logging
                                     if 'lots' in loaded_data:
-                                        logging.info(f"[DRAFT LOAD] Found {len(loaded_data['lots'])} lots in draft")
+                                        # logging.info(f"[DRAFT LOAD] Found {len(loaded_data['lots'])} lots in draft")  # Reduced logging
+                                        pass  # Keep the if block valid
                                     
                                     # Flatten nested dictionary to dot-notation for session state
                                     def flatten_dict(d, parent_key='', sep='.'):
@@ -1313,7 +1367,8 @@ def render_main_form():
                                             if k == 'lots' and isinstance(v, list):
                                                 # Store lot data in session state
                                                 st.session_state['lots'] = v
-                                                st.session_state['lot_mode'] = 'multiple' if len(v) > 0 else 'none'
+                                                # UNIFIED LOT ARCHITECTURE: Use 'single' instead of 'none'
+                                                st.session_state['lot_mode'] = 'multiple' if len(v) > 0 else 'single'
                                                 # Also set lotsInfo.hasLots for proper form configuration
                                                 if len(v) > 0:
                                                     st.session_state['lotsInfo.hasLots'] = True
@@ -1359,19 +1414,20 @@ def render_main_form():
                                     
                                     import logging
                                     lot_keys = [k for k in flattened_data.keys() if k.startswith('lot_')]
-                                    logging.info(f"[DRAFT LOAD] Flattened data has {len(lot_keys)} lot-prefixed keys")
+                                    # logging.info(f"[DRAFT LOAD] Flattened data has {len(lot_keys)} lot-prefixed keys")  # Reduced logging
                                     if lot_keys:
-                                        logging.info(f"[DRAFT LOAD] Sample lot keys: {lot_keys[:5]}")
+                                        # logging.info(f"[DRAFT LOAD] Sample lot keys: {lot_keys[:5]}")  # Reduced logging
+                                        pass  # Keep the if block valid
                                     
                                     # Check if we're in general mode (no lots)
                                     has_lots = loaded_data.get('lotsInfo', {}).get('hasLots', False)
-                                    logging.info(f"[DRAFT LOAD] has_lots from lotsInfo: {has_lots}")
+                                    # logging.info(f"[DRAFT LOAD] has_lots from lotsInfo: {has_lots}")  # Reduced logging
                                     
                                     # If we have lots in the data but lotsInfo.hasLots is False, fix it
                                     if 'lots' in loaded_data and isinstance(loaded_data['lots'], list) and len(loaded_data['lots']) > 0:
                                         has_lots = True
                                         st.session_state['lotsInfo.hasLots'] = True
-                                        logging.info(f"[DRAFT LOAD] Corrected has_lots to True based on lots data")
+                                        # logging.info(f"[DRAFT LOAD] Corrected has_lots to True based on lots data")  # Reduced logging
                                     
                                     for key, value in flattened_data.items():
                                         # Don't add general prefix to lot keys even if has_lots is False
@@ -1398,7 +1454,7 @@ def render_main_form():
                                         # Set current lot index if not already set
                                         if 'current_lot_index' not in st.session_state:
                                             st.session_state['current_lot_index'] = 0
-                                        logging.info(f"[DRAFT LOAD] Set lot configuration: mode={st.session_state.get('lot_mode')}, index={st.session_state.get('current_lot_index')}")
+                                        # logging.info(f"[DRAFT LOAD] Set lot configuration: mode={st.session_state.get('lot_mode')}, index={st.session_state.get('current_lot_index')}")  # Reduced logging
                                     
                                     # Restore step if saved
                                     if '_save_metadata' in loaded_data:
@@ -1409,18 +1465,19 @@ def render_main_form():
                                     # Mark all steps with data as completed for navigation
                                     steps = get_fixed_steps()
                                     import logging
-                                    logging.info(f"[DRAFT LOAD] After loading, have {len(steps)} total steps")
-                                    logging.info(f"[DRAFT LOAD] lot_mode: {st.session_state.get('lot_mode')}")
-                                    logging.info(f"[DRAFT LOAD] Number of lots: {len(st.session_state.get('lots', []))}")
-                                    logging.info(f"[DRAFT LOAD] lotsInfo.hasLots: {st.session_state.get('lotsInfo.hasLots')}")
-                                    logging.info(f"[DRAFT LOAD] lot_names: {st.session_state.get('lot_names')}")
-                                    logging.info(f"[DRAFT LOAD] First 3 steps: {steps[:3] if steps else 'No steps'}")
+                                    # logging.info(f"[DRAFT LOAD] After loading, have {len(steps)} total steps")  # Reduced logging
+                                    # logging.info(f"[DRAFT LOAD] lot_mode: {st.session_state.get('lot_mode')}")  # Reduced logging
+                                    # logging.info(f"[DRAFT LOAD] Number of lots: {len(st.session_state.get('lots', []))}")  # Reduced logging
+                                    # logging.info(f"[DRAFT LOAD] lotsInfo.hasLots: {st.session_state.get('lotsInfo.hasLots')}")  # Reduced logging
+                                    # logging.info(f"[DRAFT LOAD] lot_names: {st.session_state.get('lot_names')}")  # Reduced logging
+                                    # logging.info(f"[DRAFT LOAD] First 3 steps: {steps[:3] if steps else 'No steps'}")  # Reduced logging
                                     
                                     # Log all keys starting with lot_
                                     lot_keys = [k for k in st.session_state.keys() if k.startswith('lot_')]
-                                    logging.info(f"[DRAFT LOAD] Found {len(lot_keys)} lot_ keys in session state")
+                                    # logging.info(f"[DRAFT LOAD] Found {len(lot_keys)} lot_ keys in session state")  # Reduced logging
                                     if lot_keys:
-                                        logging.info(f"[DRAFT LOAD] First 10 lot keys: {lot_keys[:10]}")
+                                        # logging.info(f"[DRAFT LOAD] First 10 lot keys: {lot_keys[:10]}")  # Reduced logging
+                                        pass  # Keep the if block valid
                                     
                                     completed_steps = {}
                                     
@@ -1555,16 +1612,29 @@ def render_main_form():
             
         current_step_keys = fixed_form_steps[st.session_state.current_step]
         
-        # Initialize FormController with current schema
-        form_controller = FormController(schema=st.session_state.get('schema', {}))
+        # Initialize FormController with current schema (cached for performance)
+        if PERFORMANCE_OPTIMIZATION_AVAILABLE:
+            form_controller = get_cached_form_controller(st.session_state.get('schema', {}))
+        else:
+            form_controller = FormController(schema=st.session_state.get('schema', {}))
         
         # Debug edit mode
         if st.session_state.get('edit_mode'):
             import logging
-            logging.info(f"=== EDIT MODE DEBUG ===")
+            # logging.info(f"=== EDIT MODE DEBUG ===")  # Reduced logging
             logging.info(f"Current step keys: {current_step_keys}")
             logging.info(f"Current lot index: {form_controller.context.lot_index}")
-            logging.info(f"Lot mode in session: {st.session_state.get('lot_mode', 'NOT SET')}")
+            
+            # CRITICAL FIX: Force lot_mode to never be 'none'
+            if st.session_state.get('lot_mode') == 'none':
+                st.session_state['lot_mode'] = 'single'
+                logging.warning("[FORCE_FIX] Corrected lot_mode from 'none' to 'single'")
+                # Also ensure lots exist
+                if 'lots' not in st.session_state or not st.session_state.get('lots'):
+                    st.session_state['lots'] = [{'name': 'Splošni sklop', 'index': 0}]
+                    logging.warning("[FORCE_FIX] Created default lot structure")
+            
+            logging.info(f"Lot mode in session: {st.session_state.get('lot_mode', 'single')}")
             # Check for sample data
             test_key = f'lots.{form_controller.context.lot_index}.clientInfo.name'
             logging.info(f"Looking for key: {test_key}")
@@ -1572,6 +1642,13 @@ def render_main_form():
                 logging.info(f"Found: {st.session_state[test_key]}")
             else:
                 logging.info(f"NOT FOUND in session state")
+                # Try to migrate existing non-lot-scoped data
+                if 'clientInfo.name' in st.session_state:
+                    st.session_state[test_key] = st.session_state['clientInfo.name']
+                    logging.warning(f"[MIGRATION] Copied clientInfo.name to {test_key}")
+                elif 'clientInfo.singleClientName' in st.session_state:
+                    st.session_state[test_key] = st.session_state['clientInfo.singleClientName']
+                    logging.warning(f"[MIGRATION] Copied clientInfo.singleClientName to {test_key}")
         
         # Store current step keys for use in lot utilities
         st.session_state.current_step_keys = current_step_keys
@@ -1716,8 +1793,11 @@ def render_main_form():
                     # Inject AI into the form controller's field renderer
                     from patches.ai_integration_patch import inject_ai_into_renderer
                     inject_ai_into_renderer(form_controller.field_renderer)
+                    # CRITICAL: Also inject into section_renderer which handles nested fields
+                    inject_ai_into_renderer(form_controller.section_renderer)
                     # Also apply general AI integration
                     apply_ai_integration()
+                    logging.info("[AI_SETUP] AI injection completed for both field_renderer and section_renderer")
                 except Exception as e:
                     logging.debug(f"AI integration could not be applied: {e}")
             
@@ -2667,7 +2747,8 @@ def render_step_breadcrumbs():
     
     # Check if lots are enabled
     has_lots = st.session_state.get("lotsInfo.hasLots", False)
-    lot_mode = st.session_state.get('lot_mode', 'none')
+    # UNIFIED LOT ARCHITECTURE: Default to 'single' instead of 'none'
+    lot_mode = st.session_state.get('lot_mode', 'single')
     
     breadcrumbs_html = '<div class="step-breadcrumbs">'
     
@@ -3078,7 +3159,8 @@ def render_drafts_sidebar(draft_options):
                     if k == 'lots' and isinstance(v, list):
                         # Store lot data in session state
                         st.session_state['lots'] = v
-                        st.session_state['lot_mode'] = 'multiple' if len(v) > 0 else 'none'
+                        # UNIFIED LOT ARCHITECTURE: Use 'single' instead of 'none'
+                        st.session_state['lot_mode'] = 'multiple' if len(v) > 0 else 'single'
                         # Also set lotsInfo.hasLots for proper form configuration
                         if len(v) > 0:
                             st.session_state['lotsInfo.hasLots'] = True

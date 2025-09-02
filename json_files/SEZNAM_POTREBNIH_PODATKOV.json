@@ -418,6 +418,7 @@
                 "otherPriceClause": {
                     "type": "string",
                     "title": "Navedite kakšno cenovno klavzulo bi želeli",
+                    "ai_enabled": true,
                     "render_if": {
                         "field": "priceInfo.priceClause",
                         "value": "drugo"
@@ -675,6 +676,7 @@
                 "otherNegotiationSubject": {
                     "type": "string",
                     "title": "Navedite v zvezi s čim se želite pogajati",
+                    "ai_enabled": true,
                     "render_if": {
                         "field": "negotiationsInfo.negotiationSubject",
                         "value": "drugo"
@@ -704,8 +706,10 @@
                 },
                 "specialNegotiationWishes": {
                     "type": "string",
+                    "format": "textarea",
                     "title": "Opišite vaše posebne želje v zvezi s pogajanji",
                     "description": "Navedite morebitne posebne zahteve, omejitve ali pojasnila glede poteka pogajanj.",
+                    "ai_enabled": true,
                     "render_if": {
                         "field": "negotiationsInfo.hasSpecialWishes",
                         "value": true
@@ -716,6 +720,7 @@
         },
         "participationAndExclusion": {
             "type": "object",
+            "title": "Razlogi za izključitev",
             "properties": {
                 "sectionHeader": {
                     "type": "object",
@@ -845,6 +850,7 @@
         },
         "participationConditions": {
             "type": "object",
+            "title": "Pogoji za sodelovanje",
             "$ref": "#/$defs/participationConditionProperties"
         },
         "financialGuarantees": {

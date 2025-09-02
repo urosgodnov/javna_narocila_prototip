@@ -116,10 +116,42 @@ def migrate_cofinancing_fields(data):
     return data
 
 
+def migrate_lot_mode(data):
+    """
+    Migrate lot_mode from 'none' to 'single' for unified lot architecture.
+    Ensures at least one lot always exists.
+    """
+    import logging
+    
+    if not data:
+        return data
+    
+    # Fix lot_mode if it's 'none'
+    if data.get('lot_mode') == 'none':
+        logging.info("[MIGRATION] Migrating lot_mode from 'none' to 'single'")
+        data['lot_mode'] = 'single'
+        
+    # Ensure lots array exists with at least one lot
+    if 'lots' not in data or not data['lots']:
+        logging.info("[MIGRATION] No lots found, creating default 'Splošni sklop' lot")
+        data['lots'] = [{'name': 'Splošni sklop', 'index': 0}]
+        
+    # If lot_mode is not set but we have no lots, set to single
+    if 'lot_mode' not in data:
+        if 'lots' in data and len(data.get('lots', [])) > 1:
+            data['lot_mode'] = 'multiple'
+        else:
+            data['lot_mode'] = 'single'
+        logging.info(f"[MIGRATION] Set lot_mode to '{data['lot_mode']}' based on lots count")
+    
+    return data
+
+
 def migrate_form_data(data):
     """
     Apply all Epic 3.0 migrations to form data.
     """
     data = migrate_address_fields(data)
     data = migrate_cofinancing_fields(data)
+    data = migrate_lot_mode(data)  # Fix lot_mode='none' issue
     return data

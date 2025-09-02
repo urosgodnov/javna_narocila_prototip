@@ -22,10 +22,29 @@ class AIFieldSuggestionService:
     First queries Qdrant knowledge base, then falls back to general AI.
     """
     
+    # Class-level cache for expensive service instances
+    _qdrant_service = None
+    _ai_response_service = None
+    
     def __init__(self):
-        """Initialize with Qdrant and AI response services."""
-        self.qdrant_service = QdrantCRUDService()
-        self.ai_response_service = AIResponseService()
+        """Initialize with cached Qdrant and AI response services."""
+        # Use cached instances to avoid recreating expensive services
+        if AIFieldSuggestionService._qdrant_service is None:
+            try:
+                AIFieldSuggestionService._qdrant_service = QdrantCRUDService()
+            except Exception as e:
+                logger.warning(f"Could not initialize Qdrant service: {e}")
+                AIFieldSuggestionService._qdrant_service = None
+        
+        if AIFieldSuggestionService._ai_response_service is None:
+            try:
+                AIFieldSuggestionService._ai_response_service = AIResponseService()
+            except Exception as e:
+                logger.warning(f"Could not initialize AI response service: {e}")
+                AIFieldSuggestionService._ai_response_service = None
+        
+        self.qdrant_service = AIFieldSuggestionService._qdrant_service
+        self.ai_response_service = AIFieldSuggestionService._ai_response_service
         
     def get_field_suggestion(
         self, 
@@ -46,24 +65,33 @@ class AIFieldSuggestionService:
         Returns:
             Dictionary with suggestions, source, confidence, and context used
         """
-        logger.info(f"Getting AI suggestions for field: {field_context}, type: {field_type}")
+        logger.info(f"[AI_SUGGESTION] Getting AI suggestions for field: {field_context}, type: {field_type}")
+        logger.debug(f"[AI_SUGGESTION] Query: {query}")
+        logger.debug(f"[AI_SUGGESTION] Form data keys: {list(form_data.keys()) if form_data else 'None'}")
         
         # Collect complete form context
         full_context = self._collect_form_context(form_data or {})
-        logger.debug(f"Collected context keys: {list(full_context.keys())[:10]}")
+        logger.info(f"[AI_SUGGESTION] Collected context keys: {list(full_context.keys())[:10]}")
+        logger.debug(f"[AI_SUGGESTION] Full context: {full_context}")
         
         # Build intelligent search query using full context
         search_query = self._build_contextual_query(field_context, field_type, full_context)
         
         # Log what context we're using
-        logger.info(f"Generating suggestions for {field_context} with context: {search_query[:200]}...")
+        logger.info(f"[AI_SUGGESTION] Built search query for {field_context}: {search_query[:200]}...")
+        logger.debug(f"[AI_SUGGESTION] Full search query: {search_query}")
         
         # First, try Qdrant knowledge base
+        logger.info(f"[AI_SUGGESTION] Searching knowledge base...")
         kb_results = self._search_knowledge_base(search_query, full_context)
+        logger.info(f"[AI_SUGGESTION] Knowledge base returned {len(kb_results) if kb_results else 0} results")
         
         if kb_results and self._has_good_results(kb_results):
+            logger.info(f"[AI_SUGGESTION] Using knowledge base results")
             # Format and return knowledge base suggestions
             return self._format_kb_suggestions(kb_results, full_context)
+        else:
+            logger.info(f"[AI_SUGGESTION] Knowledge base has no good results, falling back to AI generation")
         
         # Fall back to general AI with full context
         return self._generate_ai_suggestions_with_context(
@@ -160,6 +188,7 @@ class AIFieldSuggestionService:
             
         elif 'negotiation' in field_type.lower() or 'pogajanja' in field_context.lower():
             # Negotiations field
+            logger.info(f"[AI_SUGGESTION] Building query for negotiations field")
             query_parts.append("pogajanja")
             query_parts.append(full_context.get('project_title', ''))
             query_parts.append(full_context.get('procurement_type', ''))
@@ -167,6 +196,7 @@ class AIFieldSuggestionService:
                 query_parts.append(f"sofinancer {', '.join(full_context['cofinancers'])}")
             if full_context.get('current_lot', {}).get('name'):
                 query_parts.append(f"sklop {full_context['current_lot']['name']}")
+            logger.debug(f"[AI_SUGGESTION] Negotiation query parts: {query_parts}")
                 
         elif 'price' in field_type.lower() or 'cen' in field_context.lower():
             # Price information
@@ -240,12 +270,16 @@ class AIFieldSuggestionService:
             # Return top 5 results
             results = all_results[:5]
             
-            logger.info(f"Found {len(results)} results in knowledge base for query: {query[:100]}...")
+            logger.info(f"[AI_SUGGESTION] Found {len(results)} results in knowledge base for query: {query[:100]}...")
+            for i, result in enumerate(results[:3]):
+                logger.debug(f"[AI_SUGGESTION] KB Result {i+1}: score={result.get('score', 0)}, text={result.get('chunk_text', '')[:100]}...")
             
             return results
             
         except Exception as e:
-            logger.error(f"Error searching knowledge base: {e}")
+            logger.error(f"[AI_SUGGESTION] Error searching knowledge base: {e}")
+            import traceback
+            logger.debug(f"[AI_SUGGESTION] KB search traceback: {traceback.format_exc()}")
             return []
     
     def _has_good_results(self, results: List[Dict]) -> bool:
@@ -255,8 +289,8 @@ class AIFieldSuggestionService:
         if not results:
             return False
         
-        # Check if we have at least 2 results
-        if len(results) < 2:
+        # Check if we have at least 1 good result
+        if len(results) < 1:
             return False
         
         # Check if top results have good similarity scores
@@ -316,7 +350,9 @@ class AIFieldSuggestionService:
         Falls back to this when knowledge base doesn't have good results.
         """
         # Build comprehensive prompt with all context
+        logger.info(f"[AI_SUGGESTION] Generating AI suggestions for field: {field_context}")
         prompt = self._build_contextual_prompt(field_context, field_type, full_context, query)
+        logger.debug(f"[AI_SUGGESTION] Built prompt (first 500 chars): {prompt[:500]}...")
         
         # Generate suggestions using AI
         suggestions = []
@@ -328,12 +364,14 @@ class AIFieldSuggestionService:
                 variation = "Predlagaj alternativo: " if i > 0 else ""
                 
                 # Use the new get_ai_response method for pure AI generation
+                logger.info(f"[AI_SUGGESTION] Calling AI service for suggestion {i+1}")
                 ai_response = self.ai_response_service.get_ai_response(
                     query=variation + prompt,
                     field_type=field_type
                 )
+                logger.info(f"[AI_SUGGESTION] AI response received: {ai_response[:100] if ai_response else 'None'}...")
                 
-                if ai_response and not ai_response.startswith("❌"):
+                if ai_response and not ai_response.startswith("❌") and not ai_response.startswith("Ne vem"):
                     suggestion = {
                         'text': ai_response,
                         'source': 'ai_generated',
@@ -346,14 +384,28 @@ class AIFieldSuggestionService:
                     suggestions.append(suggestion)
         
         except Exception as e:
-            logger.error(f"Error generating AI suggestions: {e}")
-            # Provide a fallback suggestion
+            logger.error(f"[AI_SUGGESTION] Error generating AI suggestions: {e}")
+            import traceback
+            logger.debug(f"[AI_SUGGESTION] Traceback: {traceback.format_exc()}")
+            # Return "no suggestion" message
             suggestions.append({
-                'text': self._get_fallback_suggestion(field_type),
-                'source': 'fallback',
-                'confidence': 0.3,
+                'text': "Ne vem oz. nimam predloga",
+                'source': 'no_suggestion',
+                'confidence': 0.0,
                 'metadata': {'error': str(e)}
             })
+        
+        # If no valid suggestions were generated, add the "no suggestion" message
+        if not suggestions:
+            logger.warning(f"[AI_SUGGESTION] No valid suggestions generated for field: {field_context}")
+            suggestions.append({
+                'text': "Ne vem oz. nimam predloga",
+                'source': 'no_suggestion',
+                'confidence': 0.0,
+                'metadata': {'reason': 'no_valid_suggestions'}
+            })
+        
+        logger.info(f"[AI_SUGGESTION] Returning {len(suggestions)} suggestions for field: {field_context}")
         
         return {
             'suggestions': suggestions,
@@ -429,40 +481,17 @@ class AIFieldSuggestionService:
         
         prompt_parts.extend([
             "",
-            "Predlog naj bo konkreten, specifičen za ta projekt in v slovenščini."
+            "Navodila za odgovor:",
+            "1. Če imaš dovolj konteksta, podaj konkreten predlog prilagojen temu projektu",
+            "2. Če je kontekst pomanjkljiv, lahko podaš splošen predlog z opozorilom, da ga je treba prilagoditi",
+            "3. SAMO če res nimaš nobene ideje ali je vprašanje nejasno, odgovori 'Ne vem oz. nimam predloga'",
+            "Predlog naj bo v slovenščini in praktično uporaben."
         ])
         
         return "\n".join(prompt_parts)
     
     def _get_fallback_suggestion(self, field_type: str) -> str:
         """
-        Provide fallback suggestions when AI is unavailable.
+        Provide fallback message when no suggestion is available.
         """
-        fallbacks = {
-            'cofinancer_requirements': (
-                "Izvajalec mora zagotoviti:\n"
-                "- Ločeno knjigovodsko evidenco za projekt\n"
-                "- Mesečna poročila o napredku\n"
-                "- Označevanje z logotipi sofinancerja\n"
-                "- Hrambo dokumentacije 10 let po zaključku"
-            ),
-            'negotiation_terms': (
-                "Pogajanja bodo potekala v dveh krogih:\n"
-                "1. krog: Tehnične specifikacije in rok izvedbe\n"
-                "2. krog: Cena in plačilni pogoji\n"
-                "Ponudniki bodo povabljeni pisno najmanj 3 dni pred pogajanji."
-            ),
-            'price_formation': (
-                "Cene ostanejo fiksne prvo leto.\n"
-                "Po prvem letu se valorizirajo enkrat letno glede na indeks cen "
-                "življenjskih potrebščin (SURS).\n"
-                "Valorizacija se izvede na podlagi pisnega zahtevka."
-            )
-        }
-        
-        # Return appropriate fallback or generic message
-        for key in fallbacks:
-            if key in field_type.lower():
-                return fallbacks[key]
-        
-        return "Prosimo, vnesite zahteve glede na specifike vašega projekta."
+        return "Ne vem oz. nimam predloga"

@@ -95,7 +95,8 @@ def initialize_lot_session_state():
     Initialize lot-related session state variables.
     """
     if "lot_mode" not in st.session_state:
-        st.session_state.lot_mode = "none"  # Changed from "general" to "none" to match config
+        # UNIFIED LOT ARCHITECTURE: Default to 'single', never 'none'
+        st.session_state.lot_mode = "single"
     
     if "current_lot_index" not in st.session_state:
         st.session_state.current_lot_index = None

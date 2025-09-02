@@ -1010,7 +1010,8 @@ class ValidationManager:
         
         # Determine current lot context from session state
         current_lot_index = self.session_state.get('current_lot_index')
-        lot_mode = self.session_state.get('lot_mode', 'none')
+        # UNIFIED LOT ARCHITECTURE: Default to 'single', never 'none'
+        lot_mode = self.session_state.get('lot_mode', 'single')
         current_step = self.session_state.get('current_step')
         
         logging.info(f"[validate_order_type] Context: lot_mode={lot_mode}, current_lot_index={current_lot_index}, current_step={current_step}")
@@ -1175,7 +1176,7 @@ class ValidationManager:
                 # Check for double-prefixed keys first (form renderer bug)
                 cofinancer_keys.append(f'lot_0.orderType.cofinancers')
                 cofinancer_keys.append(f'lot_0.orderType.cofinancers')
-            elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
+            elif lot_mode == 'single' or (current_step and 'general' in str(current_step).lower()):
                 # For general step or when lot_mode is 'none', check general prefix
                 cofinancer_keys.append('general.orderType.cofinancers')
             else:
@@ -1196,7 +1197,7 @@ class ValidationManager:
                 # Check for double-prefixed keys first (form renderer bug)
                 count_keys.append(f'lot_0.orderType.cofinancerCount')
                 count_keys.append(f'lot_0.orderType.cofinancerCount')
-            elif lot_mode == 'none' or (current_step and 'general' in str(current_step).lower()):
+            elif lot_mode == 'single' or (current_step and 'general' in str(current_step).lower()):
                 # For general step or when lot_mode is 'none', check general prefix
                 count_keys.append('general.orderType.cofinancerCount')
             else:

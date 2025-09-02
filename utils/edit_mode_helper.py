@@ -11,8 +11,8 @@ def mark_completed_steps_for_edit(form_data: Dict[str, Any]) -> None:
     """
     from config import get_dynamic_form_steps
     
-    # Get all possible steps
-    steps = get_dynamic_form_steps()
+    # Get all possible steps - pass session_state as required
+    steps = get_dynamic_form_steps(st.session_state)
     
     # Initialize completed_steps if not exists
     if 'completed_steps' not in st.session_state:
