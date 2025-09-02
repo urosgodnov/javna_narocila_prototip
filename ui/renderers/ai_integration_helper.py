@@ -310,12 +310,35 @@ class AIIntegrationHelper:
         # Add logging for all fields being checked
         logger.debug(f"[AI_FIELD_CHECK] Checking field: {field_key}")
         
-        # EXPLICIT EXCLUSION for participationAndExclusion detail fields
-        # These fields should NEVER have AI buttons
+        # EXPLICIT EXCLUSION for participationAndExclusion and participationConditions detail fields
+        # These fields should NEVER have AI buttons - they are simple text inputs for clarification
         excluded_fields = [
+            # participationAndExclusion detail fields
             'professionalMisconductDetails',
             'contractDeficienciesDetails', 
-            'comparableSanctionsDetails'
+            'comparableSanctionsDetails',
+            # participationConditions detail fields  
+            'professionalRegisterDetails',
+            'businessRegisterDetails',
+            'licenseDetails',
+            'membershipDetails',
+            'professionalOtherDetails',
+            'generalTurnoverDetails',
+            'specificTurnoverDetails',
+            'averageTurnoverDetails',
+            'averageSpecificTurnoverDetails',
+            'financialRatioDetails',
+            'professionalInsuranceDetails',
+            'accountNotBlockedDetails',
+            'economicOtherDetails',
+            'technicalStaffDetails',
+            'equipmentDetails',
+            'experienceDetails',
+            'qualificationDetails',
+            'qualityControlDetails',
+            'environmentalManagementDetails',
+            'subcontractingDetails',
+            'technicalOtherDetails'
         ]
         for excluded in excluded_fields:
             if excluded in field_key:
