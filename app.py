@@ -1247,6 +1247,10 @@ def validate_step(step_keys, schema):
     # Clear previous error styles first
     validation_renderer.clear_field_errors()
     
+    # Clear stored errors if validation passes
+    if is_valid and 'last_validation_errors' in st.session_state:
+        del st.session_state['last_validation_errors']
+    
     # Display validation errors with red borders using existing system
     if not is_valid:
         
@@ -1296,6 +1300,9 @@ def validate_step(step_keys, schema):
                             if any(part in error.lower() for part in key.lower().split('.')):
                                 error_fields.add(key)
                                 validation_renderer.add_field_error_style(key)
+        
+        # Store errors for next render so FormController can apply red borders
+        st.session_state['last_validation_errors'] = errors
         
         # Display validation errors
         for error in errors:

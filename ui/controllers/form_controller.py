@@ -35,6 +35,9 @@ class FormController:
         self.validation_renderer = ValidationRenderer(self.context)
         # Pass validation renderer to field renderer for dynamic requirements
         self.field_renderer = FieldRenderer(self.context, self.validation_renderer)
+        
+        # Check for existing validation errors from previous validation attempts
+        self._check_existing_validation_errors()
         self.section_renderer = SectionRenderer(self.context, self.field_renderer)
         self.lot_manager = LotManager(self.context)
         
@@ -60,6 +63,41 @@ class FormController:
                 'submission_count': 0,
                 'is_dirty': False
             }
+    
+    def _check_existing_validation_errors(self) -> None:
+        """Check for existing validation errors from previous attempts and mark fields."""
+        # Check if there are stored validation errors from a previous validation attempt
+        if 'last_validation_errors' in st.session_state:
+            errors = st.session_state.get('last_validation_errors', [])
+            if errors:
+                # Extract field names from error messages and mark them
+                for error in errors:
+                    # Try to identify which fields have errors
+                    if "Zakoniti zastopnik" in error or "singleClientLegalRepresentative" in error:
+                        self._mark_field_with_error('clientInfo.singleClientLegalRepresentative')
+                        self._mark_field_with_error('singleClientLegalRepresentative')
+                    
+                    # Check for other common required fields
+                    field_mappings = {
+                        'Poštna številka': ['clientInfo.singleClientPostalCode', 'singleClientPostalCode'],
+                        'Kraj': ['clientInfo.singleClientCity', 'singleClientCity'],
+                        'Ulica': ['clientInfo.singleClientStreet', 'singleClientStreet'],
+                        'Hišna številka': ['clientInfo.singleClientHouseNumber', 'singleClientHouseNumber'],
+                        'Naziv': ['clientInfo.singleClientName', 'singleClientName'],
+                        'CPV': ['projectInfo.cpvCodes', 'cpvCodes']
+                    }
+                    
+                    for field_label, field_keys in field_mappings.items():
+                        if field_label in error:
+                            for field_key in field_keys:
+                                self._mark_field_with_error(field_key)
+    
+    def _mark_field_with_error(self, field_key: str) -> None:
+        """Mark a field as having a validation error."""
+        # Add error to context so field renderer knows to show red border
+        self.context.add_validation_error(field_key, 'Validation error')
+        # Also use validation renderer to add styling
+        self.validation_renderer.add_field_error_style(field_key)
     
     def set_schema(self, schema: Dict[str, Any]) -> None:
         """
