@@ -9,7 +9,7 @@ from config import (
     get_lot_navigation_buttons,
     SCHEMA_FILE
 )
-from config_fixed import get_fixed_steps, get_step_name
+from config import get_fixed_steps, get_step_name
 from utils.schema_utils import load_json_schema, get_form_data_from_session, clear_form_data, resolve_schema_ref
 from utils.lot_utils import (
     initialize_lot_session_state, 
@@ -900,7 +900,7 @@ def get_required_fields_for_step(step_keys):
 
 def render_quick_navigation():
     """Render quick navigation dropdown for completed steps."""
-    from config_fixed import get_fixed_steps, get_step_name
+    from config import get_fixed_steps, get_step_name
     
     steps = get_fixed_steps()
     current = st.session_state.current_step
@@ -1571,7 +1571,7 @@ def render_main_form():
 
     with col1:
         # Get fixed form steps
-        from config_fixed import get_fixed_steps
+        from config import get_fixed_steps
         fixed_form_steps = get_fixed_steps()
         
         # Calculate progress

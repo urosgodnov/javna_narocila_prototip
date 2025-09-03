@@ -211,6 +211,79 @@ get_dynamic_form_steps_refactored = get_dynamic_form_steps
 # Backward compatibility - static steps list
 FORM_STEPS = BASE_STEPS + LOT_SPECIFIC_STEPS + FINAL_STEPS
 
+# Fixed form steps - always shown in the same order
+FIXED_STEPS = [
+    # Step 1: Podatki o naročniku
+    ["clientInfo"],
+    
+    # Step 2: Osnovni podatki naročila
+    ["projectInfo"],
+    
+    # Step 3: Pravna podlaga
+    ["legalBasis"],
+    
+    # Step 4: Postopek oddaje
+    ["submissionProcedure"],
+    
+    # Step 5: Konfiguracija sklopov
+    ["lotsInfo"],
+    
+    # Step 6: Vrsta naročila
+    ["orderType"],
+    
+    # Step 7: Tehnične zahteve
+    ["technicalSpecifications"],
+    
+    # Step 8: Roki izvajanja
+    ["executionDeadline"],
+    
+    # Step 9: Informacije o ceni
+    ["priceInfo"],
+    
+    # Step 10: Ogledi in pogajanja
+    ["inspectionInfo", "negotiationsInfo"],
+    
+    # Step 11: Pogoji za sodelovanje in razlogi za izključitev
+    ["participationAndExclusion", "participationConditions"],
+    
+    # Step 12: Zavarovanja in ponudbe
+    ["financialGuarantees", "variantOffers"],
+    
+    # Step 13: Merila izbire
+    ["selectionCriteria"],
+    
+    # Step 14: Sklepanje pogodbe
+    ["contractInfo"],
+    
+    # Step 15: Potrditev
+    ["otherInfo"]
+]
+
+def get_fixed_steps():
+    """Return the fixed list of form steps."""
+    return FIXED_STEPS.copy()
+
+def get_step_name(step_index):
+    """Get readable name for a step."""
+    step_names = {
+        0: "Podatki o naročniku",
+        1: "Osnovni podatki naročila", 
+        2: "Pravna podlaga",
+        3: "Postopek oddaje",
+        4: "Konfiguracija sklopov",
+        5: "Vrsta naročila",
+        6: "Tehnične zahteve",
+        7: "Roki izvajanja",
+        8: "Informacije o ceni",
+        9: "Ogledi in pogajanja",
+        10: "Pogoji za sodelovanje",
+        11: "Zavarovanja in ponudbe",
+        12: "Merila izbire",
+        13: "Sklepanje pogodbe",
+        14: "Potrditev"
+    }
+    return step_names.get(step_index, f"Korak {step_index + 1}")
+
 # Schema file path
 SCHEMA_FILE = "json_files/SEZNAM_POTREBNIH_PODATKOV.json"
 
