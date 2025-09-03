@@ -338,7 +338,12 @@ class AIIntegrationHelper:
             'qualityControlDetails',
             'environmentalManagementDetails',
             'subcontractingDetails',
-            'technicalOtherDetails'
+            'technicalOtherDetails',
+            # Additional technical section fields that shouldn't have AI
+            'companyReferencesDetails',
+            'staffReferencesDetails',
+            'staffRequirementsDetails',
+            'qualityCertificatesDetails'
         ]
         for excluded in excluded_fields:
             if excluded in field_key:

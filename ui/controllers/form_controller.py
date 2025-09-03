@@ -282,13 +282,17 @@ class FormController:
         
         if prop_type == 'object':
             # Use section renderer for objects
+            # Pass required fields from the object's schema
+            object_required = prop_schema.get('required', [])
             self.section_renderer.render_section(
-                prop_name, prop_schema, parent_key="", level=0
+                prop_name, prop_schema, parent_key="", level=0, required_fields=object_required
             )
         elif prop_type == 'array' and prop_schema.get('items', {}).get('type') == 'object':
             # Use section renderer for arrays of objects
+            # Arrays of objects might have required fields in items schema
+            items_required = prop_schema.get('items', {}).get('required', [])
             self.section_renderer.render_section(
-                prop_name, prop_schema, parent_key="", level=0
+                prop_name, prop_schema, parent_key="", level=0, required_fields=items_required
             )
         else:
             # Use field renderer for simple fields

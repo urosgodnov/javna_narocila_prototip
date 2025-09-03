@@ -78,7 +78,8 @@ class SectionRenderer:
                       section_name: str, 
                       section_schema: dict, 
                       parent_key: str = "",
-                      level: int = 0) -> Dict[str, Any]:
+                      level: int = 0,
+                      required_fields: List[str] = None) -> Dict[str, Any]:
         """
         Render a section with nested fields.
         
@@ -94,20 +95,26 @@ class SectionRenderer:
         section_type = section_schema.get('type')
         
         if section_type == 'object':
-            return self._render_object_section(section_name, section_schema, parent_key, level)
+            return self._render_object_section(section_name, section_schema, parent_key, level, required_fields)
         elif section_type == 'array':
             return self._render_array_section(section_name, section_schema, parent_key, level)
         else:
             # Fallback to field renderer for simple types
-            return self.field_renderer.render_field(section_name, section_schema, parent_key)
+            # Check if this field is required
+            is_required = required_fields and section_name in required_fields
+            return self.field_renderer.render_field(section_name, section_schema, parent_key, required=is_required)
     
     def _render_object_section(self, 
                               section_name: str, 
                               section_schema: dict, 
                               parent_key: str,
-                              level: int) -> Dict[str, Any]:
+                              level: int,
+                              parent_required_fields: List[str] = None) -> Dict[str, Any]:
         """Render an object section with nested properties."""
         full_key = f"{parent_key}.{section_name}" if parent_key else section_name
+        
+        # Check if THIS section is required by its parent
+        is_section_required = parent_required_fields and section_name in parent_required_fields
         
         # IMPORTANT: Skip rendering if both $ref and properties exist
         # This happens when app.py resolves $ref but leaves both in the schema
@@ -118,6 +125,7 @@ class SectionRenderer:
         else:
             properties = section_schema.get('properties', {})
         
+        # Get required fields for THIS section's properties
         required_fields = section_schema.get('required', [])
         conditionally_required = section_schema.get('conditionally_required', [])
         
@@ -344,8 +352,10 @@ class SectionRenderer:
                 prop_type = prop_schema.get('type')
                 
                 if prop_type == 'object':
+                    # Get required fields for nested object
+                    object_required = prop_schema.get('required', [])
                     self._render_object_section(
-                        prop_name, prop_schema, item_key, level + 1
+                        prop_name, prop_schema, item_key, level + 1, object_required
                     )
                 elif prop_type == 'array':
                     self._render_array_section(
@@ -558,8 +568,10 @@ class SectionRenderer:
                 continue
             
             if prop_type == 'object':
+                # Get required fields for nested object
+                object_required = prop_schema.get('required', [])
                 section_data[prop_name] = self._render_object_section(
-                    prop_name, prop_schema, parent_key, level
+                    prop_name, prop_schema, parent_key, level, object_required
                 )
             elif prop_type == 'array' and prop_schema.get('items', {}).get('type') == 'object':
                 section_data[prop_name] = self._render_array_section(
