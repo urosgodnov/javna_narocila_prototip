@@ -10,6 +10,7 @@ from datetime import date, datetime
 import logging
 
 from utils.form_helpers import FormContext
+from ui.helpers.validation_display import ValidationDisplay
 
 
 class FieldRenderer:
@@ -37,6 +38,8 @@ class FieldRenderer:
         """
         self.context = context
         self.validation_renderer = validation_renderer
+        # Inject global validation styles once
+        ValidationDisplay.inject_global_error_styles()
         
     def render_field(self, 
                     field_name: str, 
@@ -121,15 +124,15 @@ class FieldRenderer:
         # Check if field has validation errors to add red border
         has_error = self.context.has_errors(full_key)
         if has_error:
-            # Add CSS for red border on this specific field
-            self._add_field_error_style(widget_key)
+            # Use the new validation display helper for consistent styling
+            ValidationDisplay.mark_field_with_error(widget_key, full_key)
         
         # Handle different string subtypes
         # Check for CPV field first
         if 'cpv' in field_name.lower() or schema.get('format') == 'cpv':
             # Apply error styling if validation errors exist
             if self.context.has_errors(full_key):
-                self._add_field_error_style(widget_key)
+                ValidationDisplay.mark_field_with_error(widget_key, full_key)
             
             # Use CPV selector component
             from ui.components.cpv_selector import render_cpv_selector
@@ -149,7 +152,7 @@ class FieldRenderer:
             # Show validation error message below field if exists
             errors = self.context.get_validation_errors(full_key)
             if errors:
-                st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+                ValidationDisplay.display_field_error(errors[0])
             
             return value
         elif schema.get('format') == 'date':
@@ -217,7 +220,7 @@ class FieldRenderer:
             # Show validation error message below field if exists
             errors = self.context.get_validation_errors(full_key)
             if errors:
-                st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+                ValidationDisplay.display_field_error(errors[0])
             
             return value
     
@@ -406,7 +409,7 @@ class FieldRenderer:
         # Check if field has validation errors to add red border
         has_error = self.context.has_errors(full_key)
         if has_error:
-            self._add_field_error_style(widget_key)
+            ValidationDisplay.mark_field_with_error(widget_key, full_key)
         
         # Handle null/None values - keep field empty
         if current_value is None or current_value == "null":
@@ -530,7 +533,7 @@ class FieldRenderer:
         # Check if field has validation errors to add red border
         has_error = self.context.has_errors(full_key)
         if has_error:
-            self._add_field_error_style(widget_key)
+            ValidationDisplay.mark_field_with_error(widget_key, full_key)
         
         # Ensure current value is in options
         # Only reset to first option if current_value is None or empty string
@@ -588,7 +591,7 @@ class FieldRenderer:
         # Check if field has validation errors to add red border
         has_error = self.context.has_errors(full_key)
         if has_error:
-            self._add_field_error_style(widget_key)
+            ValidationDisplay.mark_field_with_error(widget_key, full_key)
         
         value = st.text_area(
             label=self._format_label(label, required, full_key),
@@ -717,7 +720,7 @@ class FieldRenderer:
         # Check if field has validation errors to add red border
         has_error = self.context.has_errors(full_key)
         if has_error:
-            self._add_field_error_style(widget_key)
+            ValidationDisplay.mark_field_with_error(widget_key, full_key)
         
         # Format current value with European format
         formatted_str = format_currency_display(current_value)
@@ -754,7 +757,7 @@ class FieldRenderer:
             # Show validation error message below field if exists
             errors = self.context.get_validation_errors(full_key)
             if errors:
-                st.markdown(f'<div style="color: #ff4444; font-size: 0.875rem; margin-top: 0.25rem;">⚠️ {errors[0]}</div>', unsafe_allow_html=True)
+                ValidationDisplay.display_field_error(errors[0])
             
             return parsed_value
         else:
@@ -789,21 +792,26 @@ class FieldRenderer:
         st.markdown(
             f"""
             <style>
-            /* Universal error field styling using data-testid */
-            div[data-testid="stTextInput"]:has(input[aria-label*="{widget_key}"]) input,
-            div[data-testid="stNumberInput"]:has(input[aria-label*="{widget_key}"]) input,
-            div[data-testid="stTextArea"]:has(textarea[aria-label*="{widget_key}"]) textarea,
-            div[data-testid="stDateInput"]:has(input[aria-label*="{widget_key}"]) input,
-            div[data-testid="stTimeInput"]:has(input[aria-label*="{widget_key}"]) input,
-            div[data-testid="stSelectbox"]:has(div[aria-label*="{widget_key}"]) > div > div:first-child,
-            div[data-testid="stMultiSelect"]:has(div[aria-label*="{widget_key}"]) > div > div:first-child {{
+            /* Error field styling - using multiple selectors for better compatibility */
+            /* Direct targeting without :has() for better browser support */
+            .error-{error_class} input,
+            .error-{error_class} textarea,
+            .error-{error_class} select,
+            div.error-{error_class} input,
+            div.error-{error_class} textarea,
+            [data-testid*="Input"].error-{error_class} input,
+            [data-testid*="TextArea"].error-{error_class} textarea,
+            [data-testid*="Selectbox"].error-{error_class} > div {{
                 border: 2px solid #ff4444 !important;
                 background-color: #fff5f5 !important;
                 box-shadow: 0 0 0 1px #ff4444 !important;
             }}
             
-            /* Additional targeting for multiselect containers */
-            div[data-testid="stMultiSelect"] div[data-baseweb="select"]:has(input[aria-label*="{widget_key}"]) {{
+            /* Additional targeting by widget key */
+            input#widget_{widget_key},
+            textarea#widget_{widget_key},
+            [id*="{widget_key}"] input,
+            [id*="{widget_key}"] textarea {{
                 border: 2px solid #ff4444 !important;
                 background-color: #fff5f5 !important;
             }}
@@ -827,13 +835,28 @@ class FieldRenderer:
             }}
             </style>
             <script>
-            // Add error class to field containers
+            // Add error class to field containers - improved targeting
             setTimeout(() => {{
-                const fields = document.querySelectorAll('[key="{widget_key}"], [aria-label*="{widget_key}"]');
-                fields.forEach(field => {{
-                    const container = field.closest('div[data-testid]');
-                    if (container) {{
-                        container.classList.add('{error_class}');
+                // Find all input elements and check their containers
+                const allInputs = document.querySelectorAll('input, textarea, select');
+                allInputs.forEach(input => {{
+                    // Check various attributes that might contain our widget key
+                    const hasKey = 
+                        input.getAttribute('key') === '{widget_key}' ||
+                        input.getAttribute('id')?.includes('{widget_key}') ||
+                        input.getAttribute('aria-label')?.includes('{widget_key}');
+                    
+                    if (hasKey) {{
+                        // Add class to the input itself
+                        input.classList.add('error-{error_class}');
+                        input.style.border = '2px solid #ff4444';
+                        input.style.backgroundColor = '#fff5f5';
+                        
+                        // Find and mark the container
+                        const container = input.closest('div[data-testid]');
+                        if (container) {{
+                            container.classList.add('error-{error_class}');
+                        }}
                     }}
                 }});
             }}, 100);
