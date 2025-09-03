@@ -429,6 +429,12 @@ def show_login_form():
 
 def main():
     """Main application entry point."""
+    # Configure logging before anything else
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
     st.set_page_config(layout="wide", page_title=get_text("app_title"))
     
     # Story 3: Show login form first
