@@ -483,7 +483,6 @@ def main():
     
     # Load data if in edit mode but data not yet loaded
     if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
-        import logging
         logging.info(f"=== CHECKING EDIT MODE: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}, current_page={st.session_state.get('current_page')}")
         
         # FORCE RELOAD if lot_mode is 'none' (indicates old data)
@@ -525,8 +524,7 @@ def main():
             logging.info(f"=== EDIT DATA ALREADY LOADED ===")
     else:
         if st.session_state.get('current_page') == 'form':
-            import logging
-            logging.debug(f"Form page but not edit mode: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}")
+                logging.debug(f"Form page but not edit mode: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}")
 
     # Route to appropriate page based on current_page state
     if st.session_state.current_page == 'dashboard':
@@ -534,8 +532,7 @@ def main():
     elif st.session_state.current_page == 'form':
         # Load data if in edit mode but data not yet loaded - moved here for proper timing
         if st.session_state.get('edit_mode') and st.session_state.get('edit_record_id'):
-            import logging
-            logging.info(f"=== FORM PAGE EDIT CHECK: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}")
+                logging.info(f"=== FORM PAGE EDIT CHECK: edit_mode={st.session_state.get('edit_mode')}, edit_record_id={st.session_state.get('edit_record_id')}")
             if 'edit_data_loaded' not in st.session_state:
                 from ui.dashboard import load_procurement_to_form
                 logging.info(f"=== LOADING procurement {st.session_state.edit_record_id} for editing ===")
@@ -575,7 +572,6 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
     try:
         import json
         import datetime
-        import logging
         from datetime import date, time
         
         # Custom JSON encoder for date/time objects
@@ -609,8 +605,7 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
             procurement_id = st.session_state.edit_record_id
             success = database.update_procurement(procurement_id, form_data)
             if success:
-                import logging
-                logging.info(f"Updated procurement ID: {procurement_id}")
+                        logging.info(f"Updated procurement ID: {procurement_id}")
                 draft_id = procurement_id
             else:
                 draft_id = None
@@ -619,13 +614,11 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
             procurement_id = st.session_state.current_procurement_id
             success = database.update_procurement(procurement_id, form_data)
             if success:
-                import logging
-                logging.info(f"Updated procurement ID: {procurement_id}")
+                        logging.info(f"Updated procurement ID: {procurement_id}")
                 draft_id = procurement_id
             else:
                 # If update fails, create new one
-                import logging
-                logging.warning(f"Failed to update procurement {procurement_id}, creating new one")
+                        logging.warning(f"Failed to update procurement {procurement_id}, creating new one")
                 draft_id = database.create_procurement(form_data)
                 st.session_state.current_procurement_id = draft_id
                 logging.info(f"Created new procurement ID: {draft_id}")
@@ -634,8 +627,7 @@ def save_form_draft(include_files=True, show_success=True, location="navigation"
             form_data['status'] = form_data.get('status', 'Delno izpolnjeno')
             draft_id = database.create_procurement(form_data)
             st.session_state.current_procurement_id = draft_id
-            import logging
-            logging.info(f"Created new procurement ID: {draft_id}")
+                logging.info(f"Created new procurement ID: {draft_id}")
         
         if draft_id:
             
@@ -1228,7 +1220,6 @@ def validate_step(step_keys, schema):
     """Validate the fields for the current step using centralized validation."""
     # Story 27.3: Refactored to use ValidationManager
     from utils.validations import ValidationManager
-    import logging
     
     current_step = st.session_state.get('current_step', 0)
     logging.info(f"validate_step called for step {current_step} with keys: {step_keys}")
@@ -1355,8 +1346,7 @@ def render_main_form():
                             with st.spinner(LOADING_MESSAGES['load_draft']):
                                 loaded_data = database.load_draft(draft['id'])
                                 if loaded_data:
-                                    import logging
-                                    # logging.info(f"[DRAFT LOAD] Loading draft with keys: {list(loaded_data.keys())}")  # Reduced logging
+                                                                # logging.info(f"[DRAFT LOAD] Loading draft with keys: {list(loaded_data.keys())}")  # Reduced logging
                                     if 'lots' in loaded_data:
                                         # logging.info(f"[DRAFT LOAD] Found {len(loaded_data['lots'])} lots in draft")  # Reduced logging
                                         pass  # Keep the if block valid
@@ -1418,8 +1408,7 @@ def render_main_form():
                                     # Flatten and load into session state
                                     flattened_data = flatten_dict(loaded_data)
                                     
-                                    import logging
-                                    lot_keys = [k for k in flattened_data.keys() if k.startswith('lot_')]
+                                                                lot_keys = [k for k in flattened_data.keys() if k.startswith('lot_')]
                                     # logging.info(f"[DRAFT LOAD] Flattened data has {len(lot_keys)} lot-prefixed keys")  # Reduced logging
                                     if lot_keys:
                                         # logging.info(f"[DRAFT LOAD] Sample lot keys: {lot_keys[:5]}")  # Reduced logging
@@ -1470,8 +1459,7 @@ def render_main_form():
                                     
                                     # Mark all steps with data as completed for navigation
                                     steps = get_fixed_steps()
-                                    import logging
-                                    # logging.info(f"[DRAFT LOAD] After loading, have {len(steps)} total steps")  # Reduced logging
+                                                                # logging.info(f"[DRAFT LOAD] After loading, have {len(steps)} total steps")  # Reduced logging
                                     # logging.info(f"[DRAFT LOAD] lot_mode: {st.session_state.get('lot_mode')}")  # Reduced logging
                                     # logging.info(f"[DRAFT LOAD] Number of lots: {len(st.session_state.get('lots', []))}")  # Reduced logging
                                     # logging.info(f"[DRAFT LOAD] lotsInfo.hasLots: {st.session_state.get('lotsInfo.hasLots')}")  # Reduced logging
@@ -1626,8 +1614,7 @@ def render_main_form():
         
         # Debug edit mode
         if st.session_state.get('edit_mode'):
-            import logging
-            # logging.info(f"=== EDIT MODE DEBUG ===")  # Reduced logging
+                # logging.info(f"=== EDIT MODE DEBUG ===")  # Reduced logging
             logging.info(f"Current step keys: {current_step_keys}")
             logging.info(f"Current lot index: {form_controller.context.lot_index}")
             
@@ -2521,8 +2508,7 @@ def render_lot_header():
             current_step_fields = fixed_form_steps[current_step]
             
             # Debug logging for issue with ID 8
-            import logging
-            logging.debug(f"[render_lot_header] Step {current_step}: fields={current_step_fields}")
+                logging.debug(f"[render_lot_header] Step {current_step}: fields={current_step_fields}")
             
             # Check if this is truly a lot-specific step
             # It should have lot_X prefix AND not be just lot_context
@@ -3049,8 +3035,7 @@ def render_navigation_buttons(current_step_keys):
                     button_text, 
                     use_container_width=True
                 ):
-                    import logging
-                    logging.info(f"Next button clicked at step {st.session_state.current_step}")
+                                logging.info(f"Next button clicked at step {st.session_state.current_step}")
                     # Enhanced validation can be added here
                     validation_passed = validate_step(current_step_keys, st.session_state.schema)
                     logging.info(f"Validation result: {validation_passed}")
