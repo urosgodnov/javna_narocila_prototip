@@ -243,19 +243,22 @@ FIXED_STEPS = [
     # Step 10: Ogledi in pogajanja
     ["inspectionInfo", "negotiationsInfo"],
     
-    # Step 11: Pogoji za sodelovanje in razlogi za izključitev
-    ["participationAndExclusion", "participationConditions"],
+    # Step 11: Pogoji za sodelovanje (SEPARATED - only conditions)
+    ["participationConditions"],
     
-    # Step 12: Zavarovanja in ponudbe
+    # Step 12: Razlogi za izključitev (SEPARATED - only exclusions)
+    ["participationAndExclusion"],
+    
+    # Step 13: Zavarovanja in ponudbe (was Step 12)
     ["financialGuarantees", "variantOffers"],
     
-    # Step 13: Merila izbire
+    # Step 14: Merila izbire (was Step 13)
     ["selectionCriteria"],
     
-    # Step 14: Sklepanje pogodbe
+    # Step 15: Sklepanje pogodbe (was Step 14)
     ["contractInfo"],
     
-    # Step 15: Potrditev
+    # Step 16: Potrditev (was Step 15)
     ["otherInfo"]
 ]
 
@@ -276,11 +279,12 @@ def get_step_name(step_index):
         7: "Roki izvajanja",
         8: "Informacije o ceni",
         9: "Ogledi in pogajanja",
-        10: "Pogoji za sodelovanje",
-        11: "Zavarovanja in ponudbe",
-        12: "Merila izbire",
-        13: "Sklepanje pogodbe",
-        14: "Potrditev"
+        10: "Pogoji za sodelovanje",      # Step 11 - only conditions
+        11: "Pogoji za izključitev",      # Step 12 - only exclusions  
+        12: "Zavarovanja in ponudbe",     # Was Step 12, now Step 13
+        13: "Merila izbire",              # Was Step 13, now Step 14
+        14: "Sklepanje pogodbe",          # Was Step 14, now Step 15
+        15: "Potrditev"                   # Was Step 15, now Step 16
     }
     return step_names.get(step_index, f"Korak {step_index + 1}")
 

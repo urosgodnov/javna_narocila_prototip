@@ -1755,7 +1755,7 @@ def render_main_form():
         elif 'lotConfiguration' in current_step_keys:
             # Skip - lot configuration is now integrated into lotsInfo
             st.info("Konfiguracija sklopov se sedaj izvaja direktno pri izbiri sklopov.")
-        # Special handling for step 15 - otherInfo
+        # Special handling for step 16 - otherInfo (was step 15)
         elif 'otherInfo' in current_step_keys:
             # Get the session key for otherInfo field using new architecture
             session_key = f'lots.{form_controller.context.lot_index}.otherInfo'
@@ -1778,7 +1778,7 @@ def render_main_form():
             if other_info_value != st.session_state.get(session_key):
                 st.session_state[session_key] = other_info_value
         else:
-            # Render normal form for all other steps including step 14 (contractInfo)
+            # Render normal form for all other steps including step 15 (contractInfo, was step 14)
             # Use FormController for rendering with required fields
             required_fields = get_required_fields_for_step(current_step_keys)
             
