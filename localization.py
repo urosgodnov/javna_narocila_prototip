@@ -239,7 +239,7 @@ def get_dynamic_step_label(step_keys, step_number: int, has_lots: bool = False) 
         'priceInfo': "Informacije o ceni",
         'inspectionInfo': "Ogledi in pogajanja",
         'negotiationsInfo': "Ogledi in pogajanja",
-        'participationAndExclusion': "Pogoji za izključitev",
+        'participationAndExclusion': "Razlogi za izključitev",
         'participationConditions': "Pogoji za sodelovanje",
         'financialGuarantees': "Zavarovanja in ponudbe",
         'variantOffers': "Zavarovanja in ponudbe",

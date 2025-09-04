@@ -722,12 +722,6 @@
             "type": "object",
             "title": "Razlogi za izključitev",
             "properties": {
-                "sectionHeader": {
-                    "type": "object",
-                    "title": "Razlogi za izključitev",
-                    "properties": {},
-                    "description": "Prosimo označite vse neobvezne razloge za izključitev, ki jih želite vključiti v dokumentacijo v zvezi z oddajo javnega naročila."
-                },
                 "exclusionReasonsSelection": {
                     "type": "string",
                     "title": "Prosimo označite vse neobvezne razloge za izključitev, ki jih želite vključiti v dokumentacijo:",
@@ -1423,12 +1417,6 @@
         "participationConditionProperties": {
             "type": "object",
             "properties": {
-                "participationConditionsHeader": {
-                    "type": "object",
-                    "title": "Pogoji za sodelovanje",
-                    "properties": {},
-                    "description": "Prosimo označite vse pogoje za sodelovanje, ki jih želite vključiti v dokumentacijo v zvezi z oddajo javnega naročila."
-                },
                 "participationSelection": {
                     "type": "string",
                     "title": "Ali želite vključiti pogoje za sodelovanje?",

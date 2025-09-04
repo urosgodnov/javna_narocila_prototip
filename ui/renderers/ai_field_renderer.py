@@ -614,9 +614,7 @@ class AIFieldRenderer:
                 st.write("")  # Spacing to align with input
                 # Use a unique key that doesn't conflict with session state
                 btn_key = f"{full_key}_ai_button"
-                # Remove any existing session state for this button to avoid conflicts
-                if btn_key in st.session_state:
-                    del st.session_state[btn_key]
+                # DON'T delete session state - Streamlit needs it to track button clicks!
                 if st.button("AI predlog", key=btn_key):
                     st.session_state.ai_triggers[full_key] = True
             

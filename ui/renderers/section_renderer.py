@@ -302,6 +302,23 @@ class SectionRenderer:
         # Update array if items were removed
         if len(updated_array) != len(array_data):
             self.context.set_field_value(full_key, updated_array)
+            
+            # Clear widget states for removed items and items that will shift position
+            # This prevents old values from persisting when indices change
+            for idx in range(len(updated_array), len(array_data)):
+                item_key = f"{full_key}.{idx}"
+                session_key_prefix = self.context.get_field_key(item_key)
+                
+                # Clear all widget states for this item
+                keys_to_remove = []
+                for key in st.session_state:
+                    if key.startswith(f"widget_{session_key_prefix}"):
+                        keys_to_remove.append(key)
+                
+                for key in keys_to_remove:
+                    if key in st.session_state:
+                        del st.session_state[key]
+            
             st.rerun()
         
         # Add button
@@ -338,9 +355,7 @@ class SectionRenderer:
             with col_remove:
                 # Use a more unique key format to avoid conflicts
                 remove_key = f"btn_remove_{session_key}"
-                # Remove any existing session state for this button to avoid conflicts
-                if remove_key in st.session_state:
-                    del st.session_state[remove_key]
+                # DON'T delete session state - Streamlit needs it to track button clicks!
                 if st.button(self.ICONS['delete'], key=remove_key, help="Odstrani element"):
                     return False  # Signal to remove this item
             
@@ -405,6 +420,23 @@ class SectionRenderer:
             # Add to array
             current_array = self.context.get_field_value(array_key, [])
             # logger.info(f"[ADD_BUTTON_CLICKED] Current array has {len(current_array)} items")  # Reduced logging
+            
+            # Clear any existing widget states for the new item index to prevent value carryover
+            new_index = len(current_array)
+            new_item_key = f"{array_key}.{new_index}"
+            session_key_prefix = self.context.get_field_key(new_item_key)
+            
+            # Clear all widget states that start with this prefix
+            import streamlit as st
+            keys_to_remove = []
+            for key in st.session_state:
+                if key.startswith(f"widget_{session_key_prefix}"):
+                    keys_to_remove.append(key)
+            
+            for key in keys_to_remove:
+                del st.session_state[key]
+                # logger.info(f"[ADD_BUTTON_CLICKED] Cleared widget state: {key}")
+            
             current_array.append(new_item)
             self.context.set_field_value(array_key, current_array)
             # logger.info(f"[ADD_BUTTON_CLICKED] Array now has {len(current_array)} items, triggering rerun")  # Reduced logging

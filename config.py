@@ -243,11 +243,11 @@ FIXED_STEPS = [
     # Step 10: Ogledi in pogajanja
     ["inspectionInfo", "negotiationsInfo"],
     
-    # Step 11: Pogoji za sodelovanje (SEPARATED - only conditions)
-    ["participationConditions"],
-    
-    # Step 12: Razlogi za izključitev (SEPARATED - only exclusions)
+    # Step 11: Razlogi za izključitev (SEPARATED - only exclusions)
     ["participationAndExclusion"],
+    
+    # Step 12: Pogoji za sodelovanje (SEPARATED - only conditions)
+    ["participationConditions"],
     
     # Step 13: Zavarovanja in ponudbe (was Step 12)
     ["financialGuarantees", "variantOffers"],
@@ -279,8 +279,8 @@ def get_step_name(step_index):
         7: "Roki izvajanja",
         8: "Informacije o ceni",
         9: "Ogledi in pogajanja",
-        10: "Pogoji za sodelovanje",      # Step 11 - only conditions
-        11: "Pogoji za izključitev",      # Step 12 - only exclusions  
+        10: "Razlogi za izključitev",     # Step 11 - only exclusions
+        11: "Pogoji za sodelovanje",      # Step 12 - only conditions  
         12: "Zavarovanja in ponudbe",     # Was Step 12, now Step 13
         13: "Merila izbire",              # Was Step 13, now Step 14
         14: "Sklepanje pogodbe",          # Was Step 14, now Step 15
